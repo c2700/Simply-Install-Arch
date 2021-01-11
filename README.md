@@ -1,4 +1,4 @@
-(Don't judge me for my horrible varaiable naming if you read the script ('_') )
+(Don't judge me for my horrible variable naming if you read the script ('_') )
 
 Just Run the script and go through the options
 
