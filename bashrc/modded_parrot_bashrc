@@ -1,0 +1,56 @@
+#
+# /etc/bash.bashrc
+#
+
+# If not running interactively, don't do anything
+[[ $- != *i* ]] && return
+
+[[ $DISPLAY ]] && shopt -s checkwinsize
+
+
+red=$(tput setaf 196)
+blue=$(tput setaf 12)
+yellow=$(tput setaf 220)
+light_blue=$(tput setaf 33)
+brown=$(tput setaf 1)
+cyan=$(tput setaf 14)
+orange=$(tput setaf 166)
+grey=$(tput setaf 61)
+
+bgred=$(tput setab 196)
+bgblue=$(tput setab 12)
+bgyellow=$(tput setab 220)
+bglight_blue=$(tput setab 33)
+bgbrown=$(tput setab 1)
+bgcyan=$(tput setab 14)
+bgorange=$(tput setab 166)
+
+clr_rst=$(tput sgr0)
+
+bold=$(tput smso)
+bold_rst=$(tput rmso)
+
+#	┌─
+#	└──╼
+
+#	┌
+#	└──╼ 
+
+#	┌
+#	|
+#	└
+
+PS1='${red}┌${clr_rst}${blue}[${clr_rst}${yellow}\u${red}@${clr_rst}${orange}\h${clr_rst} ${brown}\s-\V shell \l${clr_rst}${blue}]${clr_rst}\n${red}└─>${clr_rst}${blue}[${clr_rst}${cyan}\w${clr_rst}${blue}]${clr_rst}\n\$ '
+
+case ${TERM} in
+  xterm*|rxvt*|Eterm|aterm|kterm|gnome*)
+    PROMPT_COMMAND=${PROMPT_COMMAND:+$PROMPT_COMMAND; }'printf "\033]0;%s@%s:%s\007" "${USER}" "${HOSTNAME%%.*}" "${PWD/#$HOME/\~}"'
+
+  ;;
+  screen*)
+    PROMPT_COMMAND=${PROMPT_COMMAND:+$PROMPT_COMMAND; }'printf "\033_%s@%s:%s\033\\" "${USER}" "${HOSTNAME%%.*}" "${PWD/#$HOME/\~}"'
+   ;;
+esac
+
+[ -r /usr/share/bash-completion/bash_completion   ] && . /usr/share/bash-completion/bash_completion
+
