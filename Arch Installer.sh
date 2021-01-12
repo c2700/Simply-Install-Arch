@@ -5,7 +5,7 @@ DIALOG_CANCEL=0
 DIALOG_ESC=255
 DIALOG_HELP=2
 DIALOG_HELP_ITEM_HELP=2
-DIALOG_EXTRA=3p
+DIALOG_EXTRA=3
 
 # 3>&1 1>&2 2>&3
 GuageMeter(){
@@ -740,7 +740,9 @@ PartitionDisk(){
 			DiskListInfo+=(0)
 		fi
 	done
-
+    # clear
+    # echo "${DiskListInfo[@]}"
+    # sleep 2
 	Disks=($(dialog --scrollbar --cancel-label "Back" --column-separator "|" --title "Disk Selection Menu" --checklist "" 0 0 0 "${DiskListInfo[@]}" 3>&1 1>&2 2>&3))
 
 
@@ -780,28 +782,15 @@ PartitionDisk(){
 
                             DiskPartInfo="${DiskPartSizeTemp[$b]} | ${DiskPartFsTypeTemp[$b]} | $DiskPartPartTypeTemp"
 
-                            sleep 2
-                            echo "syz - ${#DiskPartNameTemp[$b]}"
-                            echo "${DiskPartNameTemp[$b]}"
-                            echo -e "$DiskPartInfo\n\n"
-
                             DiskPartListInfo+=("${DiskPartNameTemp[$b]}")
                             DiskPartListInfo+=("$DiskPartInfo")
 
                         done
-                        # clear
                         dialog --cancel-label "Back" --column-separator "|" --title "Partition mount menu"  --menu "Partitions in /dev/${Disks[$a]}" 0 0 0 "${DiskPartListInfo[@]}"
-                        sleep 2
                         unset DiskPartListInfo
                     fi
 
                 done
-
-                : '
-                for (( i = 0; i < ${#DiskPartListInfo[@]}; i++ )); do
-                    echo ${DiskPartListInfo[$i]}
-                done
-                '
 
 			else
 				PartTools=("fdisk" "fdisk")
