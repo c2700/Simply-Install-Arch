@@ -3,6 +3,7 @@
 Just Run the script and go through the options
 
 To-Be-Done:
+
 	1) Auto-Install Menu:
 		 i) Fresh Auto Install
 		ii) MultiBoot Auto Install
@@ -19,7 +20,7 @@ To-Be-Done:
 		   i) include manual editing on the dialog iface (parted will be used to partition the disk)
 		  ii) include auto partition
 	
-	5) set default locale as english based on the tz selected if is locale not set. if tz (and/or) locale is not selected then prompt to select tz first (if not selected) then prompt for locale selction
+	5) set default locale as english based on the tz selected if locale is not set. if tz (and/or) locale is not selected then prompt to select tz first (if not selected) then prompt for locale selection
 
 
 
