@@ -218,7 +218,6 @@ Install_UI(){
 	# Install_UI
 	# ConfHost
 	# $1 - options in this function's menu
-	# $2 - chroot dir
 	# $2=""
 
 	pkgs=""
@@ -327,8 +326,7 @@ Install_UI(){
 
 
 SetTz(){
-	# $1 - arch-chroot directory
-	# $2 - default option
+	# $1 - default option
 	regions=()
 	regions_dir_temp=($(ls -d /usr/share/zoneinfo/* | grep -iv 'right\|posix\|\.[a-zA-Z0-9]*'))
 	regions_temp=($(ls /usr/share/zoneinfo/ | grep -iv 'right\|posix\|\.[a-zA-Z0-9]*'))
@@ -371,7 +369,6 @@ SetTz(){
 		else
 			: '
 			ln -sf $zone /mnt/etc/localtime &>/dev/null
-			# arch-chroot "${1}" hwclock -wrv | dialog --programbox 0 0
 			arch-chroot /mnt/ hwclock -wrv | dialog --programbox 0 0
 			if [[ ${PIPESTATUS[0]} -eq 0 ]]
 			then
@@ -412,9 +409,7 @@ SetLocale(){
 	echo "${LocaleDialog[@]}" | sed 's/" "/"\n"/g;s/"//g' > locales.txt
 	while read txt
 	do
-		# arch-chroot $1 sed -i s/"#$txt"/"$txt"/g /etc/locale.gen
 		# arch-chroot /mnt sed -i s/"#$txt"/"$txt"/g /etc/locale.gen
-		# arch-chroot $1 locale-gen
 		# arch-chroot /mnt locale-gen
 		sed -i s/"#$txt"/"$txt"/g locale.gen
 		# awk '{print ARGV}'
@@ -437,7 +432,6 @@ SetLocale(){
 
 
 SetHostName(){
-	# $1 - arch_chroot directory
 	hostname=$(dialog --inputbox "Set host name" 0 0 3>&1 1>&2 2>&3)
 	if [[ -z $hostname ]]
 	then
@@ -449,11 +443,9 @@ SetHostName(){
 			SetHostName
 		fi
 	fi
-	# arch-chroot "${1}" echo "$hostname" > "${1}/etc/hostname"
-	# arch-chroot /mnt echo "$hostname" > "${1}/etc/hostname"
+	# arch-chroot /mnt echo "$hostname" > "/mnt/etc/hostname"
 	dialog --msgbox "set $hostname as hostname. You can change the hostname in the /etc/hostname file in the arch-chroot directory" 0 0
-	# arch-chroot "${1}" echo -e "127.0.0.1\tlocalhost\n      ::1\tlocalhost" > "${1}/etc/hostname"
-	# arch-chroot "/mnt" echo -e "127.0.0.1\tlocalhost\n      ::1\tlocalhost" > "/mnt/etc/hostname"
+	# arch-chroot /mnt echo -e "127.0.0.1\tlocalhost\n      ::1\tlocalhost" > "/mnt/etc/hostname"
 }
 
 SetPassword(){
@@ -495,7 +487,6 @@ SetPassword(){
 }
 
 add_users(){
-	# $1 - arch_chroot directory
 	password=""
 	username=$(dialog --inputbox "Username" 0 0 3>&1 1>&2 2>&3)
 	if [[ $? -eq 1 ]]
@@ -514,16 +505,13 @@ add_users(){
 
 	# dialog --msgbox "created username ${username} and password ${password} is set" 0 0
 	dialog --msgbox "created username ${username} and password is set" 0 0
-	# arch-chroot "${1}" useradd -m $username -G users -g power,wheel,storage &>/dev/null
 	# arch-chroot /mnt useradd -m $username -G users -g power,wheel,storage &>/dev/null
-	# arch-chroot "${1}" passwd $username &>/dev/null
 	# arch-chroot /mnt passwd $username &>/dev/null
 	# if [[ $? -eq 2 ]]
 	# then
 	# 	dialog --msgbox "user ${username} exists"
 	# 	add_users
 	# fi
-
 }
 
 BashPromptPreview(){
@@ -537,19 +525,17 @@ BashPromptPreview(){
 }
 
 SetPrompt(){
-	# $1 - arch_chroot_dir
-	# $2 - bashrc file
+	# $1 - bashrc file
 
-	Users=($(grep [1-9][0-9][0-9][0-9] ${1}/etc/passwd | grep -iv nobody | sed 's/\:/ \: /g' | awk '{print $1}'))
-	# cp -rfv bashrc/"$2" "$1"/home/$Users/.bashrc &>/dev/null
-	# cp -rfv bashrc/"$2" /mnt/home/$Users/.bashrc &>/dev/null
-	cp -rfv bashrc/"$2" /home/$Users/.bashrc &>/dev/null
-	dialog --msgbox "set $2 as the bash prompt" 0 0
+	Users=($(grep [1-9][0-9][0-9][0-9] /mnt/etc/passwd | grep -iv nobody | sed 's/\:/ \: /g' | awk '{print $1}'))
+	# cp -rfv bashrc/"$1" /mnt/home/$Users/.bashrc &>/dev/null
+	# cp -rfv bashrc/"$1" /mnt/home/$Users/.bashrc &>/dev/null
+	cp -rfv bashrc/"$1" /home/$Users/.bashrc &>/dev/null
+	dialog --msgbox "set $1 as the bash prompt" 0 0
 }
 
 SetBashPrompt(){
 	# $1 - "menu option item"
-	# $2 - arch_chroot_dir
 
 	bashrc_opts=("default" "it's the same as you see on the live iso")
 	bashrc_opts+=("modded parrot" "my personalized version of the parrot OS bash prompt")
@@ -640,9 +626,9 @@ SetRootPassword(){
 
 ConfHost(){
 	# $1 - menu option item
-	# $2 - arch_chroot directory
 	# if [[ -z $1 ]]
 
+    # need to give a different condition to reassure mnt. pt.
 	# if [[ -z $2 ]]
 	# then
 	# 	dialog "mount the partitions" 0 0
@@ -898,7 +884,11 @@ MainMenu(){
 			;;
 
 		"Install Arch *")
-			archchrootdir='/mnt'
+
+            # make another condition that ensures something is mounted in the /mnt dir. this one seems senseless now that I read it
+
+			# archchrootdir='/mnt'
+			archchrootdir=''
 			# if [[ $archchrootdir == '' ]]
 			if [[ -z $archchrootdir ]]
 			then
@@ -963,18 +953,16 @@ MainMenu(){
 				dialog --msgbox "packages that will be installed:\n${packages}" 0 0
 
 				: '
-				$arch_chroot="" # arch_chroot directory
-				# pacstrap "$arch_chroot" "$packages" | GuageMeter "Installing arch linux packages" 1
-				pacstrap "$arch_chroot" "$packages"
-				if [[ $? -eq 0 ]]
+				pacstrap /mnt "$packages" | GuageMeter "Installing arch linux packages" 1
+				# pacstrap /mnt "$packages"
+				if [[ ${PIPESTATUS[0]} -eq 0 ]]
 				then
-					# genfstab "${1}" > "${1}/etc/fstab"
-					genfstab "/mnt/" > "/mnt//etc/fstab"
+					genfstab "/mnt/" > "/mnt/etc/fstab"
 				else
 					dialog --msgbox "failed to install packages via pacstrap"
 				fi
 				'
-				dialog --msgbox "Created fstab entry. you can generate the fstab of your disk by executing genfstab -U {arch-chroot directory} > {arch-chroot directory}/etc/fstab' (i.e. if anythin went wrong with the fstab entry)" 0 0
+				dialog --msgbox "Created fstab entry. you can generate the fstab of your disk by executing genfstab -U {arch-chroot directory} (in this case it's the /mnt directory) > {arch-chroot directory}/etc/fstab' (i.e. if anythin went wrong with the fstab entry)" 0 0
 				MainMenu "Install Arch *"
 			fi
 			;;
@@ -982,7 +970,7 @@ MainMenu(){
 
 		"Configure Host *")
 			: '
-			arch-chroot $mnt_dir
+			arch-chroot /mnt
 			if [[ $? -eq 1 ]]
 			then
 				dialog --msgbox "cannot chroot" 0 0
@@ -1008,7 +996,7 @@ MainMenu(){
 				if [[ $? -eq 1 ]]
 				then
 					dialog --msgbox "saved basic customization instructions" 0 0
-					# echo -e "change hostname - vim /etc/hostname\ncreate users - useradd -m\n<username> -G power,storage,wheel -g users\nset or change user password - passwd <username>\nset or change user password - passwd\nset locale - vim /etc/locale.gen, comment '#' to ignore and uncomment to generate or use the locale\n\n(DE - Desktop Environment, WM - Window Manager) to install a DE - install a minimal DE package or the group using the '-g' argument in pacman and a lockscreen manager. enable the lockscreen manager using the systemctl tool and write the DE session name in the /home/<user name>/.xinitrc file\n to install a WM - install a WM and the lockscreen manager will pick it up (if enabled)\nset timezone - soft link (ln -sf) /usr/share/zoneinfo/<continent>/<region> /etc/localtime execute hwclock -w -v (-v is optional if you prefer verbosity)" > ${arch_chroot_mnt}/home/customize.txt
+					# echo -e "change hostname - vim /etc/hostname\ncreate users - useradd -m\n<username> -G power,storage,wheel -g users\nset or change user password - passwd <username>\nset or change user password - passwd\nset locale - vim /etc/locale.gen, comment '#' to ignore and uncomment to generate or use the locale\n\n(DE - Desktop Environment, WM - Window Manager) to install a DE - install a minimal DE package or the group using the '-g' argument in pacman and a lockscreen manager. enable the lockscreen manager using the systemctl tool and write the DE session name in the /home/<user name>/.xinitrc file\n to install a WM - install a WM and the lockscreen manager will pick it up (if enabled)\nset timezone - soft link (ln -sf) /usr/share/zoneinfo/<continent>/<region> /etc/localtime execute hwclock -w -v (-v is optional if you prefer verbosity)" > /mnt/home/customize.txt
 				fi
 			fi
 			# reboot now -f
