@@ -860,7 +860,12 @@ MainMenu(){
 	menuopt+=("Reboot" "Reboot the computer")
 
 	# $1="Manual Install"
-	$1="${menuopt[0]}"
+	if pacman -Qs $dialog > /dev/null ; then
+		$1="${menuopt[0]}"
+	else
+		echo "Please install dialog on your machine!"
+		exit
+	fi
 
 	menuitem=$(dialog --default-item "${1}" --backtitle "Written by c2700" --cancel-label "Exit" --title "Install Menu" --menu "To install arch all options followed by '*' are mandatory" 0 0 0 "${menuopt[@]}" 3>&1 1>&2 2>&3)
 
