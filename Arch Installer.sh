@@ -34,7 +34,7 @@ iw_reconnect(){
 	if [[ "${1}" -eq 1 ]]
 	then
 		dialog --yesno "rescan and connect to a wireless device? " 0 0
-		while read -n1 -p "line: " line
+		while read -s -n1 -p "line: " line
 		do
 			if [[ $line == "y" ]]
 			then
@@ -132,7 +132,7 @@ ConfNet(){
 	if [[ ${PIPESTATUS[0]} -eq 0 ]]
 	then
 		dialog --title "Installed Network Manager" --msgbox "network available" 0 0
-		MainMenu "Configure Network *"
+		MainMenu "Configure Network **"
 	else
 		dialog --title "Network Status" --msgbox "network not available. will search for availble network managers" 0 0
 	fi
@@ -198,15 +198,15 @@ ConfNet(){
 		"networkmanager")
 			# nm_mngr
 			dialog --msgbox "networkmanager used" 0 0
-			MainMenu "Configure Network *"
+			MainMenu "Configure Network **"
 			;;
 		"iwd")
 			# iwd_mngr
 			dialog --msgbox "iwd used" 0 0
-			MainMenu "Configure Network *"
+			MainMenu "Configure Network **"
 			;;
 		*)
-			MainMenu "Configure Network *"
+			MainMenu "Configure Network **"
 			;;
 	esac
 }
@@ -491,7 +491,7 @@ add_users(){
 	username=$(dialog --inputbox "Username" 0 0 3>&1 1>&2 2>&3)
 	if [[ $? -eq 1 ]]
 	then
-		ConfHost "add users *"
+		ConfHost "add users **"
 	fi
 
 	if [[ ${#username} -eq 0 ]]
@@ -632,13 +632,13 @@ ConfHost(){
 	# if [[ -z $2 ]]
 	# then
 	# 	dialog "mount the partitions" 0 0
-	# 	MainMenu "Configure Host *"
+	# 	MainMenu "Configure Host +"
 	# fi
 	# HostOpt=()
 	HostOpt=("set hostname *" "set your computer name")
 	HostOpt+=("set Locale *" "set your computer language")
 	HostOpt+=("set timezone" "configure which timezone you are in")
-	HostOpt+=("add users *" "add users")
+	HostOpt+=("add users **" "add users")
 	HostOpt+=("root password *" "set root password")
 	HostOpt+=("Install UI" "Install Desktop Environment or Window Manager")
 	HostOpt+=("Set Bash Prompt" "File that's used to tell how the terminal prompt should look like")
@@ -646,7 +646,7 @@ ConfHost(){
 	opt=$(dialog --cancel-label "BACK" --default-item "${1}" --menu "Host Configuration Menu" 0 0 0 "${HostOpt[@]}" 3>&1 1>&2 2>&3)
 	if [[ $? -eq 1 ]]
 	then
-		MainMenu "Configure Host *"
+		MainMenu "Configure Host +"
 	fi
 	case $opt in
 		"set hostname *")
@@ -661,9 +661,9 @@ ConfHost(){
 			SetTz
 			ConfHost "set timezone"
 			;;
-		"add users *")
+		"add users **")
 			add_users
-			ConfHost "add users *"
+			ConfHost "add users **"
 			;;
 		# "set root password")
 		"root password *")
@@ -689,6 +689,53 @@ ConfHost(){
 
 
 
+MountViewPartitions(){
+	DiskPartListInfo=()
+	DiskPartNameTemp=()
+	DiskPartSizeTemp=()
+	partitions=()
+	for ((a = 0; a < ${#Disks[@]}; a++))
+	do
+	    DiskPartNameTemp=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $1 }'))
+
+	    DiskPartSizeTemp=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $2 }'))
+
+	    DiskPartFsTypeTemp=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $3 }'))
+
+	    DiskPartPartTypeTempString1=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $4 }'))
+
+	    DiskPartPartTypeTempString2=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $5 }'))
+
+	    if [[ -z ${DiskPartSizeTemp[@]} ]] && [[ -z ${DiskPartFsTypeTemp[@]} ]] && [[ -z ${DiskPartPartTypeTempString1[@]} ]] && [[ -z ${DiskPartPartTypeTempString2[@]} ]]
+	    then
+	        continue
+	    else
+	        for (( b = 0; b < ${#DiskPartNameTemp[@]}; b++ ))
+	        do
+	            DiskPartPartTypeTemp="${DiskPartPartTypeTempString1[$b]} ${DiskPartPartTypeTempString2[$b]}"
+
+	            DiskPartInfo="${DiskPartSizeTemp[$b]} | ${DiskPartFsTypeTemp[$b]} | $DiskPartPartTypeTemp"
+
+	            # DiskPartListInfo+=("${DiskPartNameTemp[$b]}")
+	            # DiskPartListInfo+=("$DiskPartInfo")
+				# DiskPartListInfo+=(0)
+				DiskPartListInfo+=("${DiskPartNameTemp[$b]}" "$DiskPartInfo" 0)
+	        done
+	        # dialog --cancel-label "Back" --column-separator "|" --title "Partition mount menu"  --extra-button --extra-label "Mount" --checklist "Partitions in /dev/${Disks[$a]}" 0 0 0 "${DiskPartListInfo[@]}"
+	        # dialog --cancel-label "Back" --column-separator "|" --title "Partition mount menu"  --extra-button --extra-label "Mount" --menu "Partitions in /dev/${Disks[$a]}" 0 0 0 "${DiskPartListInfo[@]}"
+	        # partition=$(dialog --cancel-label "Back" --column-separator "|" --title "Partition mount menu"  --extra-button --extra-label "Mount" --menu "Partitions in /dev/${Disks[$a]}" 0 0 0 "${DiskPartListInfo[@]}")
+	        partition=($(dialog --cancel-label "Back" --column-separator "|" --title "Partition mount menu"  --extra-button --extra-label "Mount" --checklist "Partitions in /dev/${Disks[$a]}" 0 0 0 "${DiskPartListInfo[@]}" 3>&1 1>&2 2>&3))
+	        if [[ $? -eq 3 ]]; then
+		        for (( a = 2; a < ${#partition[@]}; a+=2 )); do
+		        	echo "${DiskPartListInfo[$a]}"
+		        	# mount the selected partitions. If same fstype partitions are selected msgbox to say "mount only one of those partitions"
+		        done
+		       	# else clause to call "MountViewPartitions" to show "mounted at <mnt. pt.>" text next to partitions
+	        fi
+	        unset DiskPartListInfo
+	    fi
+	done
+}
 
 DiskListTemp(){
 	lsblk -dno name,size,pttype,vendor,model | grep -iv 'loop\|sr0'
@@ -739,45 +786,8 @@ PartitionDisk(){
 		else
 			dialog --yes-label "Mount" --no-label "Edit" --yesno "Select \"Edit\" for Editing and then mounting the partitions of this disk or select \"Mount\" to only select and mount existing ext4/efi/fat32/swap partitions" 0 0
 
-
 			if [[ $? -eq 0 ]]; then
-				DiskPartListInfo=()
-                DiskPartNameTemp=()
-                DiskPartSizeTemp=()
-
-                clear
-                for ((a = 0; a < ${#Disks[@]}; a++))
-                do
-                    DiskPartNameTemp=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $1 }'))
-
-                    DiskPartSizeTemp=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $2 }'))
-
-                    DiskPartFsTypeTemp=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $3 }'))
-
-                    DiskPartPartTypeTempString1=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $4 }'))
-
-                    DiskPartPartTypeTempString2=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $5 }'))
-
-                    if [[ -z ${DiskPartSizeTemp[@]} ]] && [[ -z ${DiskPartFsTypeTemp[@]} ]] && [[ -z ${DiskPartPartTypeTempString1[@]} ]] && [[ -z ${DiskPartPartTypeTempString2[@]} ]]
-                    then
-                        continue
-                    else
-                        for (( b = 0; b < ${#DiskPartNameTemp[@]}; b++ ))
-                        do
-                            DiskPartPartTypeTemp="${DiskPartPartTypeTempString1[$b]} ${DiskPartPartTypeTempString2[$b]}"
-
-                            DiskPartInfo="${DiskPartSizeTemp[$b]} | ${DiskPartFsTypeTemp[$b]} | $DiskPartPartTypeTemp"
-
-                            DiskPartListInfo+=("${DiskPartNameTemp[$b]}")
-                            DiskPartListInfo+=("$DiskPartInfo")
-
-                        done
-                        dialog --cancel-label "Back" --column-separator "|" --title "Partition mount menu"  --menu "Partitions in /dev/${Disks[$a]}" 0 0 0 "${DiskPartListInfo[@]}"
-                        unset DiskPartListInfo
-                    fi
-
-                done
-
+				MountViewPartitions 
 			else
 				PartTools=("fdisk" "fdisk")
 				PartTools+=("gdisk" "gdisk")
@@ -809,11 +819,11 @@ PartitionDisk(){
 							;;
 					esac
 				done
-
+				MountViewPartitions
 			fi
 		fi
 	elif [[ $? -eq 1 ]]; then
-		MainMenu "Partition Disk *"
+		MainMenu "Partition Disk **"
 	fi
 }
 
@@ -850,16 +860,33 @@ PartitionDisk(){
 
 
 MainMenu(){
+
 	# $1 - menu option item
 
-	menuopt=("Partition Disk *" "format, Partition or select the Hard Disk and mount the hard disk partitions")
-	menuopt+=("Configure Network *" "Connect to Network")
+	clear
+	which dialog &>/dev/null
+	if [[ $? -eq 1 ]]
+	then
+		echo -e "dialog not installed.\n"
+		# pacman -Uvd --noconfirm $(ls dialog*)
+		read -s -n1 -p "press any key to install the git provided dialog package "
+		if [[ $? -eq 1 ]]
+		then
+			echo -e "\n\ndialog could not be installed.\n\nPlease install provided dialog packages by typing \"pacman -Uvd <package name>\" with or without the \"--noconfirm\" argument.\n\ncurrent directory:\n$(pwd)\n\npackages in this directory:\n$(ls *.pkg*).\n\n\nexiting...\n\n"
+			exit
+		else
+			dialog --msgbox "installed dialog" 0 0
+		fi
+	fi
+
+	menuopt=("Partition Disk **" "format/Partition/select Hard Disks and mount partitions")
+	menuopt+=("Configure Network **" "Connect to Network")
 	menuopt+=("Install Arch *" "Install the base system")
-	menuopt+=("Configure Host *" "Personalize the machine by setting Hostname, adding users etc.")
+	menuopt+=("Configure Host +" "Personalize the machine by setting Hostname, adding users etc.")
 	menuopt+=("continue Live" "Continue having A feel for the OS")
 	menuopt+=("Reboot" "Reboot the computer")
 
-	menuitem=$(dialog --default-item "${1}" --backtitle "Written by c2700" --cancel-label "Exit" --title "Install Menu" --menu "To install arch all options followed by '*' are mandatory" 0 0 0 "${menuopt[@]}" 3>&1 1>&2 2>&3)
+	menuitem=$(dialog --default-item "${1}" --backtitle "Written by c2700" --cancel-label "Exit" --title "Install Menu" --menu "To install arch all options followed by\n  i) '**' are priority 1\n ii) '*'are priority 2\niii) '+'are priority 3\n\nThe rest are optional" 0 0 0 "${menuopt[@]}" 3>&1 1>&2 2>&3)
     
     # check if dialog is installed
 
@@ -869,16 +896,16 @@ MainMenu(){
 	fi
 
 	case $menuitem in
-		"Partition Disk *")
+		"Partition Disk **")
 			PartitionDisk
-			# MainMenu "Partition Disk *"
+			# MainMenu "Partition Disk **"
 			;;
-		"Configure Network *")
+		"Configure Network **")
 			# dialog --msgbox "Configure Network" 0 0
 			ConfNet
 			if [[ $? -eq 1 ]]
 			then
-				MainMenu "Configure Network *"
+				MainMenu "Configure Network **"
 			fi
 			;;
 
@@ -967,7 +994,7 @@ MainMenu(){
 			;;
 
 
-		"Configure Host *")
+		"Configure Host +")
 			: '
 			arch-chroot /mnt
 			if [[ $? -eq 1 ]]
@@ -977,7 +1004,7 @@ MainMenu(){
 			'
 				ConfHost "set hostname *"
 			# fi
-			MainMenu "Configure Host *"
+			MainMenu "Configure Host +"
 			;;
 
 		"continue Live")
@@ -1017,4 +1044,4 @@ MainMenu(){
 # dialog --backtitle "Written by c2700" --msgbox "previously disabled stable repos have been enabled. you can add, remove, disable or enable repos by editing the /etc/pacman.conf file" 0 0
 
 # MainMenu "Partition Disk" 3>&1 1>&2 2>&3
-MainMenu "Partition Disk *"
+MainMenu "Partition Disk **"
