@@ -109,14 +109,14 @@ nm_mngr(){
 		clear
 		dialog --msgbox "press 'q' to exit the upcoming wifi list" 0 0
 		nmcli device wifi list && read -p "Enter SSID to connect to: " wifi_name
-		nmcli device wifi connect $wifi_name -a
+		nmcli device wifi connect "$wifi_name" -a
 		if [[ $? -eq 1 ]]
 		then
 			# for (( reconnect = "n"; reconnect != "n" ;))
-			for (( reconnect = "n"; reconnect -eq "y" ;))
+			for (( reconnect="n"; reconnect == "y" ;))
 			do
 				nmcli device wifi list && read -p "Enter SSID to connect to: " wifi_name
-				nmcli device wifi connect $wifi_name -a
+				nmcli device wifi connect "$wifi_name" -a
 				read -p "rescan and connect to another ssid? [y/n]" reconnect
 			done
 		fi
@@ -416,7 +416,8 @@ SetLocale(){
 	done < locales.txt
 	# nicepl=("$(cat locales.txt)")
 	# echo -e "locales\n${nicepl[*]}" | sed 's/"\n"//g'
-	LocaleFormat=$(echo -e "\n\n${LocaleDialog[@]}\n" | sed 's/" "/"\n"/g')
+	LocaleFormat=$(echo -e "\n\n${LocaleDialog[*]}\n" | sed 's/" "/"\n"/g')
+	# LocaleFormat=$(echo -e "\n\n${LocaleDialog[@]}\n" | sed 's/" "/"\n"/g')
 	dialog --msgbox "locales set:$LocaleFormat" 0 0
 	# locale-gen
 	# rm -rfv locales.txt &2>/dev/null
@@ -690,10 +691,14 @@ ConfHost(){
 
 
 MountViewPartitions(){
+	
 	DiskPartListInfo=()
 	DiskPartNameTemp=()
 	DiskPartSizeTemp=()
 	partitions=()
+	mountpoint=""
+	SelectedPartitions=()
+
 	for ((a = 0; a < ${#Disks[@]}; a++))
 	do
 	    DiskPartNameTemp=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $1 }'))
@@ -702,48 +707,55 @@ MountViewPartitions(){
 
 	    DiskPartFsTypeTemp=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $3 }'))
 
-	    DiskPartPartTypeTempString1=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $4 }'))
+	    DiskPartTypeTempString1=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $4 }'))
 
-	    DiskPartPartTypeTempString2=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $5 }'))
+	    DiskPartTypeTempString2=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $5 }'))
 
-	    if [[ -z ${DiskPartSizeTemp[@]} ]] && [[ -z ${DiskPartFsTypeTemp[@]} ]] && [[ -z ${DiskPartPartTypeTempString1[@]} ]] && [[ -z ${DiskPartPartTypeTempString2[@]} ]]
+	    if [[ -z ${DiskPartSizeTemp[*]} ]] && [[ -z ${DiskPartFsTypeTemp[*]} ]] && [[ -z ${DiskPartTypeTempString1[*]} ]] && [[ -z ${DiskPartTypeTempString2[*]} ]]
 	    then
 	        continue
 	    else
 	        for (( b = 0; b < ${#DiskPartNameTemp[@]}; b++ ))
 	        do
-	            DiskPartPartTypeTemp="${DiskPartPartTypeTempString1[$b]} ${DiskPartPartTypeTempString2[$b]}"
-
-	            DiskPartInfo="${DiskPartSizeTemp[$b]} | ${DiskPartFsTypeTemp[$b]} | $DiskPartPartTypeTemp"
-
-	            # DiskPartListInfo+=("${DiskPartNameTemp[$b]}")
-	            # DiskPartListInfo+=("$DiskPartInfo")
-				# DiskPartListInfo+=(0)
+	            DiskPartTypeTemp="${DiskPartTypeTempString1[$b]} ${DiskPartTypeTempString2[$b]}"
+	            DiskPartInfo="${DiskPartSizeTemp[$b]} | ${DiskPartFsTypeTemp[$b]} | $DiskPartTypeTemp"
 				DiskPartListInfo+=("${DiskPartNameTemp[$b]}" "$DiskPartInfo" 0)
 	        done
-	        # dialog --cancel-label "Back" --column-separator "|" --title "Partition mount menu"  --extra-button --extra-label "Mount" --checklist "Partitions in /dev/${Disks[$a]}" 0 0 0 "${DiskPartListInfo[@]}"
-	        # dialog --cancel-label "Back" --column-separator "|" --title "Partition mount menu"  --extra-button --extra-label "Mount" --menu "Partitions in /dev/${Disks[$a]}" 0 0 0 "${DiskPartListInfo[@]}"
-	        # partition=$(dialog --cancel-label "Back" --column-separator "|" --title "Partition mount menu"  --extra-button --extra-label "Mount" --menu "Partitions in /dev/${Disks[$a]}" 0 0 0 "${DiskPartListInfo[@]}")
 	        partition=($(dialog --cancel-label "Back" --column-separator "|" --title "Partition mount menu"  --extra-button --extra-label "Mount" --checklist "Partitions in /dev/${Disks[$a]}" 0 0 0 "${DiskPartListInfo[@]}" 3>&1 1>&2 2>&3))
-	        if [[ $? -eq 3 ]]; then
-		        for (( a = 2; a < ${#partition[@]}; a+=2 )); do
-		        	echo "${DiskPartListInfo[$a]}"
-		        	# mount the selected partitions. If same fstype partitions are selected msgbox to say "mount only one of those partitions"
-		        done
-		       	# else clause to call "MountViewPartitions" to show "mounted at <mnt. pt.>" text next to partitions
-	        fi
-	        unset DiskPartListInfo
-	    fi
+			# 0 - ok
+			# 1 - back
+			# 3 - mount
+			PARTITION_EXIT_CODE=$?
+			if [[ $PARTITION_EXIT_CODE -eq 0 ]]
+			then
+				DiskPartListInfo=()
+			elif [[ $PARTITION_EXIT_CODE -eq 1 ]]
+			then
+				# MountViewPartitions
+				PartitionDisk
+			elif [[ $PARTITION_EXIT_CODE -eq 3 ]]
+			then
+				echo ${partition[*]}
+				DiskPartListInfo=()
+			fi
+		fi
 	done
-}
+} 
+ 
+
 
 DiskListTemp(){
-	lsblk -dno name,size,pttype,vendor,model | grep -iv 'loop\|sr0'
+	lsblk -dno name,size,pttype,vendor,model | grep -iv 'loop\|sr[0-9]*'
 }
 
 DiskPartInfoTemp(){
-    lsblk -nlo name,size,fstype,fsver,parttypename /dev/"$1" | grep -i '[a,s]d[a-z][0-9]' | grep -i 'ext4\|fat32\|vfat\|efi\|swap' | sed 's/1.0   //g;s/vfat   FAT32 EFI System/FAT32  EFI System/g;s/swap   1     Linux swap/swap   Linux swap/g'
-    echo -e "\n"
+	if [[ -z $1 ]]
+	then
+		lsblk -nlo name,size,fstype,fsver,parttypename | grep -i '[a,s]d[a-z][0-9]' | grep -i 'ext4\|fat32\|vfat\|efi\|swap' | sed 's/1.0   //g;s/vfat   FAT32 EFI System/FAT32  EFI System/g;s/swap   1     Linux swap/swap   Linux swap/g'
+	else
+	    lsblk -nlo name,size,fstype,fsver,parttypename /dev/"$1" | grep -i '[a,s]d[a-z][0-9]' | grep -i 'ext4\|fat32\|vfat\|efi\|swap' | sed 's/1.0   //g;s/vfat   FAT32 EFI System/FAT32  EFI System/g;s/swap   1     Linux swap/swap   Linux swap/g'
+	fi
+	echo -e "\n"
 }
 
 PartitionDisk(){
@@ -756,7 +768,7 @@ PartitionDisk(){
 
 	DiskListInfo=()
 	DiskName=()
-
+	
 	for (( i = 0; i <= ${#DiskList}; i++ ))
 	do
 		DiskName+=("${DiskVendor[$i]} ${DiskModel[$i]}")
@@ -773,61 +785,36 @@ PartitionDisk(){
 			DiskListInfo+=(0)
 		fi
 	done
-    # clear
-    # echo "${DiskListInfo[@]}"
-    # sleep 2
+
 	Disks=($(dialog --scrollbar --cancel-label "Back" --column-separator "|" --title "Disk Selection Menu" --checklist "" 0 0 0 "${DiskListInfo[@]}" 3>&1 1>&2 2>&3))
-
-
-	if [[ $? -eq 0 ]]; then
-		if [[ -z ${Disks[@]} ]]; then
+	if [[ $? -eq 0 ]]
+	then
+		if [[ -z ${Disks[*]} ]]
+		then
 			dialog --msgbox "please select atleast one disk" 0 0
 			PartitionDisk
 		else
-			dialog --yes-label "Mount" --no-label "Edit" --yesno "Select \"Edit\" for Editing and then mounting the partitions of this disk or select \"Mount\" to only select and mount existing ext4/efi/fat32/swap partitions" 0 0
-
-			if [[ $? -eq 0 ]]; then
-				MountViewPartitions 
-			else
-				PartTools=("fdisk" "fdisk")
-				PartTools+=("gdisk" "gdisk")
-				PartTools+=("cgdisk" "cgdisk")
-				PartTools+=("cfdisk" "cfdisk")
-				PartTools+=("sfdisk" "sfdisk")
-
-				PartTool=$(dialog --no-tags --menu "Partition Tool Selection Menu" 0 0 0 "${PartTools[@]}" 3>&1 1>&2 2>&3)
-
-				for i in ${Disks[@]}
-				do
-					dialog --msgbox "editing $i using $PartTool" 0 0
-					clear
-					case $PartTool in
-						'fdisk')
-							fdisk /dev/$i
-							;;
-						'gdisk')
-							gdisk /dev/$i
-							;;
-						'cgdisk')
-							cgdisk /dev/$i
-							;;
-						'cfdisk')
-							cfdisk /dev/$i
-							;;
-						'sfdisk')
-							sfdisk /dev/$i
-							;;
-					esac
-				done
+			dialog --extra-button --extra-label "Mount" --ok-label "Back" --cancel-label "Edit" --yesno "Select \"Edit\" for Editing and then mounting the partitions of this disk or select \"Mount\" to only select and mount existing ext4/efi/fat32/swap partitions" 0 0
+			PART_MSG_BOX_EXIT_CODE=$?
+			# 0 - back
+			# 1 - edit
+			# 3 - mount
+			if [[ $PART_MSG_BOX_EXIT_CODE -eq 0 ]]
+			then
+				PartitionDisk
+			elif [[ $PART_MSG_BOX_EXIT_CODE -eq 1 ]]
+			then
+				echo "edit"
+			elif [[ $PART_MSG_BOX_EXIT_CODE -eq 3 ]]
+			then
 				MountViewPartitions
 			fi
 		fi
-	elif [[ $? -eq 1 ]]; then
+	elif [[ $? -eq 1 ]]
+	then
 		MainMenu "Partition Disk **"
 	fi
 }
-
-	# dialog --yes-label "Mount" --no-label "Edit" --yesno "Select Mount to only mount the partition in the /mnt directory. Select Edit to edit and mount the partition" 0 0
 
 
 
@@ -868,8 +855,8 @@ MainMenu(){
 	if [[ $? -eq 1 ]]
 	then
 		echo -e "dialog not installed.\n"
-		# pacman -Uvd --noconfirm $(ls dialog*)
 		read -s -n1 -p "press any key to install the git provided dialog package "
+		pacman -Uvd --noconfirm $(ls dialog*)
 		if [[ $? -eq 1 ]]
 		then
 			echo -e "\n\ndialog could not be installed.\n\nPlease install provided dialog packages by typing \"pacman -Uvd <package name>\" with or without the \"--noconfirm\" argument.\n\ncurrent directory:\n$(pwd)\n\npackages in this directory:\n$(ls *.pkg*).\n\n\nexiting...\n\n"
@@ -1038,7 +1025,7 @@ MainMenu(){
 }
 
 
-# uncomment repos excluding testing repos
+# UNcomment repos excluding testing repos
 # sed '94s/\#\[/"["' /etc/pacman.conf
 # sed '95s/\#\[/""' /etc/pacman.conf
 # dialog --backtitle "Written by c2700" --msgbox "previously disabled stable repos have been enabled. you can add, remove, disable or enable repos by editing the /etc/pacman.conf file" 0 0
