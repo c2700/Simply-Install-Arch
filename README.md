@@ -15,7 +15,7 @@ To-Be-Done:
 
 	3) shell rc files
 		  i) bashrc prompts for stronger machines (A mix of conf files, python scripts, bash scripts just to make it look like those prompts you see with git icons and colorfilled text embeded arrows. not advisable to be used on weak machines though it can be used)
-			ii) zshrc prompts as the one above.
+		 ii) zshrc prompts as the one above.
 
 	4) partition editor
 		   i) include manual editing on the dialog iface (parted will be used to partition the disk)
