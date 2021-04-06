@@ -1,4 +1,4 @@
-Just Run the script and go through the options<br>
+Just Run the script and go through the options<br><br><br>
 Plz Don't judge me for my horrible and confusing varaiable names and naming convention if you plan on reading the script 👀. It's something I came up with on the spot.
 <br><br>
 
