@@ -940,7 +940,7 @@ PartitionDisk(){
 				diskeditors+=("fdisk" "fdisk")
 				diskeditors+=("sfdisk" "sfdisk")
 				diskeditors+=("cfdisk" "cfdisk")
-				# diskeditors+=("parted","parted")
+				diskeditors+=("parted" "parted (not beginner friendly)")
 				DiskEditor=$(dialog --no-tags --cancel-label "Back" --menu "Disk Editor Menu" 0 0 0 "${diskeditors[@]}" 3>&1 1>&2 2>&3)
 				DISKEDITOR_EXIT_CODE=$?
 				if [[ $DISKEDITOR_EXIT_CODE -eq 1 ]]
