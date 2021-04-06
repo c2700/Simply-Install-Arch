@@ -5,7 +5,7 @@ Just Run the script and go through the options
 <br>
 <br>DON'T BOTHER READING FURTHER IF U DON'T PLAN ON READING FUTURE CHANGES TO BE MADE
 <br><br><br><br><br><br>
-<b>To-Be-Done:<br><br></b>
+<b>To Do:<br><br></b>
 1) Auto-Install Menu:<br>
 &nbsp&nbsp&nbsp&nbsp <input type="checkbox"> Fresh Auto Install<br>
 &nbsp&nbsp&nbsp&nbsp <input type="checkbox"> MultiBoot Auto Install<br>
