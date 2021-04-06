@@ -749,11 +749,11 @@ MountViewPartitions(){
 				do
 					for (( d = 0; d < ${#DiskPartNameTemp[@]}; d++ ))
 					do
-						if [[ ${DiskPartListInfo[$c]} == 0 ]]
+						cc=$((c%2))
+						# if [[ ${DiskPartListInfo[$c]} -eq 0 ]]
+						if [[ $cc -eq 0 ]] && [[ c -ne 0 ]] && [[ c -ne 1 ]]
 						then
-							echo "set - ${DiskPartListInfo[$c]}"
 							unset DiskPartListInfo[$c]
-							echo "unset - ${DiskPartListInfo[$c]}"
 						fi
 						
 						if [[ "${DiskPartNameTemp[$d]}" == "${SelectedPartitionsTemp[$c]}" ]]
@@ -861,6 +861,16 @@ MountViewPartitions(){
 			'
 		fi
 	done
+	dialog --yes-label "OK" --no-label "Back" --yesno "${SelectedPartitionsMountedText[*]}" 0 0
+	DISK_MOUNT_CONFIRMATION_EXIT_CODE=$?
+	if [[ $DISK_MOUNT_CONFIRMATION_EXIT_CODE -eq 0 ]]
+	then
+		MainMenu
+	elif [[ $DISK_MOUNT_CONFIRMATION_EXIT_CODE -eq 1 ]]; then
+		PartitionDisk
+		# MountViewPartitions
+	fi
+	MainMenu
 }
 
 
@@ -925,7 +935,21 @@ PartitionDisk(){
 				PartitionDisk
 			elif [[ $PART_MSG_BOX_EXIT_CODE -eq 1 ]]
 			then
-				echo "edit"
+				diskeditors=("gdisk" "gdisk")
+				diskeditors+=("cgdisk" "cgdisk")
+				diskeditors+=("fdisk" "fdisk")
+				diskeditors+=("sfdisk" "sfdisk")
+				diskeditors+=("cfdisk" "cfdisk")
+				# diskeditors+=("parted","parted")
+				DiskEditor=$(dialog --no-tags --cancel-label "Back" --menu "Disk Editor Menu" 0 0 0 "${diskeditors[@]}" 3>&1 1>&2 2>&3)
+				DISKEDITOR_EXIT_CODE=$?
+				if [[ $DISKEDITOR_EXIT_CODE -eq 1 ]]
+				then
+					PartitionDisk
+				elif [[ $DISKEDITOR_EXIT_CODE -eq 0 ]]
+				then
+					MountViewPartitions
+				fi
 			elif [[ $PART_MSG_BOX_EXIT_CODE -eq 3 ]]
 			then
 				MountViewPartitions
@@ -1148,7 +1172,7 @@ MainMenu(){
 			then
 				MainMenu "Reboot"
 			else
-				dialog --yesno "save basic customization instructions in the arch partition? It will be stored in the /home/customize.txt file of your arch install location. use less, more, cat or a text editor to view the file" 0 0
+				dialog --yesno "save basic customization instructions in the arch partition? It will be stored in the /home/customize.txt file of your arch install location. use less, more, cat or a text editor like vim, vi, emacs or nano to view the file" 0 0
 				if [[ $? -eq 1 ]]
 				then
 					dialog --msgbox "saved basic customization instructions" 0 0
