@@ -1,11 +1,11 @@
 #!/bin/bash
 
-DIALOG_OK=1
-DIALOG_CANCEL=0
-DIALOG_ESC=255
-DIALOG_HELP=2
-DIALOG_HELP_ITEM_HELP=2
-DIALOG_EXTRA=3
+# DIALOG_OK=1
+# DIALOG_CANCEL=0
+# DIALOG_ESC=255
+# DIALOG_HELP=2
+# DIALOG_HELP_ITEM_HELP=2
+# DIALOG_EXTRA=3
 
 # 3>&1 1>&2 2>&3
 GuageMeter(){
@@ -691,24 +691,25 @@ ConfHost(){
 
 
 MountViewPartitions(){
-	
+
 	DiskPartListInfo=()
 	DiskPartNameTemp=()
 	DiskPartSizeTemp=()
+	DiskPartType=()
+	SelectedPartitionsMountedText=()
+	SelectedPartitionsTemp=()
 	partitions=()
-	mountpoint=""
-	SelectedPartitions=()
+	fat32_efi_parts=()
+	linux_fs_ext4_parts=()
+	home_parts=()
+	swap_parts=()
 
 	for ((a = 0; a < ${#Disks[@]}; a++))
 	do
 	    DiskPartNameTemp=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $1 }'))
-
 	    DiskPartSizeTemp=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $2 }'))
-
 	    DiskPartFsTypeTemp=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $3 }'))
-
 	    DiskPartTypeTempString1=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $4 }'))
-
 	    DiskPartTypeTempString2=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $5 }'))
 
 	    if [[ -z ${DiskPartSizeTemp[*]} ]] && [[ -z ${DiskPartFsTypeTemp[*]} ]] && [[ -z ${DiskPartTypeTempString1[*]} ]] && [[ -z ${DiskPartTypeTempString2[*]} ]]
@@ -720,28 +721,148 @@ MountViewPartitions(){
 	            DiskPartTypeTemp="${DiskPartTypeTempString1[$b]} ${DiskPartTypeTempString2[$b]}"
 	            DiskPartInfo="${DiskPartSizeTemp[$b]} | ${DiskPartFsTypeTemp[$b]} | $DiskPartTypeTemp"
 				DiskPartListInfo+=("${DiskPartNameTemp[$b]}" "$DiskPartInfo" 0)
+				DiskPartType+=("$DiskPartTypeTemp")
 	        done
-	        partition=($(dialog --cancel-label "Back" --column-separator "|" --title "Partition mount menu"  --extra-button --extra-label "Mount" --checklist "Partitions in /dev/${Disks[$a]}" 0 0 0 "${DiskPartListInfo[@]}" 3>&1 1>&2 2>&3))
+        	partition=($(dialog --cancel-label "Back" --column-separator "|" --title "Partition mount menu" --extra-button --extra-label "Mount" --checklist "Partitions in /dev/${Disks[$a]}" 0 0 0 "${DiskPartListInfo[@]}" 3>&1 1>&2 2>&3))
+			PARTITION_EXIT_CODE=$?
+
 			# 0 - ok
 			# 1 - back
 			# 3 - mount
-			PARTITION_EXIT_CODE=$?
+
 			if [[ $PARTITION_EXIT_CODE -eq 0 ]]
 			then
+				SelectedPartitionsTemp+=${partition[*]}
 				DiskPartListInfo=()
 			elif [[ $PARTITION_EXIT_CODE -eq 1 ]]
 			then
-				# MountViewPartitions
 				PartitionDisk
 			elif [[ $PARTITION_EXIT_CODE -eq 3 ]]
 			then
-				echo ${partition[*]}
-				DiskPartListInfo=()
+				SelectedPartitionsTemp+=(${partition[@]})
+				# clear
+				# echo "DiskPartNameTemp_p : ${#DiskPartNameTemp[@]} - ${DiskPartNameTemp[@]}"
+				# echo -e "SelectedPartitionsTemp_p : ${#SelectedPartitionsTemp[@]} - ${SelectedPartitionsTemp[@]}\n"
+				# fstype - ${DiskPartFsTypeTemp[$d]}.
+				# echo "DiskPartTypeTemp_p ${#DiskPartTypeTemp[@]} - ${#DiskPartTypeTemp[@]}"
+				for (( c = 0; c <= ${#SelectedPartitionsTemp[@]}; c++ ))
+				do
+					for (( d = 0; d < ${#DiskPartNameTemp[@]}; d++ ))
+					do
+						if [[ ${DiskPartListInfo[$c]} == 0 ]]
+						then
+							echo "set - ${DiskPartListInfo[$c]}"
+							unset DiskPartListInfo[$c]
+							echo "unset - ${DiskPartListInfo[$c]}"
+						fi
+						
+						if [[ "${DiskPartNameTemp[$d]}" == "${SelectedPartitionsTemp[$c]}" ]]
+						then
+							# DiskPartTypeTemp="${DiskPartTypeTempString1[$b]} ${DiskPartTypeTempString2[$b]}"
+							# DiskPartInfo="${DiskPartSizeTemp[$b]} ${DiskPartFsTypeTemp[$b]} $DiskPartTypeTemp"
+							# SelectedPartitionsMountedText+=("/dev/${SelectedPartitionsTemp[$c]}")
+							# echo "${DiskPartInfo[$d]}"
+							# SelectedPartitionsMountedText+=("${DiskPartInfo[$d]}")
+							# echo -e "${SelectedPartitionsTemp[$c]} - ${DiskPartFsTypeTemp[$d]} ${DiskPartType[$d]}\n"
+							# echo "${DiskPartListInfo[@]}"
+							if [[ ${DiskPartFsTypeTemp[$d]} == "FAT32" ]] && [[ ${DiskPartType[$d]} == "EFI System" ]]
+							then
+								PartInfo="/dev/${SelectedPartitionsTemp[$c]} ${DiskPartListInfo[$d]} ${DiskPartType[$d]} mounted at /boot"
+								SelectedPartitionsMountedText+=($PartInfo)
+								fat32_efi_parts+=(${SelectedPartitionsTemp[$d]})
+							elif [[ ${DiskPartFsTypeTemp[$d]} == "ext4" ]] && [[ ${DiskPartType[$d]} == "Linux filesystem" ]]
+							then
+								PartInfo="/dev/${SelectedPartitionsTemp[$c]} ${DiskPartListInfo[$d]} ${DiskPartType[$d]} mounted at /"
+								SelectedPartitionsMountedText+=($PartInfo)
+								linux_fs_ext4_parts+=(${SelectedPartitionsTemp[$d]})
+							elif [[ ${DiskPartFsTypeTemp[$d]} == "ext4" ]] && [[ ${DiskPartType[$d]} == "Linux home" ]]
+							then
+								PartInfo="/dev/${SelectedPartitionsTemp[$c]} ${DiskPartListInfo[$d]} ${DiskPartType[$d]} mounted at /home"
+								SelectedPartitionsMountedText+=($PartInfo)
+								home_parts+=(${SelectedPartitionsTemp[$d]})
+							elif [[ ${DiskPartFsTypeTemp[$d]} == "swap" ]]
+							then
+								PartInfo="created and enabled swap on /dev/${SelectedPartitionsTemp[$c]}"
+								SelectedPartitionsMountedText+=($PartInfo)
+								swap_parts+=("${SelectedPartitionsTemp[$c]}")
+							fi
+						fi
+					done
+				done
+				
+ 				# echo "${fat32_efi_parts[@]} ${linux_fs_ext4_parts[@]} ${home_parts[@]} ${swap_parts[@]}"
+ 				part_numbers=${#linux_fs_ext4_parts[@]}+${#swap_parts[@]}+${#fat32_efi_parts[@]}+${#home_parts[@]}
+				if [[ ${#linux_fs_ext4_parts[@]} -gt 1 ]] || [[ ${#swap_parts[@]} -gt 1 ]] || [[ ${#fat32_efi_parts[@]} -gt 1 ]] || [[ ${#home_parts[@]} -gt 1 ]]
+				then
+					dialog --msgbox "select one partition for each filesystem\n   i) Boot - EFI (FAT32 format)\n  ii) Root - Linux journaling filesystem (ext4/btrfs/xfs/zfs).\n iii) swap - swap (optional but recommended) \n  iv) home - same linux journaling filesystem as root (optional)" 0 0
+					MountViewPartitions
+					# PartitionDisk
+				elif [[ ${#linux_fs_ext4_parts[@]} -le 1 ]] || [[ ${#swap_parts[@]} -le 1 ]] || [[ ${#fat32_efi_parts[@]} -le 1 ]] || [[ ${#home_parts[@]} -le 1 ]]
+				then
+					: '
+					for (( i = 0; i < ${#DiskPartListInfo[@]}; i++ ))
+					do
+						echo "${DiskPartListInfo[$i]}"
+					done
+					echo -e "1 - nice - ${DiskPartListInfo[*]}\n"
+					echo -e "nice0 - ${DiskPartType[*]}\n"
+					echo -e "nice1 - ${SelectedPartitionsMountedText[@]}\n"
+					'
+					DiskPartListInfo=()
+				fi
 			fi
+
+			: '
+			if [[ "${Disks[$a]}" == "${Disks[-1]}" ]]
+			then
+
+				# 0 - ok
+				# 1 - back
+				# 3 - mount
+
+	        	partition=($(dialog --cancel-label "Back" --column-separator "|" --title "Partition mount menu"  --extra-button --extra-label "Mount" --checklist "Partitions in /dev/${Disks[$a]}" 0 0 0 "${DiskPartListInfo[@]}" 3>&1 1>&2 2>&3))
+				PARTITION_EXIT_CODE=$?
+
+				if [[ $PARTITION_EXIT_CODE -eq 0 ]]
+				then
+					echo ${partition[*]}
+					SelectedPartitionsTemp+=${partition[*]}
+					DiskPartListInfo=()
+				elif [[ $PARTITION_EXIT_CODE -eq 1 ]]
+				then
+					# MountViewPartitions
+					PartitionDisk
+				elif [[ $PARTITION_EXIT_CODE -eq 3 ]]
+				then
+					SelectedPartitionsTemp+=${partition[*]}
+					DiskPartListInfo=()
+				fi
+
+			elif [[ "${Disks[$a]}" != "${Disks[-1]}" ]]
+			then
+
+				# 0 - Back
+				# 1 - mount
+
+	        	partition=($(dialog --cancel-label "Mount" --ok-label "Back" --column-separator "|" --title "Partition mount menu" --checklist "Partitions in /dev/${Disks[$a]}" 0 0 0 "${DiskPartListInfo[@]}" 3>&1 1>&2 2>&3))
+				PARTITION_EXIT_CODE=$?
+
+				if [[ $PARTITION_EXIT_CODE -eq 1 ]]
+				then
+					echo ${partition[*]}
+					SelectedPartitionsTemp+=${partition[*]}
+					DiskPartListInfo=()
+				elif [[ $PARTITION_EXIT_CODE -eq 0 ]]
+				then
+					# MountViewPartitions
+					PartitionDisk
+				fi
+			fi
+			'
 		fi
 	done
-} 
- 
+}
+
 
 
 DiskListTemp(){
@@ -768,7 +889,7 @@ PartitionDisk(){
 
 	DiskListInfo=()
 	DiskName=()
-	
+
 	for (( i = 0; i <= ${#DiskList}; i++ ))
 	do
 		DiskName+=("${DiskVendor[$i]} ${DiskModel[$i]}")
@@ -842,6 +963,28 @@ PartitionDisk(){
 
 
 
+Repo_Enable(){
+	dialog --backtitle "Written by c2700" --yesno "enable \"multilib\" repo for packages with support for multiple architectures?" 5 80
+	REPO_ENABLE_EXIT_CODE=$?
+	if [[ REPO_ENABLE_EXIT_CODE -eq 1 ]]
+	then
+		dialog --backtitle "Written by c2700" --yes-label "exit" --no-label "continue installation" --yesno "multilib repo not enabled. To enable it restart the script or uncomment lines 94 and 95 in file \"/etc/pacman.conf\"" 6 63
+		RESTART_EXIT_CODE=$?
+		if [[ $RESTART_EXIT_CODE -eq 0 ]]
+		then
+			  exit
+		elif [[ $RESTART_EXIT_CODE -eq 1 ]]
+		then
+			echo ""
+		fi
+	elif [[ REPO_ENABLE_EXIT_CODE -eq 0 ]]
+	then
+		# sed '94s/\#\[/"["' /etc/pacman.conf
+		# sed '95s/\#\[/""' /etc/pacman.conf
+		dialog --backtitle "Written by c2700" --msgbox "\"multilib\" repo has been enabled. you can add, remove, disable or enable repos by editing the \"/etc/pacman.conf\" file" 0 0
+	fi
+}
+
 
 
 
@@ -874,7 +1017,7 @@ MainMenu(){
 	menuopt+=("Reboot" "Reboot the computer")
 
 	menuitem=$(dialog --default-item "${1}" --backtitle "Written by c2700" --cancel-label "Exit" --title "Install Menu" --menu "To install arch all options followed by\n  i) '**' are priority 1\n ii) '*'are priority 2\niii) '+'are priority 3\n\nThe rest are optional" 0 0 0 "${menuopt[@]}" 3>&1 1>&2 2>&3)
-    
+
     # check if dialog is installed
 
 	if [[ $? -eq 1 ]]
@@ -1024,11 +1167,5 @@ MainMenu(){
 
 }
 
-
-# UNcomment repos excluding testing repos
-# sed '94s/\#\[/"["' /etc/pacman.conf
-# sed '95s/\#\[/""' /etc/pacman.conf
-# dialog --backtitle "Written by c2700" --msgbox "previously disabled stable repos have been enabled. you can add, remove, disable or enable repos by editing the /etc/pacman.conf file" 0 0
-
-# MainMenu "Partition Disk" 3>&1 1>&2 2>&3
-MainMenu "Partition Disk **"
+# Repo_Enable
+MainMenu "Partition Disk **" 3>&1 1>&2 2>&3
