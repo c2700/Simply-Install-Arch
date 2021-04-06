@@ -1,47 +1,31 @@
-(Don't judge me for my horrible varaiable naming if you read the script ('_') )
+Just Run the script and go through the options<br><br><br>
+Plz Don't judge me for my horrible and confusing variable names and naming convention if you plan on reading the script 👀. It's something I came up with on the spot.
+<br><br><br><br>
 
-Just Run the script and go through the options
+## <H1>To Add</H1>
 
-<br>
-<br>DON'T BOTHER READING FURTHER IF U DON'T PLAN ON READING FUTURE CHANGES TO BE MADE
-<br><br><br><br><br><br>
-<b>To Do:<br><br></b>
-1) Auto-Install Menu:<br>
-&nbsp&nbsp&nbsp&nbsp <input type="checkbox"> Fresh Auto Install<br>
-&nbsp&nbsp&nbsp&nbsp <input type="checkbox"> MultiBoot Auto Install<br>
-<br>2) Bootloaders<br>
-&nbsp&nbsp&nbsp&nbsp <input type="checkbox"> syslinux<br>
-&nbsp&nbsp&nbsp&nbsp <input type="checkbox"> refind<br>
-&nbsp&nbsp&nbsp&nbsp <input type="checkbox"> systemd-boot (bootctl)<br>
-<br>3) shell rc files<br>
-&nbsp&nbsp&nbsp&nbsp <input type="checkbox"> bashrc prompts for stronger machines (A mix of conf files, python scripts, bash scripts just to make it look like those prompts you see with git icons and colorfilled text embeded arrows. not advisable to be used on weak machines though it can be used)
-<br>&nbsp&nbsp&nbsp&nbsp <input type="checkbox"> zshrc prompts as the one above.
-<br><br>4) partition editor:
-<br>&nbsp&nbsp&nbsp&nbsp <input type="checkbox"> Include manual editing on the dialog iface (parted will be used to partition the disk)
-<br>&nbsp&nbsp&nbsp&nbsp <input type="checkbox"> Include auto partition
-<br><br>5) auto set locale:
-<br>&nbsp&nbsp&nbsp&nbsp <input type="checkbox"> set default locale as english based on the tz selected if locale is not set. if tz (and/or) locale is not selected then prompt to select tz first (if not selected) then prompt for locale selection
-</p>
-</pre>
+<h3>1. Auto-Install Menu:</h3>
 
-<!--
-	1) Auto-Install Menu:
-		i) Fresh Auto Install
-		ii) MultiBoot Auto Install
+- [ ] Fresh Auto Install
+- [ ] MultiBoot Auto Install
 
-	2) Bootloaders
-		   i) syslinux
-		  ii) refind
-		 iii) systemd-boot (bootctl)
+<br><h3>2. Bootloaders:</h3>
 
-	3) shell rc files
-		  i) bashrc prompts for stronger machines (A mix of conf files, python scripts, bash scripts just to make it look like those prompts you see with git icons and colorfilled text embeded arrows. not advisable to be used on weak machines though it can be used)
-			ii) zshrc prompts as the one above.
+- [ ] syslinux
+- [ ] refind
+- [ ] systemd-boot (bootctl)
 
-	4) partition editor
-		   i) include manual editing on the dialog iface (parted will be used to partition the disk)
-		  ii) include auto partition
+<br><h3>3. shell rc files:</h3>
+   
+- [ ] bashrc prompts for stronger machines (A mix of conf files, python scripts, bash scripts just to make it look like those prompts you see with git icons and colorfilled text embeded arrows. not advisable to be used on weak machines though it can be used)
+- [ ] zshrc prompts as the one above.
 
-	5) set default locale as english based on the tz selected if locale is not set. if tz (and/or) locale is not selected then prompt to select tz first (if not selected) then prompt for locale selection
--->
+<br><h3>4. partition editor:</h3>
+   
+- [ ] include manual editing on the dialog iface (parted will be used to partition the disk)
+- [ ] include auto partition
+
+<br><h3>5. autoset timezone:</h3>
+   
+- [ ] set default locale as english based on the tz selected if locale is not set. if tz (and/or) locale is not selected then prompt to select tz first (if not selected) then prompt for locale selection
 
