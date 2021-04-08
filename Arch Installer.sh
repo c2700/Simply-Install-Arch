@@ -730,7 +730,11 @@ MountViewPartitions(){
 			# 1 - back
 			# 3 - mount
 
-			if [[ $PARTITION_EXIT_CODE -eq 0 ]]
+			if [[ ${#partition[*]} -eq 0 ]] && [[ $PARTITION_EXIT_CODE -eq 0 ]]
+			then
+				dialog --msgbox "please select atleast one partition out of EFI/EXT4/swap for system use" 0 0
+				MountViewPartitions
+			elif [[ $PARTITION_EXIT_CODE -eq 0 ]]
 			then
 				SelectedPartitionsTemp+=${partition[*]}
 				DiskPartListInfo=()
@@ -749,9 +753,10 @@ MountViewPartitions(){
 				do
 					for (( d = 0; d < ${#DiskPartNameTemp[@]}; d++ ))
 					do
+						SelectedPartitionsMountedText=( ${SelectedPartitionsMountedText[@]} )
 						cc=$((c%2))
 						# if [[ ${DiskPartListInfo[$c]} -eq 0 ]]
-						if [[ $cc -eq 0 ]] && [[ c -ne 0 ]] && [[ c -ne 1 ]]
+						if [[ $cc -eq 0 ]] && [[ $c -ne 0 ]] && [[ $c -ne 1 ]]
 						then
 							unset DiskPartListInfo[$c]
 						fi
@@ -760,29 +765,30 @@ MountViewPartitions(){
 						then
 							# DiskPartTypeTemp="${DiskPartTypeTempString1[$b]} ${DiskPartTypeTempString2[$b]}"
 							# DiskPartInfo="${DiskPartSizeTemp[$b]} ${DiskPartFsTypeTemp[$b]} $DiskPartTypeTemp"
-							# SelectedPartitionsMountedText+=("/dev/${SelectedPartitionsTemp[$c]}")
+							# SelectedPartitionsMountedText+=("/dev/${SelectedPartitionsTemp[$c]}\n")
 							# echo "${DiskPartInfo[$d]}"
-							# SelectedPartitionsMountedText+=("${DiskPartInfo[$d]}")
+							# SelectedPartitionsMountedText+=("${DiskPartInfo[$d]}\n")
 							# echo -e "${SelectedPartitionsTemp[$c]} - ${DiskPartFsTypeTemp[$d]} ${DiskPartType[$d]}\n"
 							# echo "${DiskPartListInfo[@]}"
 							if [[ ${DiskPartFsTypeTemp[$d]} == "FAT32" ]] && [[ ${DiskPartType[$d]} == "EFI System" ]]
 							then
-								PartInfo="/dev/${SelectedPartitionsTemp[$c]} ${DiskPartListInfo[$d]} ${DiskPartType[$d]} mounted at /boot"
+								PartInfo="/dev/${SelectedPartitionsTemp[$c]}---------${DiskPartType[$d]}------------${DiskPartFsTypeTemp[$d]}-------------/boot"
+								# PartInfo="\n/dev/${SelectedPartitionsTemp[$c]} ${DiskPartListInfo[$d]} ${DiskPartType[$d]} mounted at /boot"
 								SelectedPartitionsMountedText+=($PartInfo)
 								fat32_efi_parts+=(${SelectedPartitionsTemp[$d]})
 							elif [[ ${DiskPartFsTypeTemp[$d]} == "ext4" ]] && [[ ${DiskPartType[$d]} == "Linux filesystem" ]]
 							then
-								PartInfo="/dev/${SelectedPartitionsTemp[$c]} ${DiskPartListInfo[$d]} ${DiskPartType[$d]} mounted at /"
+								PartInfo="/dev/${SelectedPartitionsTemp[$c]}-------${DiskPartType[$d]}--------${DiskPartFsTypeTemp[$d]}----------------/"
 								SelectedPartitionsMountedText+=($PartInfo)
 								linux_fs_ext4_parts+=(${SelectedPartitionsTemp[$d]})
 							elif [[ ${DiskPartFsTypeTemp[$d]} == "ext4" ]] && [[ ${DiskPartType[$d]} == "Linux home" ]]
 							then
-								PartInfo="/dev/${SelectedPartitionsTemp[$c]} ${DiskPartListInfo[$d]} ${DiskPartType[$d]} mounted at /home"
+								PartInfo="/dev/${SelectedPartitionsTemp[$c]}-----${DiskPartListInfo[$d]} ${DiskPartType[$d]}-------/home"
 								SelectedPartitionsMountedText+=($PartInfo)
 								home_parts+=(${SelectedPartitionsTemp[$d]})
 							elif [[ ${DiskPartFsTypeTemp[$d]} == "swap" ]]
 							then
-								PartInfo="created and enabled swap on /dev/${SelectedPartitionsTemp[$c]}"
+								PartInfo="/dev/${SelectedPartitionsTemp[$c]}-----------swap----------------swap--------------swap"
 								SelectedPartitionsMountedText+=($PartInfo)
 								swap_parts+=("${SelectedPartitionsTemp[$c]}")
 							fi
@@ -861,7 +867,7 @@ MountViewPartitions(){
 			'
 		fi
 	done
-	dialog --yes-label "OK" --no-label "Back" --yesno "${SelectedPartitionsMountedText[*]}" 0 0
+	dialog --output-separator "\t" --yes-label "OK" --no-label "Back" --title "partition mount confirmation" --yesno "\nPartition--------Partition FS-------Partition Format----MountPoint\n\n${SelectedPartitionsMountedText[*]}" 80 77
 	DISK_MOUNT_CONFIRMATION_EXIT_CODE=$?
 	if [[ $DISK_MOUNT_CONFIRMATION_EXIT_CODE -eq 0 ]]
 	then
@@ -943,11 +949,16 @@ PartitionDisk(){
 				diskeditors+=("parted" "parted (not beginner friendly)")
 				DiskEditor=$(dialog --no-tags --cancel-label "Back" --menu "Disk Editor Menu" 0 0 0 "${diskeditors[@]}" 3>&1 1>&2 2>&3)
 				DISKEDITOR_EXIT_CODE=$?
+				clear
 				if [[ $DISKEDITOR_EXIT_CODE -eq 1 ]]
 				then
 					PartitionDisk
 				elif [[ $DISKEDITOR_EXIT_CODE -eq 0 ]]
 				then
+					for (( i = 0; i < ${#Disks[@]}; i++ ))
+					do
+						$DiskEditor "/dev/${Disks[$i]}"
+					done
 					MountViewPartitions
 				fi
 			elif [[ $PART_MSG_BOX_EXIT_CODE -eq 3 ]]
