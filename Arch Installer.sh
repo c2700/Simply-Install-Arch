@@ -730,8 +730,41 @@ ConfirmMounts(){
 	echo -e "${texts[@]}"
 	# 0 - ok
 	# 1 - back
-	dialog --yes-label "OK" --no-label "Back" --title "partition mount confirmation" --yesno "\nPartition-----Size-----------Filesystem-----------Format----MountPoint\n\n${texts[*]}" 20 75
+	dialog --yes-label "OK" --no-label "Back" --title "partition mount confirmation" --yesno "\nPartition-----Size-----------Filesystem----------Format----MountPoint\n\n${texts[*]}" 20 75
 	return $?
+}
+
+Mount(){
+	# $1 - block dev
+	# $2 - fs
+	if [[ $2 == "/mnt/" ]]
+	then
+		mkfs.ext4 "/dev/$1"
+		mount "/dev/$1" "/mnt"
+	elif [[ "$2" == "/mnt/boot/" ]]
+	then
+		mkfs.fat -F32 "/dev/$1"
+		if mountpoint "/mnt/"
+		then
+			mount "/dev/$1" "/mnt/boot"
+		else
+			Mount
+		fi
+	elif [[ $2 == "/mnt/home" ]]
+	then
+		if mountpoint "/mnt/home"
+		then
+			mount "/dev/$1" "/mnt/home"
+		else
+			Mount
+		fi
+		mkfs.ext4 "/dev/$1"
+		mount "/dev/$1" "/mnt/home"
+	elif [[ $2 == "swap" ]]
+	then
+		mkswap "/dev/$1"
+		swapon "/dev/$1"
+	fi
 }
 
 MountViewPartitions(){
@@ -741,6 +774,7 @@ MountViewPartitions(){
 	DiskPartSizeTemp=()
 	DiskPartType=()
 	SelectedPartitionsMountedText=("")
+	MountPoints=()
 	SelectedPartitionsTemp=()
 	partitions=()
 	fat32_efi_parts=()
@@ -800,22 +834,30 @@ MountViewPartitions(){
 							DiskPartType="${DiskPartTypeTempString1[$d]} ${DiskPartTypeTempString2[$d]}"
 							echo "${SelectedPartitionsTemp[$c]} ${DiskPartSizeTemp[$d]} $DiskPartType ${DiskPartFsTypeTemp[$d]}"
 
-							if [[ "$DiskPartType" == "EFI System" ]] && [[ "${DiskPartFsTypeTemp[$d]}" == "FAT32" ]]
+							if [[ "$DiskPartType" == "Linux filesystem" ]] && [[ "${DiskPartFsTypeTemp[$d]}" == "ext4" ]]
+							then
+								linux_fs_ext4_parts+=("${SelectedPartitionsTemp[$c]}")
+								SelectedPartitionsMountedText+=("\n${SelectedPartitionsTemp[$c]}----------${DiskPartSizeTemp[$d]}-------$DiskPartType---------${DiskPartFsTypeTemp[$d]}--------/")
+								MountPoints+=("${SelectedPartitionsTemp[$c]}")
+								MountPoints+=( "/mnt/")
+							elif [[ "$DiskPartType" == "EFI System" ]] && [[ "${DiskPartFsTypeTemp[$d]}" == "FAT32" ]]
 							then
 								fat32_efi_parts+=("${SelectedPartitionsTemp[$c]}")
 								SelectedPartitionsMountedText+=("\n${SelectedPartitionsTemp[$c]}----------${DiskPartSizeTemp[$d]}-----------$DiskPartType-----------${DiskPartFsTypeTemp[$d]}--------/boot")
-							elif [[ "$DiskPartType" == "Linux filesystem" ]] && [[ "${DiskPartFsTypeTemp[$d]}" == "ext4" ]]
-							then
-								linux_fs_ext4_parts+=("${SelectedPartitionsTemp[$c]}")
-								SelectedPartitionsMountedText+=("\n${SelectedPartitionsTemp[$c]}---------${DiskPartSizeTemp[$d]}-------$DiskPartType---------${DiskPartFsTypeTemp[$d]}---------/")
-							elif [[ "$DiskPartType" == "Linux swap" ]] && [[ "${DiskPartFsTypeTemp[$d]}" == "swap" ]]
-							then
-								swap_parts+=("${SelectedPartitionsTemp[$c]}")
-								SelectedPartitionsMountedText+=("\n${SelectedPartitionsTemp[$c]}-----------${DiskPartSizeTemp[$d]}-----------$DiskPartType------------${DiskPartFsTypeTemp[$d]}---------swap")
+								MountPoints+=("${SelectedPartitionsTemp[$c]}")
+								MountPoints+=("/mnt/boot/")
 							elif [[ "$DiskPartType" == "Linux home" ]] && [[ "${1DiskPartFsTypeTemp[$d]}" == "ext4" ]]
 							then
 								home_parts+=("${SelectedPartitionsTemp[$c]}")
+								MountPoints+=("${SelectedPartitionsTemp[$c]}" "/mnt/home/")
+								MountPoints+=("/mnt/home/")
 								SelectedPartitionsMountedText+=("\n${SelectedPartitionsTemp[$c]}-----${DiskPartSizeTemp[$d]}-----------$DiskPartType-----------${DiskPartFsTypeTemp[$d]}--------/home")
+							elif [[ "$DiskPartType" == "Linux swap" ]] && [[ "${DiskPartFsTypeTemp[$d]}" == "swap" ]]
+							then
+								swap_parts+=("${SelectedPartitionsTemp[$c]}")
+								SelectedPartitionsMountedText+=("\n${SelectedPartitionsTemp[$c]}-----------${DiskPartSizeTemp[$d]}------------$DiskPartType------------${DiskPartFsTypeTemp[$d]}--------swap")
+								MountPoints+=("${SelectedPartitionsTemp[$c]}")
+								MountPoints+=("swap")
 							fi
 						fi
 					done
@@ -893,8 +935,23 @@ MountViewPartitions(){
 				PartitionDisk
 			elif [[ $MOUNTS_EXIT_CODE -eq 0 ]]
 			then
+				clear
+				for (( i = 1; i < ${#MountPoints[@]}; i+=2 ))
+				do
+					if [[ "${MountPoints[$i]}" == "swap" ]]
+					then
+						echo "using ${MountPoints[$((i-1))]} as swap and enabled swap"
+						Mount
+					fi
+
+					if [[ "${MountPoints[$i]}" =~ "/mnt/" ]]
+					then
+						echo "mounted ${MountPoints[$((i-1))]} at ${MountPoints[$i]}"
+					fi
+				done
 				echo "done"
-				# MainMenu
+				read -p ": " -n1
+				MainMenu
 			fi
 		else
 			MountViewPartitions
@@ -914,8 +971,8 @@ MountViewPartitions(){
 		dialog --msgbox "no boot and system partitions detected. system cannot be installed." 0 0
 		MountViewPartitions
 	fi
-	echo "nice ConfirmMounts"
-	ConfirmMounts "${SelectedPartitionsMountedText[@]}"
+	# echo "nice ConfirmMounts"
+	# ConfirmMounts "${SelectedPartitionsMountedText[@]}"
 	MainMenu
 }
 
