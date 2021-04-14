@@ -24,6 +24,18 @@ use one of these tools cfdisk, cgdisk, fdisk, gdisk, sfdisk. enter partition cod
 6) pacman -Sy
 7) (base systems) pacstrap /mnt/ base base-devel devel linux linux-{headers,docs} networkmanager iw net-tools dkms broadcom-wl-dkms vim pulseaudio efi{var,bootmgr} grub sudo os-prober
 8) (optional. can be done after installation as well but on live use pacstrap) install a Desktop environment or window manager and a soundmanager.
+	Desktop environment:
+
+		i) KDE - sddm (desktop/lockscreen manager), sddm-kcm (sddm configuration util), plasma-desktop, ark (srchive tool), spectacle (screenshot util), kdeplasma-addons (plasma widgets), plasma-pa (pulse audio controller in plasma), kinfocenter (computer info provider), gwenview (gallery), okular (pdf reader), kwalletmanager, konsole (kde terminal)
+
+		ii) mate - lightdm (desktop/lockscreen manager), pacman -Sy mat{e,e-extra} (mate and mate-extra group apps), pacman -Sy 
+
+		iii) cinnamon - pacman -Sy $(pacman -Ssq cinnamon)
+
+		iv) deepin - pacman -Sy deepi{n,n-extra} (deepin & deepin-extra groups)
+
+		v) gnome - pacman -Sy gnome gnome-extra
+
 9) arch-chroot /mnt
 10) echo "<computer name>" > /etc/hostname (this will appear at your default shell prompt)
 11) echo -e "127.0.0.1\tlocalhost\n      ::1\tlocalhost" > /etc/hosts
