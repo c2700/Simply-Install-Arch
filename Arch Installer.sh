@@ -1088,7 +1088,6 @@ MainMenu(){
 	menuopt+=("Configure Network **" "Connect to Network")
 	menuopt+=("Install Arch *" "Install the base system")
 	menuopt+=("Configure Host +" "Personalize the machine by setting Hostname, adding users etc.")
-	menuopt+=("continue Live" "Continue having A feel for the OS")
 	menuopt+=("Reboot" "Reboot the computer")
 
 	menuitem=$(dialog --default-item "${1}" --backtitle "Written by c2700" --cancel-label "Exit" --title "Install Menu" --menu "To install arch all options followed by\n  i) '**' are priority 1\n ii) '*'are priority 2\niii) '+'are priority 3\n\nThe rest are optional" 0 0 0 "${menuopt[@]}" 3>&1 1>&2 2>&3)
@@ -1212,11 +1211,6 @@ MainMenu(){
 			MainMenu "Configure Host +"
 			;;
 
-		"continue Live")
-			exit
-			clear
-			reset
-			;;
 		"Reboot")
 			dialog --extra-button --extra-label "cancel" --msgbox "Reboot the machine" 0 0
 			if [[ $? -eq 3 ]]
