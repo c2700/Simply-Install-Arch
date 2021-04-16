@@ -63,7 +63,7 @@ ItemExistsinArray(){
 
 # Network Mgmnt
 
-iw_reconnect(){
+iw_rechonnect(){
 	# $1 - $?
 	# $2 - $wireless_dev
 	# $3 - $SSID
@@ -124,10 +124,10 @@ iwd_mngr(){
 	then
 		# read -p "$SSID password: " pass
 		iwctl --passphrase $pass station $wireless_dev connect $SSID
-		iw_reconnect $? $wireless_dev $SSID "$(read -p "$SSID password: ")"
+		iw_rechonnect $? $wireless_dev $SSID "$(read -p "$SSID password: ")"
 	else
 		iwctl station $wireless_dev connect $SSID
-		iw_reconnect $? $wireless_dev $SSID
+		iw_rechonnect $? $wireless_dev $SSID
 	fi
 }
 
@@ -149,12 +149,12 @@ nm_mngr(){
 		nmcli device wifi connect "$wifi_name" -a
 		if [[ $? -eq 1 ]]
 		then
-			# for (( reconnect = "n"; reconnect != "n" ;))
-			for (( reconnect="n"; reconnect == "y" ;))
+			# for (( rechonnect = "n"; rechonnect != "n" ;))
+			for (( rechonnect="n"; rechonnect == "y" ;))
 			do
 				nmcli device wifi list && read -p "Enter SSID to connect to: " wifi_name
 				nmcli device wifi connect "$wifi_name" -a
-				read -p "rescan and connect to another ssid? [y/n]" reconnect
+				read -p "rescan and connect to another ssid? [y/n]" rechonnect
 			done
 		fi
 	fi
@@ -730,51 +730,163 @@ ConfirmMounts(){
 	echo -e "${texts[@]}"
 	# 0 - ok
 	# 1 - back
-	dialog --yes-label "OK" --no-label "Back" --title "partition mount confirmation" --yesno "\nPartition-----Size-----------Filesystem----------Format----MountPoint\n\n${texts[*]}" 20 75
+	dialog --yes-label "OK" --no-label "Back" --title "partition mount confirmation" --yesno "\nPartition-----Size-----------Filesystem----------Format----MountPoint\n${texts[*]}" 20 75
 	return $?
 }
 
-Mount(){
-	# $1 - block dev
-	# $2 - fs
-	if [[ $2 == "/mnt/" ]]
+
+
+MountPartitions(){
+
+	# SelectedPartitionsMountedTemp=$1[@] # SelectedPartitionsMountedText
+	# SelectedPartitionsMountedTemp=($1[@])
+	SelectedPartitionsMounted=($1[@])
+	SelectedPartitionsMounted=("${!SelectedPartitionsMountedTemp}")
+	# MntPtsTemp=$2[@] # MountPoints
+	MntPtsTemp=$2
+	MntPts=("${!MntPts}")
+	# MntBlkDevTemp=$3[@] # MountBlockDev
+	MntBlkDevTemp=$3
+	MntBlkDev=("${!MntBlkDev}")
+
+	# clear
+	echo "${SelectedPartitionsMounted[@]}"
+	# exit
+
+	# ConfirmMounts "${SelectedPartitionsMountedText[@]}"
+	# ConfirmMounts "${SelectedPartitionsMounted[@]}"
+
+	MOUNTS_EXIT_CODE=$?
+	if [[ $MOUNTS_EXIT_CODE -eq 1 ]]
 	then
-		mkfs.ext4 "/dev/$1"
-		mount "/dev/$1" "/mnt"
-	elif [[ "$2" == "/mnt/boot/" ]]
+		PartitionDisk
+	elif [[ $MOUNTS_EXIT_CODE -eq 0 ]]
 	then
-		mkfs.fat -F32 "/dev/$1"
-		if mountpoint "/mnt/"
-		then
-			mount "/dev/$1" "/mnt/boot"
-		else
-			Mount
-		fi
-	elif [[ $2 == "/mnt/home" ]]
-	then
-		if mountpoint "/mnt/home"
-		then
-			mount "/dev/$1" "/mnt/home"
-		else
-			Mount
-		fi
-		mkfs.ext4 "/dev/$1"
-		mount "/dev/$1" "/mnt/home"
-	elif [[ $2 == "swap" ]]
-	then
-		mkswap "/dev/$1"
-		swapon "/dev/$1"
+		clear
+		rootfs=""
+		root_blkdev=""
+		echo "1 exp - ${MntPts[@]}"
+		echo "2 exp - ${MntBlkDev[@]}"
+		# echo "1 exp - ${MountPoints[@]}"
+		# echo "2 exp - ${MountBlockDev[@]}"
+		echo ""
+		read -p "nice" -n1
+		# for (( i = 0; i < ${#MountBlockDev[@]}; i++ ))
+		for (( i = 0; i < ${#MntBlkDev[@]}; i++ ))
+		do
+			# if [[ "${MountPoints[$i]}" =~ "/mnt/"$ ]]
+			if [[ "${MntPts[$i]}" =~ "/mnt/"$ ]]
+			then
+				rootfs="${MntPts[$i]}"
+				root_blkdev=${MntBlkDev[$i]}
+				echo "0 - root"
+				echo "mkfs.ext4  ${MntBlkDev[$i]}"
+				echo -e "mounted ${MntBlkDev[$i]} at ${MntPts[$i]}\n\n"
+
+				# rootfs="${MountPoints[$i]}"
+				# root_blkdev=${MountBlockDev[$i]}
+				# echo "mkfs.ext4  ${MountBlockDev[$i]}"
+				# echo -e "mounted ${MountBlockDev[$i]} at ${MountPoints[$i]}\n\n"
+				
+				mount /dev/sdb4 /mnt &>/dev/null
+				# mount $rootfs $root_blkdev 
+			fi
+		done
+
+		# for (( i = 0; i < ${#MountPoints[@]}; i++ ))
+		for (( i = 0; i < ${#MntPts[@]}; i++ ))
+		do
+			# if [[ "${MountPoints[$i]}" == "swap" ]]
+			if [[ "${MntPts[$i]}" == "swap" ]]
+			then
+				echo "1 - swap"
+
+				echo "using ${MntBlkDev[$i]} as swap and enabled swap"
+				# mkswap "${MntBlkDev[$i]}"
+				# swapon "${MntBlkDev[$i]}"
+
+
+				# echo "using ${MountBlockDev[$i]} as swap and enabled swap"
+				# # mkswap "${MountBlockDev[$i]}"
+				# # swapon "${MountBlockDev[$i]}"
+
+			# elif [[ "${MountPoints[$i]}" =~ "/mnt/"$ ]]
+			elif [[ "${MntPts[$i]}" =~ "/mnt/"$ ]]
+			then
+				# mount "/dev/${MntBlkDev[$i]}" "${MntPts[$i]}"
+				rootfs="${MntPts[$i]}"
+				root_blkdev=${MntBlkDev[$i]}
+
+				# rootfs="${MountPoints[$i]}"
+				# root_blkdev=${MountBlockDev[$i]}
+
+				if mountpoint /mnt &>/dev/null
+				then
+					echo ""
+				else
+					echo "2 - root"
+
+					echo -e "mounted ${MntBlkDev[$i]} at ${MntPts[$i]}\n\n"
+					echo "mkfs.ext4 ${MntBlkDev[$i]}"
+					# mkfs.ext4 ${MntBlkDev[$i]}
+					# mount "${MntBlkDev[$i]}" "${MntPts[$i]}"
+
+					# echo -e "mounted ${MountBlockDev[$i]} at ${MountPoints[$i]}\n\n"
+					# echo "mkfs.ext4 ${MountBlockDev[$i]}"
+					# # mkfs.ext4 ${MountBlockDev[$i]}
+					# # mount "${MountBlockDev[$i]}" "${MountPoints[$i]}"
+				fi
+			# elif [[ "${MountPoints[$i]}" =~ "/mnt/boot/"$ ]]
+			elif [[ "${MntPts[$i]}" =~ "/mnt/boot/"$ ]]
+			then
+				# mount /dev/$root /mnt &>/dev/null
+				mount /dev/sdb4 /mnt &>/dev/null
+				ROOT_MOUNT_EXIT_CODE=$?
+				if [[ $ROOT_MOUNT_EXIT_CODE -eq 32 ]] || [[ $ROOT_MOUNT_EXIT_CODE -eq 0 ]]
+				then
+					echo "3 - boot"
+
+					echo "mkfs.fat -F32 ${MntBlkDev[$i]}"
+					# mkfs.fat -F32 ${MntBlkDev[$i]}
+					# mount "/dev/${MntBlkDev[$i]}" "${MntPts[$i]}" &>/dev/null
+					echo -e "mounted ${MntBlkDev[$i]} at ${MntPts[$i]}\n\n"
+
+					# echo "mkfs.fat -F32 ${MountBlockDev[$i]}"
+					# # mkfs.fat -F32 ${MountBlockDev[$i]}
+					# # mount "/dev/${MountBlockDev[$i]}" "${MountPoints[$i]}" &>/dev/null
+					# echo -e "mounted ${MountBlockDev[$i]} at ${MountPoints[$i]}\n\n"
+
+				fi
+			elif [[ "${MntPts[$i]}" =~ "/mnt/home/"$ ]]
+			then
+				echo "mkfs.ext4 ${MntBlkDev[$i]}"
+				# mount "/dev/$${MntBlkDev[$i]}" "${MntPts[$i]}" &>/dev/null
+				echo -e "mounted ${MntBlkDev[$i]} at ${MntPts[$i]}\n\n"
+
+				# echo "mkfs.ext4 ${MountBlockDev[$i]}"
+				# # mount "/dev/$${MountBlockDev[$i]}" "${MountPoints[$i]}" &>/dev/null
+				# echo -e "mounted ${MountBlockDev[$i]} at ${MountPoints[$i]}\n\n"
+
+			fi
+		done
+		echo "done"
+		read -p ": " -n1
+		MainMenu
 	fi
 }
+
+
 
 MountViewPartitions(){
 
 	DiskPartListInfo=()
 	DiskPartNameTemp=()
+	DiskPartName=()
 	DiskPartSizeTemp=()
 	DiskPartType=()
 	SelectedPartitionsMountedText=("")
 	MountPoints=()
+	MountBlockDev=()
 	SelectedPartitionsTemp=()
 	partitions=()
 	fat32_efi_parts=()
@@ -801,6 +913,20 @@ MountViewPartitions(){
 				DiskPartListInfo+=("${DiskPartNameTemp[$b]}" "$DiskPartInfo" 0)
 				DiskPartType+=("$DiskPartTypeTemp")
 	        done
+
+	        if [[ ${#DiskPartListInfo[@]} -eq 0 ]]
+	        then
+				dialog --yes-label "Edit Disk" --no-label "Discard Disk" --yesno "Disk does not contain any partitions. Edit The Disk?" 0 0
+				EMPTY_DISK_EXIT_CODE=$?
+				if [[ $EMPTY_DISK_EXIT_CODE -eq 0 ]]
+				then
+					echo ""
+					# EditDisk 
+				else
+					echo ""
+				fi
+	        fi
+
         	partition=($(dialog --cancel-label "Back" --column-separator "|" --title "Partition mount menu" --extra-button --extra-label "Mount" --checklist "Partitions in /dev/${Disks[$a]}" 0 0 0 "${DiskPartListInfo[@]}" 3>&1 1>&2 2>&3))
 			PARTITION_EXIT_CODE=$?
 
@@ -810,13 +936,14 @@ MountViewPartitions(){
 
 			: '
 			if [[ ${#partition[*]} -eq 0 ]] && ( [[ $PARTITION_EXIT_CODE -eq 0 ]] || [[ $PARTITION_EXIT_CODE -eq 3 ]] )
-			if [[ ${linux_fs_ext4_parts[@]} -eq 0 ]]  && [[ ${fat32_efi_parts[@]} -eq 0 ]]
+			if [[ ${#linux_fs_ext4_parts[@]} -eq 0 ]]  && [[ ${#fat32_efi_parts[@]} -eq 0 ]]
 			if ([[ ${#linux_fs_ext4_parts[@]} -eq 0 ]]  && [[ ${#fat32_efi_parts[@]} -eq 0 ]] && [[ ${#partition[*]} -eq 0 ]] ) || ( [[ ${#swap_parts[@]} -eq 0 ]] && [[ ${#partition[*]} -eq 0 ]] )
 			then
 				dialog --msgbox "please select atleast one partition out of EFI/EXT4/swap for system use" 0 0
 				MountViewPartitions
 			elif [[ $PARTITION_EXIT_CODE -eq 0 ]]
 			'
+
 			if [[ $PARTITION_EXIT_CODE -eq 0 ]]
 			then
 				SelectedPartitionsTemp+=(${partition[@]})
@@ -837,32 +964,33 @@ MountViewPartitions(){
 							if [[ "$DiskPartType" == "Linux filesystem" ]] && [[ "${DiskPartFsTypeTemp[$d]}" == "ext4" ]]
 							then
 								linux_fs_ext4_parts+=("${SelectedPartitionsTemp[$c]}")
-								SelectedPartitionsMountedText+=("\n${SelectedPartitionsTemp[$c]}----------${DiskPartSizeTemp[$d]}-------$DiskPartType---------${DiskPartFsTypeTemp[$d]}--------/")
-								MountPoints+=("${SelectedPartitionsTemp[$c]}")
+								SelectedPartitionsMountedText+=("\n${SelectedPartitionsTemp[$c]}----------${DiskPartSizeTemp[$d]}-------$DiskPartType--------${DiskPartFsTypeTemp[$d]}----------/")
+								MountBlockDev+=("${SelectedPartitionsTemp[$c]}")
 								MountPoints+=( "/mnt/")
 							elif [[ "$DiskPartType" == "EFI System" ]] && [[ "${DiskPartFsTypeTemp[$d]}" == "FAT32" ]]
 							then
 								fat32_efi_parts+=("${SelectedPartitionsTemp[$c]}")
 								SelectedPartitionsMountedText+=("\n${SelectedPartitionsTemp[$c]}----------${DiskPartSizeTemp[$d]}-----------$DiskPartType-----------${DiskPartFsTypeTemp[$d]}--------/boot")
-								MountPoints+=("${SelectedPartitionsTemp[$c]}")
+								MountBlockDev+=("${SelectedPartitionsTemp[$c]}")
 								MountPoints+=("/mnt/boot/")
 							elif [[ "$DiskPartType" == "Linux home" ]] && [[ "${1DiskPartFsTypeTemp[$d]}" == "ext4" ]]
 							then
 								home_parts+=("${SelectedPartitionsTemp[$c]}")
-								MountPoints+=("${SelectedPartitionsTemp[$c]}" "/mnt/home/")
+								MountBlockDev+=("${SelectedPartitionsTemp[$c]}" "/mnt/home/")
 								MountPoints+=("/mnt/home/")
 								SelectedPartitionsMountedText+=("\n${SelectedPartitionsTemp[$c]}-----${DiskPartSizeTemp[$d]}-----------$DiskPartType-----------${DiskPartFsTypeTemp[$d]}--------/home")
 							elif [[ "$DiskPartType" == "Linux swap" ]] && [[ "${DiskPartFsTypeTemp[$d]}" == "swap" ]]
 							then
 								swap_parts+=("${SelectedPartitionsTemp[$c]}")
-								SelectedPartitionsMountedText+=("\n${SelectedPartitionsTemp[$c]}-----------${DiskPartSizeTemp[$d]}------------$DiskPartType------------${DiskPartFsTypeTemp[$d]}--------swap")
-								MountPoints+=("${SelectedPartitionsTemp[$c]}")
+								SelectedPartitionsMountedText+=("\n${SelectedPartitionsTemp[$c]}-----------${DiskPartSizeTemp[$d]}------------$DiskPartType-----------${DiskPartFsTypeTemp[$d]}--------swap")
+								MountBlockDev+=("${SelectedPartitionsTemp[$c]}")
 								MountPoints+=("swap")
 							fi
 						fi
 					done
 				done
 
+				DiskPartName=(${DiskPartNameTemp[@]})
 				DiskPartNameTemp=()
 				DiskPartSizeTemp=()
 				DiskPartFsTypeTemp=()
@@ -896,9 +1024,32 @@ MountViewPartitions(){
 	then
 		dialog --msgbox "multiple essential linux partitions detected (boot and ext4). please select one partition for each filesystem" 0 0
 		PartitionDisk
+	elif [[ ${#DiskPartName[@]} -eq 0 ]]
+	then
+			dialog --yes-label "Edit Disk" --no-label "Select Disk" --yesno "Disk does not contain any partitions. Edit The Disk?" 0 0
+			EMPTY_DISK_EXIT_CODE=$?
+			if [[ $EMPTY_DISK_EXIT_CODE -eq 0 ]]
+			then
+				dialog --yes-label "Continue" --no-label "Back" --yesno "Partitions are to be formatted in the diskeditor and the filesystem format is to be created using mkfs (mkfs/mkfs.ext4/mkfs.fat or whatever is used to format the partitions)\n\nPartitions to be created:\n\nMandatory:\n1) EFI partition with a FAT32 filesystem format\n2) Linux Root Partition (shows up as \"Linux filesystem\" in the partition editor) formatted in\n   ext4/ext3/ext2/ext/btrfs/xfs/zfs. Recommended - ext4/btrfs\n\nOptional but recommended:\n1) swap partition with swap filesystem\n\nOptional:\n1) Home partition with same filesystem as Linux Root Partition" 0 0
+				CONTINUE_EXIT_CODE=$?
+				# echo $CONTINUE_EXIT_CODE
+				# exit
+				# 0 - continue
+				# 1 - back
+				if [[ $CONTINUE_EXIT_CODE -eq 0 ]]
+				then
+					EditDisk "${Disks[@]}"
+				elif [[ $CONTINUE_EXIT_CODE -eq 1 ]]
+				then
+					PartitionDisk
+				fi
+			elif [[ $EMPTY_DISK_EXIT_CODE -eq 1 ]]
+			then
+				PartitionDisk
+			fi
 	elif [[ $total_parts -eq 0 ]]
 	then
-		dialog --msgbox "no partitions selected. please select an EFI and a linux filesystem partition. Select a few optional partitions as well (if needed or wanted but not necessary)" 0 0
+		dialog --msgbox "no partitions selected. please select an EFI and a linux filesystem partition (mandatory). Select a few optional partitions as well (if needed or wanted but not necessary)" 0 0
 		PartitionDisk
 		# MountViewPartitions
 	elif [[ ${#fat32_efi_parts[@]} -eq 0 ]]
@@ -914,11 +1065,16 @@ MountViewPartitions(){
 	elif [[ ${#swap_parts[@]} -eq 0 ]]
 	then
 		dialog --yesno "no swap partition detected. Recommended to have one. continue without a swap partition?" 0 0
-		echo $?
-		exit
-		if [[ $? -eq 1 ]]
+		SWAP_DIALOG_EXIT_CODE=$?
+		echo $SWAP_DIALOG_EXIT_CODE
+		if [[ $SWAP_DIALOG_EXIT_CODE -eq 1 ]]
 		then
 			MountViewPartitions
+		elif [[ $SWAP_DIALOG_EXIT_CODE -eq 0 ]]
+		then
+			ConfirmMounts "${SelectedPartitionsMountedText[@]}"
+			MountPartitions "${SelectedPartitionsMountedText[@]}" "${MountPoints[@]}" "${MountBlockDev[@]}"
+			# MountPartitions SelectedPartitionsMountedText MountPoints MountBlockDev
 		fi
 		
 		# DiskPartListInfo=()
@@ -928,6 +1084,8 @@ MountViewPartitions(){
 		PART_EXIT_CODE=$?
 		if [[ $PART_EXIT_CODE -eq 0 ]]
 		then
+			# echo $PART_EXIT_CODE
+			# exit
 			ConfirmMounts "${SelectedPartitionsMountedText[@]}"
 			MOUNTS_EXIT_CODE=$?
 			if [[ $MOUNTS_EXIT_CODE -eq 1 ]]
@@ -935,29 +1093,17 @@ MountViewPartitions(){
 				PartitionDisk
 			elif [[ $MOUNTS_EXIT_CODE -eq 0 ]]
 			then
-				clear
-				for (( i = 1; i < ${#MountPoints[@]}; i+=2 ))
-				do
-					if [[ "${MountPoints[$i]}" == "swap" ]]
-					then
-						echo "using ${MountPoints[$((i-1))]} as swap and enabled swap"
-						Mount
-					fi
-
-					if [[ "${MountPoints[$i]}" =~ "/mnt/" ]]
-					then
-						echo "mounted ${MountPoints[$((i-1))]} at ${MountPoints[$i]}"
-					fi
-				done
-				echo "done"
-				read -p ": " -n1
-				MainMenu
+				MountPartitions "${SelectedPartitionsMountedText[@]}" "${MountPoints[@]}" "${MountBlockDev[@]}"
+				# MountPartitions SelectedPartitionsMountedText MountPoints MountBlockDev
 			fi
 		else
 			MountViewPartitions
 		fi
 
 		# DiskPartListInfo=()
+	elif [[ ${#swap_parts[@]} -eq 0 ]] && [[ ${#home_parts[@]} -eq 0 ]]
+	then
+		dialog --msgbox "no" 0 0
 	elif [[ ${#linux_fs_ext4_parts[@]} -eq 0 ]] && [[ ${#fat32_efi_parts[@]} -eq 0 ]]
 	then
 		dialog --msgbox "no boot and system partitions detected. system cannot be installed." 0 0
@@ -969,7 +1115,7 @@ MountViewPartitions(){
 		# 1 - no
 		# 0 - yes
 		dialog --msgbox "no boot and system partitions detected. system cannot be installed." 0 0
-		MountViewPartitions
+		PartitionDisk
 	fi
 	# echo "nice ConfirmMounts"
 	# ConfirmMounts "${SelectedPartitionsMountedText[@]}"
@@ -990,6 +1136,31 @@ DiskPartInfoTemp(){
 	    lsblk -nlo name,size,fstype,fsver,parttypename /dev/"$1" | grep -i '[a,s]d[a-z][0-9]' | grep -i 'ext4\|fat32\|vfat\|efi\|swap' | sed 's/1.0   //g;s/vfat   FAT32 EFI System/FAT32  EFI System/g;s/swap   1     Linux swap/swap   Linux swap/g'
 	fi
 	echo -e "\n"
+}
+
+EditDisk(){
+	disks=$1[@]
+	# disks=($1[@])
+	diskeditors=("gdisk" "gdisk")
+	diskeditors+=("cgdisk" "cgdisk")
+	diskeditors+=("fdisk" "fdisk")
+	diskeditors+=("sfdisk" "sfdisk")
+	diskeditors+=("cfdisk" "cfdisk")
+	diskeditors+=("parted" "parted (not beginner friendly)")
+	DiskEditor=$(dialog --no-tags --cancel-label "Back" --menu "Disk Editor Menu" 0 0 0 "${diskeditors[@]}" 3>&1 1>&2 2>&3)
+	DISKEDITOR_EXIT_CODE=$?
+	# clear
+	if [[ $DISKEDITOR_EXIT_CODE -eq 1 ]]
+	then
+		PartitionDisk
+	elif [[ $DISKEDITOR_EXIT_CODE -eq 0 ]]
+	then
+		for (( i = 0; i < ${#Disks[@]}; i++ ))
+		do
+			$DiskEditor "/dev/${Disks[$i]}"
+		done
+		MountViewPartitions
+	fi
 }
 
 PartitionDisk(){
@@ -1028,7 +1199,7 @@ PartitionDisk(){
 			dialog --msgbox "please select atleast one disk" 0 0
 			PartitionDisk
 		else
-			dialog --extra-button --extra-label "Mount" --ok-label "Back" --cancel-label "Edit" --yesno "Select \"Edit\" for Editing and then mounting the partitions of this disk or select \"Mount\" to only select and mount existing ext4/efi/fat32/swap partitions" 0 0
+			dialog --extra-button --extra-label "Mount" --ok-label "Back" --cancel-label "Edit" --yesno "Select \"Edit\" for Editting and then mounting the partitions of this disk or select \"Mount\" to only select and mount existing ext4/efi/fat32/swap partitions" 0 0
 			PART_MSG_BOX_EXIT_CODE=$?
 			# 0 - back
 			# 1 - edit
@@ -1038,25 +1209,18 @@ PartitionDisk(){
 				PartitionDisk
 			elif [[ $PART_MSG_BOX_EXIT_CODE -eq 1 ]]
 			then
-				diskeditors=("gdisk" "gdisk")
-				diskeditors+=("cgdisk" "cgdisk")
-				diskeditors+=("fdisk" "fdisk")
-				diskeditors+=("sfdisk" "sfdisk")
-				diskeditors+=("cfdisk" "cfdisk")
-				diskeditors+=("parted" "parted (not beginner friendly)")
-				DiskEditor=$(dialog --no-tags --cancel-label "Back" --menu "Disk Editor Menu" 0 0 0 "${diskeditors[@]}" 3>&1 1>&2 2>&3)
-				DISKEDITOR_EXIT_CODE=$?
-				clear
-				if [[ $DISKEDITOR_EXIT_CODE -eq 1 ]]
+				dialog --yes-label "Continue" --no-label "Back" --yesno "Partitions are to be formatted in the diskeditor and the filesystem format is to be created using mkfs (mkfs/mkfs.ext4/mkfs.fat or whatever is used to format the partitions)\n\nPartitions to be created:\n\nMandatory:\n1) EFI partition with a FAT32 filesystem format\n2) Linux Root Partition (shows up as \"Linux filesystem\" in the partition editor) formatted in\n   ext4/ext3/ext2/ext/btrfs/xfs/zfs. Recommended - ext4/btrfs\n\nOptional but recommended:\n1) swap partition with swap filesystem\n\nOptional:\n1) Home partition with same filesystem as Linux Root Partition" 0 0
+				# echo $CONTINUE_EXIT_CODE
+				CONTINUE_EXIT_CODE=$?
+				# exit
+				# 0 - continue
+				# 1 - back
+				if [[ $CONTINUE_EXIT_CODE -eq 0 ]]
+				then
+					EditDisk "${Disks[@]}"
+				elif [[ $CONTINUE_EXIT_CODE -eq 1 ]]
 				then
 					PartitionDisk
-				elif [[ $DISKEDITOR_EXIT_CODE -eq 0 ]]
-				then
-					for (( i = 0; i < ${#Disks[@]}; i++ ))
-					do
-						$DiskEditor "/dev/${Disks[$i]}"
-					done
-					MountViewPartitions
 				fi
 			elif [[ $PART_MSG_BOX_EXIT_CODE -eq 3 ]]
 			then
@@ -1100,12 +1264,12 @@ Repo_Enable(){
 	REPO_ENABLE_EXIT_CODE=$?
 	if [[ REPO_ENABLE_EXIT_CODE -eq 1 ]]
 	then
-		dialog --backtitle "Written by c2700" --yes-label "exit" --no-label "continue installation" --yesno "multilib repo not enabled. To enable it restart the script or uncomment lines 94 and 95 in file \"/etc/pacman.conf\"" 6 63
+		dialog --backtitle "Written by c2700" --no-label "exit" --yes-label "continue installation" --yesno "multilib repo not enabled. To enable it restart the script or uncomment lines 94 and 95 in file \"/etc/pacman.conf\"" 6 63
 		RESTART_EXIT_CODE=$?
-		if [[ $RESTART_EXIT_CODE -eq 0 ]]
+		if [[ $RESTART_EXIT_CODE -eq 1 ]]
 		then
 			  exit
-		elif [[ $RESTART_EXIT_CODE -eq 1 ]]
+		elif [[ $RESTART_EXIT_CODE -eq 0 ]]
 		then
 			echo ""
 		fi
@@ -1126,7 +1290,8 @@ MainMenu(){
 	# $1 - menu option item
 
 	clear
-	which dialog &>/dev/null
+	ls /usr/bin/dialog &>/dev/null
+	# which dialog &>/dev/null
 	if [[ $? -eq 1 ]]
 	then
 		echo -e "dialog not installed.\n"
@@ -1174,12 +1339,11 @@ MainMenu(){
 
             # make another condition that ensures something is mounted in the /mnt dir. this one seems senseless now that I read it
 
-			# archchrootdir='/mnt'
-			archchrootdir=''
-			# if [[ $archchrootdir == '' ]]
-			if [[ -z $archchrootdir ]]
+			archchrootdir='/mnt'
+			# if [[ -z $archchrootdir ]]
+			if ! mountpoint /mnt
 			then
-				dialog --msgbox "arch chroot directory not mentioned" 0 0
+				dialog --msgbox "root partition not mounted" 0 0
 				MainMenu "Install Arch *"
 			else
 
@@ -1215,7 +1379,8 @@ MainMenu(){
 
 				editors=($(dialog --extra-button --extra-label "Cancel" --cancel-label "Back" --no-tags --title "text editor selection Menu" --checklist "nano and vi will be installed by default" 0 0 0 "${terminaleditorslist[@]}" 3>&1 1>&2 2>&3))
 
-				if [[ $? -eq 0 ]]
+				EDITORS_EXIT_CODE=$?
+				if [[ $EDITORS_EXIT_CODE -eq 0 ]]
 				then
 					# editors="${editors[@]}"
 					if [[ $editors == "" ]]
@@ -1226,13 +1391,13 @@ MainMenu(){
 					fi
 				fi
 
-				if [[ $? -eq 3 ]]
+				if [[ $EDITORS_EXIT_CODE -eq 3 ]]
 				then
 					packages="${packages}"
 					# break
 				fi
 
-				if [[ $? -eq 1 ]]
+				if [[ $EDITORS_EXIT_CODE -eq 1 ]]
 				then
 					MainMenu "Install Arch *"
 				fi
@@ -1249,7 +1414,7 @@ MainMenu(){
 					dialog --msgbox "failed to install packages via pacstrap"
 				fi
 				'
-				dialog --msgbox "Created fstab entry. you can generate the fstab of your disk by executing genfstab -U {arch-chroot directory} (in this case it's the /mnt directory) > {arch-chroot directory}/etc/fstab' (i.e. if anythin went wrong with the fstab entry)" 0 0
+				dialog --msgbox "Created fstab entry. you can generate the fstab of your disk by \"executing genfstab -U {arch-chroot directory} > {arch-chroot directory}/etc/fstab\" (i.e. if anythin went wrong with the fstab entry)" 0 0
 				MainMenu "Install Arch *"
 			fi
 			;;
@@ -1258,9 +1423,11 @@ MainMenu(){
 		"Configure Host +")
 			: '
 			arch-chroot /mnt
+			mountpoint /mnt
 			if [[ $? -eq 1 ]]
 			then
-				dialog --msgbox "cannot chroot" 0 0
+				# dialog --msgbox "cannot chroot" 0 0
+				dialog --msgbox "no root partition set" 0 0
 			else
 			'
 				ConfHost "set hostname *"
