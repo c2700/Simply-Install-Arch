@@ -25,7 +25,7 @@ GuageMeter(){
 }
 
 
-ItemExistsinArray(){
+IteminArray(){
 	# array_item=(${$1[@]})
 	array_list=($1)
 	array_item=$2
@@ -738,22 +738,17 @@ ConfirmMounts(){
 
 MountPartitions(){
 
-	# SelectedPartitionsMountedTemp=$1[@] # SelectedPartitionsMountedText
-	# SelectedPartitionsMountedTemp=($1[@])
-	SelectedPartitionsMounted=($1[@])
-	SelectedPartitionsMounted=("${!SelectedPartitionsMountedTemp}")
-	# MntPtsTemp=$2[@] # MountPoints
-	MntPtsTemp=$2
+	SelectedPartitionsMounted=$1[@]
+	SelectedPartitionsMounted=("${!SelectedPartitionsMounted}")
+	MntPts=$2[@]
 	MntPts=("${!MntPts}")
-	# MntBlkDevTemp=$3[@] # MountBlockDev
-	MntBlkDevTemp=$3
+	MntBlkDev=$3[@]
 	MntBlkDev=("${!MntBlkDev}")
 
 	# clear
 	echo "${SelectedPartitionsMounted[@]}"
 	# exit
 
-	# ConfirmMounts "${SelectedPartitionsMountedText[@]}"
 	# ConfirmMounts "${SelectedPartitionsMounted[@]}"
 
 	MOUNTS_EXIT_CODE=$?
@@ -767,14 +762,10 @@ MountPartitions(){
 		root_blkdev=""
 		echo "1 exp - ${MntPts[@]}"
 		echo "2 exp - ${MntBlkDev[@]}"
-		# echo "1 exp - ${MountPoints[@]}"
-		# echo "2 exp - ${MountBlockDev[@]}"
 		echo ""
 		read -p "nice" -n1
-		# for (( i = 0; i < ${#MountBlockDev[@]}; i++ ))
 		for (( i = 0; i < ${#MntBlkDev[@]}; i++ ))
 		do
-			# if [[ "${MountPoints[$i]}" =~ "/mnt/"$ ]]
 			if [[ "${MntPts[$i]}" =~ "/mnt/"$ ]]
 			then
 				rootfs="${MntPts[$i]}"
@@ -783,20 +774,13 @@ MountPartitions(){
 				echo "mkfs.ext4  ${MntBlkDev[$i]}"
 				echo -e "mounted ${MntBlkDev[$i]} at ${MntPts[$i]}\n\n"
 
-				# rootfs="${MountPoints[$i]}"
-				# root_blkdev=${MountBlockDev[$i]}
-				# echo "mkfs.ext4  ${MountBlockDev[$i]}"
-				# echo -e "mounted ${MountBlockDev[$i]} at ${MountPoints[$i]}\n\n"
-				
 				mount /dev/sdb4 /mnt &>/dev/null
 				# mount $rootfs $root_blkdev 
 			fi
 		done
 
-		# for (( i = 0; i < ${#MountPoints[@]}; i++ ))
 		for (( i = 0; i < ${#MntPts[@]}; i++ ))
 		do
-			# if [[ "${MountPoints[$i]}" == "swap" ]]
 			if [[ "${MntPts[$i]}" == "swap" ]]
 			then
 				echo "1 - swap"
@@ -806,19 +790,11 @@ MountPartitions(){
 				# swapon "${MntBlkDev[$i]}"
 
 
-				# echo "using ${MountBlockDev[$i]} as swap and enabled swap"
-				# # mkswap "${MountBlockDev[$i]}"
-				# # swapon "${MountBlockDev[$i]}"
-
-			# elif [[ "${MountPoints[$i]}" =~ "/mnt/"$ ]]
 			elif [[ "${MntPts[$i]}" =~ "/mnt/"$ ]]
 			then
 				# mount "/dev/${MntBlkDev[$i]}" "${MntPts[$i]}"
 				rootfs="${MntPts[$i]}"
 				root_blkdev=${MntBlkDev[$i]}
-
-				# rootfs="${MountPoints[$i]}"
-				# root_blkdev=${MountBlockDev[$i]}
 
 				if mountpoint /mnt &>/dev/null
 				then
@@ -831,12 +807,7 @@ MountPartitions(){
 					# mkfs.ext4 ${MntBlkDev[$i]}
 					# mount "${MntBlkDev[$i]}" "${MntPts[$i]}"
 
-					# echo -e "mounted ${MountBlockDev[$i]} at ${MountPoints[$i]}\n\n"
-					# echo "mkfs.ext4 ${MountBlockDev[$i]}"
-					# # mkfs.ext4 ${MountBlockDev[$i]}
-					# # mount "${MountBlockDev[$i]}" "${MountPoints[$i]}"
 				fi
-			# elif [[ "${MountPoints[$i]}" =~ "/mnt/boot/"$ ]]
 			elif [[ "${MntPts[$i]}" =~ "/mnt/boot/"$ ]]
 			then
 				# mount /dev/$root /mnt &>/dev/null
@@ -851,22 +822,12 @@ MountPartitions(){
 					# mount "/dev/${MntBlkDev[$i]}" "${MntPts[$i]}" &>/dev/null
 					echo -e "mounted ${MntBlkDev[$i]} at ${MntPts[$i]}\n\n"
 
-					# echo "mkfs.fat -F32 ${MountBlockDev[$i]}"
-					# # mkfs.fat -F32 ${MountBlockDev[$i]}
-					# # mount "/dev/${MountBlockDev[$i]}" "${MountPoints[$i]}" &>/dev/null
-					# echo -e "mounted ${MountBlockDev[$i]} at ${MountPoints[$i]}\n\n"
-
 				fi
 			elif [[ "${MntPts[$i]}" =~ "/mnt/home/"$ ]]
 			then
 				echo "mkfs.ext4 ${MntBlkDev[$i]}"
 				# mount "/dev/$${MntBlkDev[$i]}" "${MntPts[$i]}" &>/dev/null
 				echo -e "mounted ${MntBlkDev[$i]} at ${MntPts[$i]}\n\n"
-
-				# echo "mkfs.ext4 ${MountBlockDev[$i]}"
-				# # mount "/dev/$${MountBlockDev[$i]}" "${MountPoints[$i]}" &>/dev/null
-				# echo -e "mounted ${MountBlockDev[$i]} at ${MountPoints[$i]}\n\n"
-
 			fi
 		done
 		echo "done"
@@ -884,6 +845,8 @@ MountViewPartitions(){
 	DiskPartName=()
 	DiskPartSizeTemp=()
 	DiskPartType=()
+	DiskPartFsType=()
+	DiskPartTypeLabel=()
 	SelectedPartitionsMountedText=("")
 	MountPoints=()
 	MountBlockDev=()
@@ -898,18 +861,48 @@ MountViewPartitions(){
 	do
 	    DiskPartNameTemp=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $1 }'))
 	    DiskPartSizeTemp=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $2 }'))
-	    DiskPartFsTypeTemp=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $3 }'))
-	    DiskPartTypeTempString1=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $4 }'))
-	    DiskPartTypeTempString2=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $5 }'))
+	    # DiskPartFsTypeTemp=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $3 }'))
+	    DiskPartFsTypeTempString1=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $3" "}'))
+	    DiskPartFsTypeTempString2=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $4}'))
+	    # DiskPartTypeTempString1=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $4 }'))
+	    # DiskPartTypeTempString2=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $5 }'))
 
-	    if [[ -z ${DiskPartSizeTemp[*]} ]] && [[ -z ${DiskPartFsTypeTemp[*]} ]] && [[ -z ${DiskPartTypeTempString1[*]} ]] && [[ -z ${DiskPartTypeTempString2[*]} ]]
+	    DiskPartTypeLabelTempString=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ for(i=4;i<=$NF;++i){ print $i } }'))
+
+	    # DiskPartTypeLabelTempString1=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $5" " }'))
+	    # DiskPartTypeLabelTempString2=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $6" "}'))
+	    # DiskPartTypeLabelTempString3=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $7 }'))
+
+	    if [[ -z ${DiskPartSizeTemp[*]} ]] && [[ -z ${DiskPartFsTypeTemp[*]} ]] && [[ -z ${DiskPartTypeLabelTemp[*]} ]]
 	    then
 	        continue
 	    else
-	        for (( b = 0; b < ${#DiskPartNameTemp[@]}; b++ ))
+	        # for (( b = 0; b < ${#DiskPartNameTemp[@]}; $((b+=2)) ))
+	        for (( b=0; b < ${#DiskPartNameTemp[@]}; b++ ))
 	        do
+	        	: '
 	            DiskPartTypeTemp="${DiskPartTypeTempString1[$b]} ${DiskPartTypeTempString2[$b]}"
 	            DiskPartInfo="${DiskPartSizeTemp[$b]} | ${DiskPartFsTypeTemp[$b]} | $DiskPartTypeTemp"
+				DiskPartListInfo+=("${DiskPartNameTemp[$b]}" "$DiskPartInfo" 0)
+				'
+				DiskPartTypeLabel+=("${DiskPartTypeLabelTempString1[$b]} ${DiskPartTypeLabelTempString2[$b]} ${DiskPartTypeLabelTempString3[$b]}")
+				DiskPartFsType+=("${DiskPartFsTypeTempString1[$b]} ${DiskPartFsTypeTempString2[$b]}")
+	            # DiskPartInfo="${DiskPartSizeTemp[$b]} | ${DiskPartFsType[$b]} | $DiskPartTypeTemp"
+	            
+				: '
+				if [[ "${DiskPartFsType[$b]}" == "Linux filesystem" ]]
+				then
+	            	DiskPartInfo="${DiskPartSizeTemp[$b]} | ext4 | ${DiskPartFsType[$b]} | ${DiskPartTypeLabel[$b]}"
+	            elif [[ "${DiskPartFsType[$b]}" == "EFI System" ]]
+				then
+	            	DiskPartInfo="${DiskPartSizeTemp[$b]} | FAT32 | ${DiskPartFsType[$b]} | ${DiskPartTypeLabel[$b]}"
+	            elif [[ "${DiskPartFsType[$b]}" == "swap" ]]
+				then
+	            	DiskPartInfo="${DiskPartSizeTemp[$b]} | swap | ${DiskPartFsType[$b]} | ${DiskPartTypeLabel[$b]}"
+				fi
+				'
+
+            	DiskPartInfo="${DiskPartSizeTemp[$b]} | ${DiskPartFsType[$b]} | ${DiskPartTypeLabel[$b]}"
 				DiskPartListInfo+=("${DiskPartNameTemp[$b]}" "$DiskPartInfo" 0)
 				DiskPartType+=("$DiskPartTypeTemp")
 	        done
@@ -961,25 +954,25 @@ MountViewPartitions(){
 							DiskPartType="${DiskPartTypeTempString1[$d]} ${DiskPartTypeTempString2[$d]}"
 							echo "${SelectedPartitionsTemp[$c]} ${DiskPartSizeTemp[$d]} $DiskPartType ${DiskPartFsTypeTemp[$d]}"
 
-							if [[ "$DiskPartType" == "Linux filesystem" ]] && [[ "${DiskPartFsTypeTemp[$d]}" == "ext4" ]]
+							if [[ "$DiskPartType" == "Linux filesystem" ]]
 							then
 								linux_fs_ext4_parts+=("${SelectedPartitionsTemp[$c]}")
 								SelectedPartitionsMountedText+=("\n${SelectedPartitionsTemp[$c]}----------${DiskPartSizeTemp[$d]}-------$DiskPartType--------${DiskPartFsTypeTemp[$d]}----------/")
 								MountBlockDev+=("${SelectedPartitionsTemp[$c]}")
 								MountPoints+=( "/mnt/")
-							elif [[ "$DiskPartType" == "EFI System" ]] && [[ "${DiskPartFsTypeTemp[$d]}" == "FAT32" ]]
+							elif [[ "$DiskPartType" == "EFI System" ]]
 							then
 								fat32_efi_parts+=("${SelectedPartitionsTemp[$c]}")
 								SelectedPartitionsMountedText+=("\n${SelectedPartitionsTemp[$c]}----------${DiskPartSizeTemp[$d]}-----------$DiskPartType-----------${DiskPartFsTypeTemp[$d]}--------/boot")
 								MountBlockDev+=("${SelectedPartitionsTemp[$c]}")
 								MountPoints+=("/mnt/boot/")
-							elif [[ "$DiskPartType" == "Linux home" ]] && [[ "${1DiskPartFsTypeTemp[$d]}" == "ext4" ]]
+							elif [[ "$DiskPartType" == "Linux home" ]]
 							then
 								home_parts+=("${SelectedPartitionsTemp[$c]}")
 								MountBlockDev+=("${SelectedPartitionsTemp[$c]}" "/mnt/home/")
 								MountPoints+=("/mnt/home/")
 								SelectedPartitionsMountedText+=("\n${SelectedPartitionsTemp[$c]}-----${DiskPartSizeTemp[$d]}-----------$DiskPartType-----------${DiskPartFsTypeTemp[$d]}--------/home")
-							elif [[ "$DiskPartType" == "Linux swap" ]] && [[ "${DiskPartFsTypeTemp[$d]}" == "swap" ]]
+							elif [[ "$DiskPartType" == "Linux swap" ]]
 							then
 								swap_parts+=("${SelectedPartitionsTemp[$c]}")
 								SelectedPartitionsMountedText+=("\n${SelectedPartitionsTemp[$c]}-----------${DiskPartSizeTemp[$d]}------------$DiskPartType-----------${DiskPartFsTypeTemp[$d]}--------swap")
@@ -1073,8 +1066,8 @@ MountViewPartitions(){
 		elif [[ $SWAP_DIALOG_EXIT_CODE -eq 0 ]]
 		then
 			ConfirmMounts "${SelectedPartitionsMountedText[@]}"
-			MountPartitions "${SelectedPartitionsMountedText[@]}" "${MountPoints[@]}" "${MountBlockDev[@]}"
-			# MountPartitions SelectedPartitionsMountedText MountPoints MountBlockDev
+			# MountPartitions "${SelectedPartitionsMountedText[@]}" "${MountPoints[@]}" "${MountBlockDev[@]}"
+			MountPartitions SelectedPartitionsMountedText MountPoints MountBlockDev
 		fi
 		
 		# DiskPartListInfo=()
@@ -1093,8 +1086,8 @@ MountViewPartitions(){
 				PartitionDisk
 			elif [[ $MOUNTS_EXIT_CODE -eq 0 ]]
 			then
-				MountPartitions "${SelectedPartitionsMountedText[@]}" "${MountPoints[@]}" "${MountBlockDev[@]}"
-				# MountPartitions SelectedPartitionsMountedText MountPoints MountBlockDev
+				# MountPartitions "${SelectedPartitionsMountedText[@]}" "${MountPoints[@]}" "${MountBlockDev[@]}"
+				MountPartitions SelectedPartitionsMountedText MountPoints MountBlockDev
 			fi
 		else
 			MountViewPartitions
@@ -1128,15 +1121,28 @@ DiskListTemp(){
 	lsblk -dno name,size,pttype,vendor,model | grep -iv 'loop\|sr[0-9]*'
 }
 
+: '
 DiskPartInfoTemp(){
 	if [[ -z $1 ]]
 	then
-		lsblk -nlo name,size,fstype,fsver,parttypename | grep -i '[a,s]d[a-z][0-9]' | grep -i 'ext4\|fat32\|vfat\|efi\|swap' | sed 's/1.0   //g;s/vfat   FAT32 EFI System/FAT32  EFI System/g;s/swap   1     Linux swap/swap   Linux swap/g'
+		lsblk -nlo name,size,fstype,fsver,parttypename | grep -i '[a,s]d[a-z][0-9]' | grep -i 'linux filesystem\|ext4\|fat32\|vfat\|efi\|swap' | sed 's/1.0   //g;s/vfat   FAT32 EFI System/FAT32  EFI System/g;s/swap   1     Linux swap/swap   Linux swap/g'
 	else
-	    lsblk -nlo name,size,fstype,fsver,parttypename /dev/"$1" | grep -i '[a,s]d[a-z][0-9]' | grep -i 'ext4\|fat32\|vfat\|efi\|swap' | sed 's/1.0   //g;s/vfat   FAT32 EFI System/FAT32  EFI System/g;s/swap   1     Linux swap/swap   Linux swap/g'
+	    lsblk -nlo name,size,fstype,fsver,parttypename /dev/"$1" | grep -i '[a,s]d[a-z][0-9]' | grep -i 'linux filesystem\|ext4\|fat32\|vfat\|efi\|swap' | sed 's/1.0   //g;s/vfat   FAT32 EFI System/FAT32  EFI System/g;s/swap   1     Linux swap/swap   Linux swap/g'
 	fi
 	echo -e "\n"
 }
+'
+
+DiskPartInfoTemp(){
+	if [[ -z $1 ]]
+	then
+		lsblk -nlo name,size,parttypename,partlabel | grep -ie '[a,s]d[a-z][0-9]|\.\|\linux filesystem\|ext4\|fat32\|vfat\|efi\|swap' | sed 's/             /  /g'
+	else
+	    lsblk -nlo name,size,parttypename,partlabel /dev/"$1" | grep -ie '[a,s]d[a-z][0-9]|\.\|\linux filesystem\|ext4\|fat32\|vfat\|efi\|swap' | sed 's/             /  /g'
+	fi
+	echo -e "\n"
+}
+
 
 EditDisk(){
 	disks=$1[@]
@@ -1149,7 +1155,7 @@ EditDisk(){
 	diskeditors+=("parted" "parted (not beginner friendly)")
 	DiskEditor=$(dialog --no-tags --cancel-label "Back" --menu "Disk Editor Menu" 0 0 0 "${diskeditors[@]}" 3>&1 1>&2 2>&3)
 	DISKEDITOR_EXIT_CODE=$?
-	# clear
+	clear
 	if [[ $DISKEDITOR_EXIT_CODE -eq 1 ]]
 	then
 		PartitionDisk
@@ -1174,7 +1180,7 @@ PartitionDisk(){
 	DiskListInfo=()
 	DiskName=()
 
-	for (( i = 0; i <= ${#DiskList}; i++ ))
+	for (( i = 0; i < ${#DiskList[@]}; i++ ))
 	do
 		DiskName+=("${DiskVendor[$i]} ${DiskModel[$i]}")
 	done
