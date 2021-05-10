@@ -8,6 +8,7 @@
 # DIALOG_EXTRA=3
 
 # 3>&1 1>&2 2>&3
+
 GuageMeter(){
 	# $1 - guagebox text
 	# $2 - number
@@ -25,40 +26,6 @@ GuageMeter(){
 }
 
 
-IteminArray(){
-	# array_item=(${$1[@]})
-	array_list=($1)
-	array_item=$2
-	exit_code_0=0
-	exit_code_1=0
-
-	for (( array_iter = 0; array_iter < ${#array_item[@]}; array_iter++ ))
-	do
-		if [[ "${array_item[$array_iter]}" == "$array_item" ]]
-		then
-			$exit_code=1
-		else
-			$exit_code=0
-		fi
-	done
-
-	for (( array_iter = 0; array_iter < ${#array_item[@]}; array_iter++ ))
-	do
-		if [[ "${array_item[$array_iter]}" -eq $array_item ]]
-		then
-			$exit_code_1=1
-		else
-			$exit_code_1=0
-		fi
-	done
-
-	if [[ $exit_code_1 -eq $exit_code_0 ]]
-	then
-		return exit_code_0
-	else
-		return 2
-	fi
-}
 
 
 # Network Mgmnt
@@ -726,8 +693,12 @@ ConfHost(){
 
 
 ConfirmMounts(){
-	texts=("$@")
+	# texts=("$@")
+	Temptexts=$1[@]
+	texts=("${!Temptexts}")
+	unset Temptexts
 	echo -e "${texts[@]}"
+	read -p "nice: " -n1 
 	# 0 - ok
 	# 1 - back
 	dialog --yes-label "OK" --no-label "Back" --title "partition mount confirmation" --yesno "\nPartition-----Size-----------Filesystem----------Format----MountPoint\n${texts[*]}" 20 75
@@ -738,6 +709,10 @@ ConfirmMounts(){
 
 MountPartitions(){
 
+	# $1 - partitions to mount
+	# $2 - mountpt.s
+	# $3 - 
+
 	SelectedPartitionsMounted=$1[@]
 	SelectedPartitionsMounted=("${!SelectedPartitionsMounted}")
 	MntPts=$2[@]
@@ -746,10 +721,11 @@ MountPartitions(){
 	MntBlkDev=("${!MntBlkDev}")
 
 	# clear
-	echo "${SelectedPartitionsMounted[@]}"
+	# echo "${SelectedPartitionsMounted[@]}"
 	# exit
 
 	# ConfirmMounts "${SelectedPartitionsMounted[@]}"
+	ConfirmMounts SelectedPartitionsMounted
 
 	MOUNTS_EXIT_CODE=$?
 	if [[ $MOUNTS_EXIT_CODE -eq 1 ]]
@@ -838,315 +814,39 @@ MountPartitions(){
 
 
 
-MountViewPartitions(){
-
-	DiskPartListInfo=()
-	DiskPartNameTemp=()
-	DiskPartName=()
-	DiskPartSizeTemp=()
-	DiskPartType=()
-	DiskPartFsType=()
-	DiskPartTypeLabel=()
-	SelectedPartitionsMountedText=("")
-	MountPoints=()
-	MountBlockDev=()
-	SelectedPartitionsTemp=()
-	partitions=()
-	fat32_efi_parts=()
-	linux_fs_ext4_parts=()
-	home_parts=()
-	swap_parts=()
-
-	for (( a = 0; a < ${#Disks[@]}; a++))
-	do
-	    DiskPartNameTemp=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $1 }'))
-	    DiskPartSizeTemp=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $2 }'))
-	    # DiskPartFsTypeTemp=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $3 }'))
-	    DiskPartFsTypeTempString1=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $3" "}'))
-	    DiskPartFsTypeTempString2=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $4}'))
-	    # DiskPartTypeTempString1=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $4 }'))
-	    # DiskPartTypeTempString2=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $5 }'))
-
-	    DiskPartTypeLabelTempString=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ for(i=4;i<=$NF;++i){ print $i } }'))
-
-	    # DiskPartTypeLabelTempString1=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $5" " }'))
-	    # DiskPartTypeLabelTempString2=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $6" "}'))
-	    # DiskPartTypeLabelTempString3=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $7 }'))
-
-	    if [[ -z ${DiskPartSizeTemp[*]} ]] && [[ -z ${DiskPartFsTypeTemp[*]} ]] && [[ -z ${DiskPartTypeLabelTemp[*]} ]]
-	    then
-	        continue
-	    else
-	        # for (( b = 0; b < ${#DiskPartNameTemp[@]}; $((b+=2)) ))
-	        for (( b=0; b < ${#DiskPartNameTemp[@]}; b++ ))
-	        do
-	        	: '
-	            DiskPartTypeTemp="${DiskPartTypeTempString1[$b]} ${DiskPartTypeTempString2[$b]}"
-	            DiskPartInfo="${DiskPartSizeTemp[$b]} | ${DiskPartFsTypeTemp[$b]} | $DiskPartTypeTemp"
-				DiskPartListInfo+=("${DiskPartNameTemp[$b]}" "$DiskPartInfo" 0)
-				'
-				DiskPartTypeLabel+=("${DiskPartTypeLabelTempString1[$b]} ${DiskPartTypeLabelTempString2[$b]} ${DiskPartTypeLabelTempString3[$b]}")
-				DiskPartFsType+=("${DiskPartFsTypeTempString1[$b]} ${DiskPartFsTypeTempString2[$b]}")
-	            # DiskPartInfo="${DiskPartSizeTemp[$b]} | ${DiskPartFsType[$b]} | $DiskPartTypeTemp"
-	            
-				: '
-				if [[ "${DiskPartFsType[$b]}" == "Linux filesystem" ]]
-				then
-	            	DiskPartInfo="${DiskPartSizeTemp[$b]} | ext4 | ${DiskPartFsType[$b]} | ${DiskPartTypeLabel[$b]}"
-	            elif [[ "${DiskPartFsType[$b]}" == "EFI System" ]]
-				then
-	            	DiskPartInfo="${DiskPartSizeTemp[$b]} | FAT32 | ${DiskPartFsType[$b]} | ${DiskPartTypeLabel[$b]}"
-	            elif [[ "${DiskPartFsType[$b]}" == "swap" ]]
-				then
-	            	DiskPartInfo="${DiskPartSizeTemp[$b]} | swap | ${DiskPartFsType[$b]} | ${DiskPartTypeLabel[$b]}"
-				fi
-				'
-
-            	DiskPartInfo="${DiskPartSizeTemp[$b]} | ${DiskPartFsType[$b]} | ${DiskPartTypeLabel[$b]}"
-				DiskPartListInfo+=("${DiskPartNameTemp[$b]}" "$DiskPartInfo" 0)
-				DiskPartType+=("$DiskPartTypeTemp")
-	        done
-
-	        if [[ ${#DiskPartListInfo[@]} -eq 0 ]]
-	        then
-				dialog --yes-label "Edit Disk" --no-label "Discard Disk" --yesno "Disk does not contain any partitions. Edit The Disk?" 0 0
-				EMPTY_DISK_EXIT_CODE=$?
-				if [[ $EMPTY_DISK_EXIT_CODE -eq 0 ]]
-				then
-					echo ""
-					# EditDisk 
-				else
-					echo ""
-				fi
-	        fi
-
-        	partition=($(dialog --cancel-label "Back" --column-separator "|" --title "Partition mount menu" --extra-button --extra-label "Mount" --checklist "Partitions in /dev/${Disks[$a]}" 0 0 0 "${DiskPartListInfo[@]}" 3>&1 1>&2 2>&3))
-			PARTITION_EXIT_CODE=$?
-
-			# 0 - ok
-			# 1 - back
-			# 3 - mount
-
-			: '
-			if [[ ${#partition[*]} -eq 0 ]] && ( [[ $PARTITION_EXIT_CODE -eq 0 ]] || [[ $PARTITION_EXIT_CODE -eq 3 ]] )
-			if [[ ${#linux_fs_ext4_parts[@]} -eq 0 ]]  && [[ ${#fat32_efi_parts[@]} -eq 0 ]]
-			if ([[ ${#linux_fs_ext4_parts[@]} -eq 0 ]]  && [[ ${#fat32_efi_parts[@]} -eq 0 ]] && [[ ${#partition[*]} -eq 0 ]] ) || ( [[ ${#swap_parts[@]} -eq 0 ]] && [[ ${#partition[*]} -eq 0 ]] )
-			then
-				dialog --msgbox "please select atleast one partition out of EFI/EXT4/swap for system use" 0 0
-				MountViewPartitions
-			elif [[ $PARTITION_EXIT_CODE -eq 0 ]]
-			'
-
-			if [[ $PARTITION_EXIT_CODE -eq 0 ]]
-			then
-				SelectedPartitionsTemp+=(${partition[@]})
-				SelectedPartitionsTemp+=()
-				# echo "${SelectedPartitionsTemp[@]}"
-				# read -p "nce: "
-				for (( c = 0; c <= ${#SelectedPartitionsTemp[@]}; c++ ))
-				do
-					for (( d = 0; d <= ${#DiskPartNameTemp[@]}; d++ ))
-					do
-						if [[ "${SelectedPartitionsTemp[$c]}" == "${DiskPartNameTemp[$d]}" ]]
-						then
-							# printing format
-							read -p "nice" -n1
-							DiskPartType="${DiskPartTypeTempString1[$d]} ${DiskPartTypeTempString2[$d]}"
-							echo "${SelectedPartitionsTemp[$c]} ${DiskPartSizeTemp[$d]} $DiskPartType ${DiskPartFsTypeTemp[$d]}"
-
-							if [[ "$DiskPartType" == "Linux filesystem" ]]
-							then
-								linux_fs_ext4_parts+=("${SelectedPartitionsTemp[$c]}")
-								SelectedPartitionsMountedText+=("\n${SelectedPartitionsTemp[$c]}----------${DiskPartSizeTemp[$d]}-------$DiskPartType--------${DiskPartFsTypeTemp[$d]}----------/")
-								MountBlockDev+=("${SelectedPartitionsTemp[$c]}")
-								MountPoints+=( "/mnt/")
-							elif [[ "$DiskPartType" == "EFI System" ]]
-							then
-								fat32_efi_parts+=("${SelectedPartitionsTemp[$c]}")
-								SelectedPartitionsMountedText+=("\n${SelectedPartitionsTemp[$c]}----------${DiskPartSizeTemp[$d]}-----------$DiskPartType-----------${DiskPartFsTypeTemp[$d]}--------/boot")
-								MountBlockDev+=("${SelectedPartitionsTemp[$c]}")
-								MountPoints+=("/mnt/boot/")
-							elif [[ "$DiskPartType" == "Linux home" ]]
-							then
-								home_parts+=("${SelectedPartitionsTemp[$c]}")
-								MountBlockDev+=("${SelectedPartitionsTemp[$c]}" "/mnt/home/")
-								MountPoints+=("/mnt/home/")
-								SelectedPartitionsMountedText+=("\n${SelectedPartitionsTemp[$c]}-----${DiskPartSizeTemp[$d]}-----------$DiskPartType-----------${DiskPartFsTypeTemp[$d]}--------/home")
-							elif [[ "$DiskPartType" == "Linux swap" ]]
-							then
-								swap_parts+=("${SelectedPartitionsTemp[$c]}")
-								SelectedPartitionsMountedText+=("\n${SelectedPartitionsTemp[$c]}-----------${DiskPartSizeTemp[$d]}------------$DiskPartType-----------${DiskPartFsTypeTemp[$d]}--------swap")
-								MountBlockDev+=("${SelectedPartitionsTemp[$c]}")
-								MountPoints+=("swap")
-							fi
-						fi
-					done
-				done
-
-				DiskPartName=(${DiskPartNameTemp[@]})
-				DiskPartNameTemp=()
-				DiskPartSizeTemp=()
-				DiskPartFsTypeTemp=()
-				DiskPartTypeTempString1=()
-				DiskPartTypeTempString2=()
-				DiskPartListInfo=()
-
-			elif [[ $PARTITION_EXIT_CODE -eq 1 ]]
-			then
-				DiskPartListInfo=()
-				PartitionDisk
-			elif [[ $PARTITION_EXIT_CODE -eq 3 ]]
-			then
-				SelectedPartitionsTemp+=("${partition[@]}")
-				SelectedPartitionsTemp+=()
-				DiskPartListInfo=()
-			fi
-		fi
-	done
-	total_parts=${#fat32_efi_parts[@]}+${#linux_fs_ext4_parts[@]}+${#swap_parts[@]}+${#home_parts[@]}
-
-	if [[ ${#fat32_efi_parts[@]} -gt 1 ]]
-	then
-		dialog --msgbox "multiple boot partitions detected. please select one" 0 0
-		PartitionDisk
-	elif [[ ${#linux_fs_ext4_parts[@]} -gt 1 ]]
-	then
-		dialog --msgbox "multiple linux filesystems detected. please select one" 0 0
-		PartitionDisk
-	elif ( [[ ${#fat32_efi_parts[@]} -gt 1 ]] && [[ ${#linux_fs_ext4_parts[@]} -gt 1 ]] ) || [[ $total_parts -gt 4 ]]
-	then
-		dialog --msgbox "multiple essential linux partitions detected (boot and ext4). please select one partition for each filesystem" 0 0
-		PartitionDisk
-	elif [[ ${#DiskPartName[@]} -eq 0 ]]
-	then
-			dialog --yes-label "Edit Disk" --no-label "Select Disk" --yesno "Disk does not contain any partitions. Edit The Disk?" 0 0
-			EMPTY_DISK_EXIT_CODE=$?
-			if [[ $EMPTY_DISK_EXIT_CODE -eq 0 ]]
-			then
-				dialog --yes-label "Continue" --no-label "Back" --yesno "Partitions are to be formatted in the diskeditor and the filesystem format is to be created using mkfs (mkfs/mkfs.ext4/mkfs.fat or whatever is used to format the partitions)\n\nPartitions to be created:\n\nMandatory:\n1) EFI partition with a FAT32 filesystem format\n2) Linux Root Partition (shows up as \"Linux filesystem\" in the partition editor) formatted in\n   ext4/ext3/ext2/ext/btrfs/xfs/zfs. Recommended - ext4/btrfs\n\nOptional but recommended:\n1) swap partition with swap filesystem\n\nOptional:\n1) Home partition with same filesystem as Linux Root Partition" 0 0
-				CONTINUE_EXIT_CODE=$?
-				# echo $CONTINUE_EXIT_CODE
-				# exit
-				# 0 - continue
-				# 1 - back
-				if [[ $CONTINUE_EXIT_CODE -eq 0 ]]
-				then
-					EditDisk "${Disks[@]}"
-				elif [[ $CONTINUE_EXIT_CODE -eq 1 ]]
-				then
-					PartitionDisk
-				fi
-			elif [[ $EMPTY_DISK_EXIT_CODE -eq 1 ]]
-			then
-				PartitionDisk
-			fi
-	elif [[ $total_parts -eq 0 ]]
-	then
-		dialog --msgbox "no partitions selected. please select an EFI and a linux filesystem partition (mandatory). Select a few optional partitions as well (if needed or wanted but not necessary)" 0 0
-		PartitionDisk
-		# MountViewPartitions
-	elif [[ ${#fat32_efi_parts[@]} -eq 0 ]]
-	then
-		dialog --msgbox "no boot partition detected" 0 0
-		# DiskPartListInfo=()
-		PartitionDisk
-	elif [[ ${#linux_fs_ext4_parts[@]} -eq 0 ]]
-	then
-		dialog --msgbox "no linux system partition detected" 0 0
-		# DiskPartListInfo=()
-		PartitionDisk
-	elif [[ ${#swap_parts[@]} -eq 0 ]]
-	then
-		dialog --yesno "no swap partition detected. Recommended to have one. continue without a swap partition?" 0 0
-		SWAP_DIALOG_EXIT_CODE=$?
-		echo $SWAP_DIALOG_EXIT_CODE
-		if [[ $SWAP_DIALOG_EXIT_CODE -eq 1 ]]
-		then
-			MountViewPartitions
-		elif [[ $SWAP_DIALOG_EXIT_CODE -eq 0 ]]
-		then
-			ConfirmMounts "${SelectedPartitionsMountedText[@]}"
-			# MountPartitions "${SelectedPartitionsMountedText[@]}" "${MountPoints[@]}" "${MountBlockDev[@]}"
-			MountPartitions SelectedPartitionsMountedText MountPoints MountBlockDev
-		fi
-		
-		# DiskPartListInfo=()
-	elif [[ ${#home_parts[@]} -eq 0 ]]
-	then
-		dialog --yesno "no home partition detected. continue without home partition?" 0 0
-		PART_EXIT_CODE=$?
-		if [[ $PART_EXIT_CODE -eq 0 ]]
-		then
-			# echo $PART_EXIT_CODE
-			# exit
-			ConfirmMounts "${SelectedPartitionsMountedText[@]}"
-			MOUNTS_EXIT_CODE=$?
-			if [[ $MOUNTS_EXIT_CODE -eq 1 ]]
-			then
-				PartitionDisk
-			elif [[ $MOUNTS_EXIT_CODE -eq 0 ]]
-			then
-				# MountPartitions "${SelectedPartitionsMountedText[@]}" "${MountPoints[@]}" "${MountBlockDev[@]}"
-				MountPartitions SelectedPartitionsMountedText MountPoints MountBlockDev
-			fi
-		else
-			MountViewPartitions
-		fi
-
-		# DiskPartListInfo=()
-	elif [[ ${#swap_parts[@]} -eq 0 ]] && [[ ${#home_parts[@]} -eq 0 ]]
-	then
-		dialog --msgbox "no" 0 0
-	elif [[ ${#linux_fs_ext4_parts[@]} -eq 0 ]] && [[ ${#fat32_efi_parts[@]} -eq 0 ]]
-	then
-		dialog --msgbox "no boot and system partitions detected. system cannot be installed." 0 0
-		# MountViewPartitions
-		# DiskPartListInfo=()
-		PartitionDisk
-	elif [[ ${#home_parts[@]} -eq 0 ]] && [[ ${#swap_parts[@]} -eq 0 ]]
-	then
-		# 1 - no
-		# 0 - yes
-		dialog --msgbox "no boot and system partitions detected. system cannot be installed." 0 0
-		PartitionDisk
-	fi
-	# echo "nice ConfirmMounts"
-	# ConfirmMounts "${SelectedPartitionsMountedText[@]}"
-	MainMenu
-}
-
 
 
 DiskListTemp(){
-	lsblk -dno name,size,pttype,vendor,model | grep -iv 'loop\|sr[0-9]*'
+	lsblk -dno name,size,pttype,vendor,model | grep -iv 'loop\|sr[0-9]*' | sed -E 's/\s{8}/ none   /g'
 }
 
-: '
-DiskPartInfoTemp(){
-	if [[ -z $1 ]]
-	then
-		lsblk -nlo name,size,fstype,fsver,parttypename | grep -i '[a,s]d[a-z][0-9]' | grep -i 'linux filesystem\|ext4\|fat32\|vfat\|efi\|swap' | sed 's/1.0   //g;s/vfat   FAT32 EFI System/FAT32  EFI System/g;s/swap   1     Linux swap/swap   Linux swap/g'
-	else
-	    lsblk -nlo name,size,fstype,fsver,parttypename /dev/"$1" | grep -i '[a,s]d[a-z][0-9]' | grep -i 'linux filesystem\|ext4\|fat32\|vfat\|efi\|swap' | sed 's/1.0   //g;s/vfat   FAT32 EFI System/FAT32  EFI System/g;s/swap   1     Linux swap/swap   Linux swap/g'
-	fi
-	echo -e "\n"
-}
-'
+
+
+# DiskPartInfoTemp(){
+# 	if [[ -z $1 ]]
+# 	then
+# 		lsblk -nlo name,size,fstype,fsver,parttypename /dev/"$1" | grep -i '[a,s]d[a-z][0-9]' | grep -i 'linux filesystem\|ext4\|fat32\|vfat\|efi\|swap' | sed 's/1.0\s{3}//g;s/vfat   FAT32 EFI System/FAT32  EFI System/g;s/swap\s{3}1\s{5}Linux swap/swap   Linux swap/g'
+# 	else
+# 	    lsblk -nlo name,size,fstype,fsver,parttypename | grep -i '[a,s]d[a-z][0-9]' | grep -i 'linux filesystem\|ext4\|fat32\|vfat\|efi\|swap' | sed -E 's/1.0\s{3}//g;s/vfat\s{3}FAT32 EFI System/FAT32  EFI System/g;s/swap\s{3}1\s{5}Linux swap/swap   Linux swap/g'
+# 	fi
+# 	echo -e "\n"
+# }
 
 DiskPartInfoTemp(){
+
 	if [[ -z $1 ]]
 	then
-		lsblk -nlo name,size,parttypename,partlabel | grep -ie '[a,s]d[a-z][0-9]|\.\|\linux filesystem\|ext4\|fat32\|vfat\|efi\|swap' | sed 's/             /  /g'
+		lsblk -nlo name,size,parttypename,partlabel | grep -ie '[a,s]d[a-z][0-9]|\.\|\linux filesystem\|vfat\|efi\|swap\|linux*home' | sed -E 's/\s{13}/  /g'
+
 	else
-	    lsblk -nlo name,size,parttypename,partlabel /dev/"$1" | grep -ie '[a,s]d[a-z][0-9]|\.\|\linux filesystem\|ext4\|fat32\|vfat\|efi\|swap' | sed 's/             /  /g'
+	    lsblk /dev/"$1" -nlo name,size,parttypename,partlabel | grep -ie '[a,s]d[a-z][0-9]|\.\|\linux filesystem\|ext4\|fat32\|vfat\|efi\|swap\|linux*home' | sed -E 's/\s{13}/  /g'
 	fi
-	echo -e "\n"
 }
+
 
 
 EditDisk(){
 	disks=$1[@]
-	# disks=($1[@])
 	diskeditors=("gdisk" "gdisk")
 	diskeditors+=("cgdisk" "cgdisk")
 	diskeditors+=("fdisk" "fdisk")
@@ -1155,7 +855,7 @@ EditDisk(){
 	diskeditors+=("parted" "parted (not beginner friendly)")
 	DiskEditor=$(dialog --no-tags --cancel-label "Back" --menu "Disk Editor Menu" 0 0 0 "${diskeditors[@]}" 3>&1 1>&2 2>&3)
 	DISKEDITOR_EXIT_CODE=$?
-	clear
+	reset;clear
 	if [[ $DISKEDITOR_EXIT_CODE -eq 1 ]]
 	then
 		PartitionDisk
@@ -1163,7 +863,8 @@ EditDisk(){
 	then
 		for (( i = 0; i < ${#Disks[@]}; i++ ))
 		do
-			$DiskEditor "/dev/${Disks[$i]}"
+			echo -e "$DiskEditor '/dev/${Disks[$i]}'"
+			# $DiskEditor "/dev/${Disks[$i]}"
 		done
 		MountViewPartitions
 	fi
@@ -1175,10 +876,38 @@ PartitionDisk(){
 	DiskSize=($(DiskListTemp | awk '{print $2}'))
 	DiskPartTable=($(DiskListTemp | awk '{print $3}'))
 	DiskVendor=($(DiskListTemp | awk '{print $4}'))
-	DiskModel=($(DiskListTemp | awk '{print $5}'))
+	DiskModelTemp=($(DiskListTemp | awk '{ for(i=5;i<=NF;i++){ if (i == 5){ print i" "$i } else if(i > 5){ print $i } } }'))
 
 	DiskListInfo=()
 	DiskName=()
+	DiskModel=()
+
+	DiskModelString=""
+	for i in "${DiskModelTemp[@]}"
+	do
+		if [[ "$i" =~ ^[5]$ ]] && [[ "$DiskModelString" == "" ]]
+		then
+			continue
+		elif [[ "$i" =~ ^[5]$ ]] && [[ ! (-z "$DiskModelString") ]]
+		then
+			DiskModel+=("$DiskModelString")
+			DiskModelString=""
+		elif [[ ! ("$i" =~ ^[5]$) ]]
+		then
+			DiskModelString+="$i"
+		fi
+
+		if [[ "$i" == "${DiskModelTemp[-1]}" ]] && [[ ! "$i" =~ ^[5]$ ]] && [[ "$i" =~ ^[a-zA-Z0-9]* ]]
+		then
+			DiskModel+=("$DiskModelString")
+		fi
+	done
+
+	for (( i = 0; i < ${#DiskModel[@]}; i++ ))
+	do
+		echo "${DiskModel[$i]}"
+	done
+
 
 	for (( i = 0; i < ${#DiskList[@]}; i++ ))
 	do
@@ -1216,26 +945,109 @@ PartitionDisk(){
 			elif [[ $PART_MSG_BOX_EXIT_CODE -eq 1 ]]
 			then
 				dialog --yes-label "Continue" --no-label "Back" --yesno "Partitions are to be formatted in the diskeditor and the filesystem format is to be created using mkfs (mkfs/mkfs.ext4/mkfs.fat or whatever is used to format the partitions)\n\nPartitions to be created:\n\nMandatory:\n1) EFI partition with a FAT32 filesystem format\n2) Linux Root Partition (shows up as \"Linux filesystem\" in the partition editor) formatted in\n   ext4/ext3/ext2/ext/btrfs/xfs/zfs. Recommended - ext4/btrfs\n\nOptional but recommended:\n1) swap partition with swap filesystem\n\nOptional:\n1) Home partition with same filesystem as Linux Root Partition" 0 0
-				# echo $CONTINUE_EXIT_CODE
 				CONTINUE_EXIT_CODE=$?
 				# exit
 				# 0 - continue
 				# 1 - back
+
 				if [[ $CONTINUE_EXIT_CODE -eq 0 ]]
 				then
-					EditDisk "${Disks[@]}"
+					echo "EditDisk"
+					# EditDisk "${Disks[@]}"
 				elif [[ $CONTINUE_EXIT_CODE -eq 1 ]]
 				then
 					PartitionDisk
 				fi
 			elif [[ $PART_MSG_BOX_EXIT_CODE -eq 3 ]]
 			then
-				MountViewPartitions
+				# MountViewPartitions
+				# MountViewPartitions "${Disks[@]}"
+				MountViewPartitions Disks
 			fi
 		fi
 	elif [[ $? -eq 1 ]]
 	then
-		MainMenu "Partition Disk **"
+		MainMenu
+	fi
+}
+
+
+CheckEmptyDisks(){
+	DisksArgs=$1[@]
+	Disks=("${!DisksArgs}")
+	unset DisksArgs
+
+	NoPartDisksTemp=()
+	NoPartDisks=()
+	DiskPartCheck=()
+	DisksTemp=()
+
+	disk=""
+	have=""
+
+	for (( i = 0; i < ${#Disks[@]}; i++ ))
+	do
+		DiskPartCheck=($(DiskPartInfoTemp "${Disks[$i]}" | grep -vi 'W95 FAT32 (LBA)' | awk '{ print $1 }'))
+
+		if [[ -z ${DiskPartCheck[@]} ]]
+		then
+			NoPartDisks+=("${Disks[$i]}")
+		elif [[ ${#DiskPartCheck[@]} -ge 1 ]]
+		then
+			continue
+		fi
+		unset DiskPartCheck
+	done
+
+	if [[ ${#NoPartDisks[@]} -gt 1 ]]
+	then
+		NoPartDisksTemp=("${NoPartDisks[@]}")
+		temp="${NoPartDisksTemp[-1]}"
+		NoPartDisksTemp[-1]="&"
+		NoPartDisksTemp+=("$temp")
+		disk="disks"
+		have="have"
+	elif [[ ${#NoPartDisks[@]} -eq 1 ]]
+	then
+		NoPartDisksTemp=("${NoPartDisks[@]}")
+		disk="disk"
+		have="has"
+	fi
+
+	dialog --ok-label "Back" --cancel-label "Continue" --extra-button --extra-label "Edit" --yesno "$disk ${NoPartDisksTemp[*]} does not contain any linux installation compatible partitions. Edit the $disk?" 0 0
+	EMPTY_DISK_EXIT_CODE=$?
+	# 0 - Back
+	# 1 - Continue
+	# 3 - Edit
+
+	
+	if [[ $EMPTY_DISK_EXIT_CODE -eq 0 ]]
+	then
+		PartitionDisk
+	elif [[ $EMPTY_DISK_EXIT_CODE -eq 1 ]]
+	then
+		if [[ ${#NoPartDisksTemp[@]} -ge 1 ]]
+		then
+			dialog --msgbox "$disk ${NoPartDisksTemp[*]} $have been discarded and will not be used to install any linux components" 0 0
+			unset NoPartDisksTemp
+
+			DisksTemp=("${Disks[@]}")
+			for (( i = 0; i < ${#DisksTemp[@]}; i++ ))
+			do
+				for (( j = 0; j < ${#NoPartDisks[@]}; j++ ))
+				do
+					if [[ "${Disks[$i]}" == "${NoPartDisks[$j]}" ]]
+					then
+						unset Disks[$i]
+					fi
+				done
+			done
+			unset DisksTemp
+		fi
+	elif [[ $EMPTY_DISK_EXIT_CODE -eq 3 ]]
+	then
+		unset NoPartDisksTemp
+		EditDisk
 	fi
 }
 
@@ -1251,6 +1063,452 @@ PartitionDisk(){
 
 
 
+MountViewPartitions(){
+
+	# $1 - Disks
+
+	DisksArgs=$1[@]
+	Disks=("${!DisksArgs}")
+	unset DisksArgs
+
+	DiskPartNameTemp=()
+	DiskPartSizeTemp=()
+	SelectedPartitionsTemp=()
+	DiskPartLabelTemp=()
+	DiskPartFsTypeTemp=()
+	DiskPartListInfo=()
+	DiskPartName=()
+	DiskPartFsFormat=()
+	DiskPartFsType=()
+	DiskPartTypeLabel=()
+	DiskPartLabel=()
+	SelectedPartitionsMountedText=("")
+	MountPoints=()
+	MountBlockDev=()
+	partitions=()
+
+	NoPartDisks=()
+
+	fat32_efi_parts=()
+	linux_fs_ext4_parts=()
+	home_parts=()
+	swap_parts=()
+
+	fat32_efi_part_count=0
+	linux_fs_ext4_part_count=0
+	home_part_count=0
+	swap_part_count=0
+
+	#statements
+	# $1 - ${Disks[@]}
+	# CheckEmptyDisks "$1[@]"
+	CheckEmptyDisks Disks
+	Disks=($(IFS="";sort <<<${Disks[@]}))
+
+	# for a in "${Disks[@]}"
+	for (( a = 0; a < ${#Disks[@]}; a++))
+	do
+		# echo "$a - ${Disks[$a]}"
+		# echo "$a"
+		# continue
+		# DiskPartName=($(DiskPartInfoTemp "$a" | awk '{ print $1 }'))
+		# DiskPartSizeTemp=($(DiskPartInfoTemp "$a" | awk '{ print $2 }'))
+		# DiskPartFsTypeTemp=($(DiskPartInfoTemp "$a" | awk '{ print $3" "$4" 1" }'))
+		# DiskPartLabelTemp=($(DiskPartInfoTemp "$a" | awk '{ for(i=5;i<=NF;i++){ if (i == 5){ print i" "$i } else if(i > 5){ print $i } } }'))
+
+	    # DiskPartNameTemp=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $1 }'))
+	    DiskPartName=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $1 }'))
+	    DiskPartSizeTemp=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $2 }'))
+	    DiskPartFsTypeTemp=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $3" "$4" 1" }'))
+		DiskPartLabelTemp=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ for(i=5;i<=NF;i++){ if (i == 5){ print i" "$i } else if(i > 5){ print $i } } }'))
+		# DiskPartLabelTemp=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ for(i=5;i<=NF;++i) if(i == 5){ print i" "$i } else {print $i} }'))
+		# DiskPartLabelTemp=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ for(i=5;i<=NF;i++){ print i" "$i } }'))
+
+		if [[ -z ${DiskPartSizeTemp[*]} ]] && [[ -z ${DiskPartFsTypeTemp[*]} ]] && [[ -z ${DiskPartLabelTemp[*]} ]] && [[ -z ${DiskPartName[*]} ]]
+	    then
+	        continue
+	    else
+	    	DiskPartFsTypeString=""
+	    	for aa in "${DiskPartFsTypeTemp[@]}"
+	    	do
+	    		if [[ "$aa" =~ [1] ]]
+	    		then
+    				DiskPartFsType+=("$(echo "$DiskPartFsTypeString" | sed 's/\s$//g')")
+    				# DiskPartFsType+=("$DiskPartFsTypeString | sed 's/\s$//g'")
+    				# DiskPartFsType+=("$DiskPartFsTypeString")
+	    			DiskPartFsTypeString=""
+    			elif [[ "aa" =~ [a-zA-Z] ]]
+				then
+	    			DiskPartFsTypeString+="$aa "
+	    		fi
+	    	done
+	    	unset DiskPartFsTypeString
+	    	# DiskPartFsType=(${DiskPartFsType[@]/\s$/})
+	    	# echo ${DiskPartFsType[@]}
+
+	        # for (( b=0; b < ${#DiskPartNameTemp[@]}; b++ ))
+	        for (( b=0; b < ${#DiskPartName[@]}; b++ ))
+	        do
+				LabelStrings=""
+				for (( c = 0; c < ${#DiskPartLabelTemp[@]}; c++ ))
+				do
+					if [[ "${DiskPartLabelTemp[$c]}" =~ [a-zA-Z] ]]
+					then
+						LabelStrings+="${DiskPartLabelTemp[$c]} "
+					elif [[ "${DiskPartLabelTemp[$c]}" =~ [5] ]]
+					then
+						if [[ "$LabelStrings" != "" ]]
+						then
+							# DiskPartLabel+=("$LabelStrings")
+							DiskPartLabel+=("$(echo "$LabelStrings" | sed 's/\s$//g')")
+							LabelStrings=""
+						elif [[ "$LabelStrings" == "" ]]
+						then
+							continue
+						fi
+					fi
+					if [[ "${DiskPartLabelTemp[$c]}" == "${DiskPartLabelTemp[-1]}" ]]
+					then
+						# DiskPartLabel+=("$LabelStrings")
+						DiskPartLabel+=("$(echo "$LabelStrings" | sed 's/\s$//g')")
+						LabelStrings=""
+					fi
+				done
+
+				unset LabelStrings
+            	DiskPartInfo="${DiskPartSizeTemp[$b]} | ${DiskPartFsType[$b]} | ${DiskPartLabel[$b]}"
+				DiskPartListInfo+=("${DiskPartName[$b]}" "$DiskPartInfo" 0)
+				# DiskPartListInfo+=("${DiskPartNameTemp[$b]}" "$DiskPartInfo" 0)
+				# DiskPartLabel=()
+	        done
+
+
+			# continue
+			partition=($(dialog --cancel-label "Back" --column-separator "|" --title "Partition mount menu" --extra-button --extra-label "Mount" --checklist "Partitions in /dev/${Disks[$a]}" 0 0 0 "${DiskPartListInfo[@]}" 3>&1 1>&2 2>&3))
+			PARTITION_EXIT_CODE=$?
+			# 0 - ok
+			# 1 - back
+			# 3 - mount
+
+
+			: '
+			if [[ ${#partition[*]} -eq 0 ]] && ( [[ $PARTITION_EXIT_CODE -eq 0 ]] || [[ $PARTITION_EXIT_CODE -eq 3 ]] )
+			if [[ ${#linux_fs_ext4_parts[@]} -eq 0 ]]  && [[ ${#fat32_efi_parts[@]} -eq 0 ]]
+			if ([[ ${#linux_fs_ext4_parts[@]} -eq 0 ]]  && [[ ${#fat32_efi_parts[@]} -eq 0 ]] && [[ ${#partition[*]} -eq 0 ]] ) || ( [[ ${#swap_parts[@]} -eq 0 ]] && [[ ${#partition[*]} -eq 0 ]] )
+			then
+				dialog --msgbox "please select atleast one partition out of EFI/EXT4/swap for system use" 0 0
+				# MountViewPartitions
+				# MountViewPartitions "${Disks[@]}"
+				MountViewPartitions Disks
+			elif [[ $PARTITION_EXIT_CODE -eq 0 ]]
+			'
+
+			if [[ $PARTITION_EXIT_CODE -eq 0 ]]
+			then
+				SelectedPartitionsTemp+=("${partition[@]}")
+				# SelectedPartitionsTemp+=()
+				for (( c = 0; c < ${#SelectedPartitionsTemp[@]}; c++ ))
+				do
+					# a=c
+					# ((a+=1))
+					# for (( d = 0; d < ${#DiskPartNameTemp[@]}; d++ ))
+					for (( d = 0; d < ${#DiskPartName[@]}; d++ ))
+					do
+						# if [[ "${SelectedPartitionsTemp[$c]}" == "${DiskPartNameTemp[$d]}" ]]
+						if [[ "${SelectedPartitionsTemp[$c]}" == "${DiskPartName[$d]}" ]]
+						then
+							if [[ "${DiskPartFsType[$d]}" == "Linux filesystem" ]]
+							then
+								linux_fs_ext4_parts+=("${DiskPartFsType[$c]}")
+								((linux_fs_ext4_part_count+=1))
+							elif [[ "${DiskPartFsType[$d]}" == "Linux swap" ]]
+							then
+								swap_parts+=("${DiskPartFsType[$c]}")
+								((swap_part_count+=1))
+							elif [[ "${DiskPartFsType[$d]}" == "EFI System" ]]
+							then
+								fat32_efi_parts+=("${DiskPartFsType[$c]}")
+								((fat32_efi_part_count+=1))
+							fi
+						fi
+					done
+				done
+				DiskPartListInfo=()
+				DiskPartFsType=()
+
+			
+
+				# echo "linux_fs_ext4_parts - ${linux_fs_ext4_parts[@]}"
+				# echo "swap_parts - ${swap_parts[@]}"
+				# echo "fat32_efi_parts - ${fat32_efi_parts[@]}"
+			elif [[ $PARTITION_EXIT_CODE -eq 1 ]]
+			then
+				# DiskPartListInfo=()
+				PartitionDisk
+			elif [[ $PARTITION_EXIT_CODE -eq 3 ]]
+			then
+				SelectedPartitionsTemp+=("${partition[@]}")
+				# SelectedPartitionsTemp+=()
+			fi
+		fi
+		DiskPartListInfo=()
+		DiskPartSizeTemp=()
+		DiskPartFsType=()
+		DiskPartLabel=()
+		# read -p "nce: " -n1
+		# continue
+	done
+	# exit
+
+	# total_parts=${#fat32_efi_parts[@]}+${#linux_fs_ext4_parts[@]}+${#swap_parts[@]}+${#home_parts[@]}
+	total_parts=$(($fat32_efi_part_count+$linux_fs_ext4_part_count+$swap_part_count+$home_part_count))
+
+
+	if [[ $swap_part_count -eq 0 ]] && [[ $home_part_count -eq 0 ]] && [[ $fat32_efi_part_count -gt 1 ]] && [[ $linux_fs_ext4_part_count -gt 1 ]] && [[ $swap_part_count -eq 1 ]]
+	then
+		dialog --yesno "no home or swap partitions detected. Continue without them?" 0 0
+		PART_EXIT_CODE=$?
+		if [[ $PART_EXIT_CODE -eq 0 ]]
+		then
+			# echo "ConfirmMounts \"${SelectedPartitionsMountedText[@]}\""
+			# ConfirmMounts "${SelectedPartitionsMountedText[@]}"
+			ConfirmMounts SelectedPartitionsMountedText
+			MOUNTS_EXIT_CODE=$?
+			if [[ $MOUNTS_EXIT_CODE -eq 1 ]]
+			then
+				PartitionDisk
+			elif [[ $MOUNTS_EXIT_CODE -eq 0 ]]
+			then
+				# MountPartitions "${SelectedPartitionsMountedText[@]}" "${MountPoints[@]}" "${MountBlockDev[@]}"
+				MountPartitions SelectedPartitionsMountedText MountPoints MountBlockDev
+				# echo "MountPartitions SelectedPartitionsMountedText MountPoints MountBlockDev"
+			fi
+		elif [[ $PART_EXIT_CODE -eq 1 ]]
+		then
+			MountViewPartitions "${Disks[@]}"
+			# PartitionDisk
+			# # MountViewPartitions
+			# MountViewPartitions Disks
+
+		fi
+		# DiskPartListInfo=()
+
+
+	# elif ( [[ ${#fat32_efi_parts[@]} -gt 1 ]] && [[ ${#linux_fs_ext4_parts[@]} -gt 1 ]] ) || [[ $total_parts -gt 4 ]]
+	elif [[ $fat32_efi_part_count -gt 1 ]] && [[ $linux_fs_ext4_part_count -gt 1 ]]
+	then
+		dialog --msgbox "multiple essential linux partitions detected (boot and ext4). please select one partition for each filesystem" 0 0
+		# PartitionDisk
+		MountViewPartitions "${Disks[@]}"
+
+
+	elif [[ $fat32_efi_part_count -gt 1 ]]
+	then
+		dialog --msgbox "multiple boot partitions detected. please select one" 0 0
+		# PartitionDisk
+		MountViewPartitions "${Disks[@]}"
+
+
+	elif [[ $linux_fs_ext4_part_count -gt 1 ]]
+	then
+		dialog --msgbox "multiple linux filesystems detected. please select one" 0 0
+		# PartitionDisk
+		MountViewPartitions "${Disks[@]}"
+
+	elif [[ -z ${DiskPartName[@]} ]]
+	then
+			dialog --yes-label "Edit Disk" --no-label "Select Disk" --yesno "Disk does not contain any partitions. Edit The Disk?" 0 0
+		EMPTY_DISK_EXIT_CODE=$?
+		if [[ $EMPTY_DISK_EXIT_CODE -eq 0 ]]
+		then
+			dialog --yes-label "Continue" --no-label "Back" --yesno "Partitions are to be formatted in the diskeditor and the filesystem format is to be created using mkfs (mkfs/mkfs.ext4/mkfs.fat or whatever is used to format the partitions)\n\nPartitions to be created:\n\nMandatory:\n1) EFI partition with a FAT32 filesystem format\n2) Linux Root Partition (shows up as \"Linux filesystem\" in the partition editor) formatted in\n   ext4/ext3/ext2/ext/btrfs/xfs/zfs. Recommended - ext4/btrfs\n\nOptional but recommended:\n1) swap partition with swap filesystem\n\nOptional:\n1) Home partition with same filesystem as Linux Root Partition" 0 0
+				CONTINUE_EXIT_CODE=$?
+				# echo $CONTINUE_EXIT_CODE
+				# exit
+				# 0 - continue
+				# 1 - back
+				if [[ $CONTINUE_EXIT_CODE -eq 0 ]]
+				then
+					EditDisk "${Disks[@]}"
+				elif [[ $CONTINUE_EXIT_CODE -eq 1 ]]
+				then
+					PartitionDisk
+				fi
+			elif [[ $EMPTY_DISK_EXIT_CODE -eq 1 ]]
+			then
+				PartitionDisk
+			fi
+
+
+	elif [[ $total_parts -eq 0 ]]
+	then
+		dialog --msgbox "no partitions selected. please select an EFI and a linux filesystem partition (mandatory). Select a few optional partitions as well (if needed or wanted but not necessary)" 0 0
+	# PartitionDisk
+	# # MountViewPartitions
+	MountViewPartitions "${Disks[@]}"
+	# MountViewPartitions Disks
+
+
+
+	elif [[ $fat32_efi_part_count -eq 0 ]]
+	then
+		dialog --msgbox "no boot partition detected" 0 0
+		# DiskPartListInfo=()
+		PartitionDisk
+
+
+	elif [[ $linux_fs_ext4_part_count -eq 0 ]]
+	then
+		dialog --msgbox "no linux root system partition detected" 0 0
+		# DiskPartListInfo=()
+		PartitionDisk
+
+
+	elif [[ $swap_part_count -eq 0 ]]
+	then
+		dialog --yesno "no swap partition detected. Recommended to have one. continue without a swap partition?" 0 0
+		SWAP_DIALOG_EXIT_CODE=$?
+		# echo $SWAP_DIALOG_EXIT_CODE
+		if [[ $SWAP_DIALOG_EXIT_CODE -eq 1 ]]
+		then
+			PartitionDisk
+			# # MountViewPartitions
+			# MountViewPartitions "${Disks[@]}"
+			MountViewPartitions Disks
+		elif [[ $SWAP_DIALOG_EXIT_CODE -eq 0 ]]
+		then
+			# ConfirmMounts "${SelectedPartitionsMountedText[@]}"
+			ConfirmMounts SelectedPartitionsMountedText
+			# echo "ConfirmMounts \"${SelectedPartitionsMountedText[@]}\""
+			# MountPartitions "${SelectedPartitionsMountedText[@]}" "${MountPoints[@]}" "${MountBlockDev[@]}"
+			MountPartitions SelectedPartitionsMountedText MountPoints MountBlockDev
+			# echo "MountPartitions SelectedPartitionsMountedText MountPoints MountBlockDev"
+		fi
+		# DiskPartListInfo=()
+
+	elif [[ $home_part_count -eq 0 ]]
+	then
+		dialog --yesno "no home partition detected. continue without home partition?" 0 0
+
+	elif [[ $linux_fs_ext4_part_count -eq 0 ]] && [[ $fat32_efi_part_count -eq 0 ]]
+	then
+		dialog --msgbox "no boot and system partitions detected. system cannot be installed." 0 0
+		# # MountViewPartitions
+		# MountViewPartitions "${Disks[@]}"
+		# MountViewPartitions Disks
+		# DiskPartListInfo=()
+		PartitionDisk
+
+	elif [[ $home_part_count -eq 0 ]] && [[ $swap_part_count -eq 0 ]]
+	then
+		# 1 - no
+		# 0 - yes
+		dialog --msgbox "no boot and system partitions detected. system cannot be installed. Please Select Disks for linux installation from the Disk Menu" 0 0
+		PartitionDisk
+	fi
+}
+
+
+
+
+
+
+
+
+InstallArch(){
+
+	if ! mountpoint /mnt &>/dev/null
+	then
+		dialog --msgbox "root partition not mounted" 0 0
+		MainMenu "Install Arch *"
+	else
+
+		# nvidia linux nvlink/capabilities/fabric-mgmt 0
+		packages="base base-devel devel linu{x,x-{docs,headers}} grub efi{var,bootmgr} dkms broadcom-dkms-wl-dkms xf86-input-{libinput,synaptics} xf86-video-fbdev"
+
+		cpu_vendor=$(cat /proc/cpuinfo | grep vendor | uniq | awk '{print $3}')
+
+		amd_gpu="xf86-video-{amdgpu,ati} lib32-{amdvlk,opencl-mesa} opencl-mesa amdvlk"
+
+		intel_gpu="xf86-video-intel libva-intel-driver lib32-{libva-intel-driver,vulkan-intel} vulkan-intel intel-graphics-compiler"
+
+		nvidia_gpu="ffnvcodec-headers libvdpau opencl-nvidia xf86-video-nouveau lib32-{libvdpau,nvidia-utils,opencl-nvidia} nvidia-{dkms,lts,prime,settings,utils}"
+
+
+		# dialog --checklist "terminal text editors"
+		if [[ $cpu_vendor == "AuthenticAMD" ]]
+		then
+			packages="$packages amd-ucode"
+		elif [[ $cpu_vendor == "GenuineIntel" ]]
+		then
+			packages="$packages intel-ucode tbb intel-undervolt throttled"
+		fi
+		terminaleditorslist=("vim" "vim" off)
+		terminaleditorslist+=("neovim" "neovim" off)
+		terminaleditorslist+=("emacs" "emacs" off)
+		terminaleditorslist+=("joe" "joe" off)
+		terminaleditorslist+=("nedit" "nedit" off)
+		terminaleditorslist+=("kakoune" "kakoune" off)
+		terminaleditorslist+=("zile" "zile" off)
+		terminaleditorslist+=("mg" "mg micro emacs" off)
+
+		editors=($(dialog --extra-button --extra-label "Cancel" --cancel-label "Back" --no-tags --title "text editor selection Menu" --checklist "nano and vi will be installed by default" 0 0 0 "${terminaleditorslist[@]}" 3>&1 1>&2 2>&3))
+
+		EDITORS_EXIT_CODE=$?
+		if [[ $EDITORS_EXIT_CODE -eq 0 ]]
+		then
+			# editors="${editors[@]}"
+			if [[ $editors == "" ]]
+			then
+				packages="${packages}"
+			else
+				packages="${packages} ${editors[@]}"
+			fi
+		fi
+
+		if [[ $EDITORS_EXIT_CODE -eq 3 ]]
+		then
+			packages="${packages}"
+			# break
+		fi
+
+		if [[ $EDITORS_EXIT_CODE -eq 1 ]]
+		then
+			MainMenu "Install Arch *"
+		fi
+
+		dialog --msgbox "packages that will be installed:\n${packages}" 0 0
+
+		: '
+		pacstrap /mnt "$packages" | GuageMeter "Installing arch linux packages" 1
+		# pacstrap /mnt "$packages"
+		if [[ ${PIPESTATUS[0]} -eq 0 ]]
+		then
+			genfstab "/mnt/" > "/mnt/etc/fstab"
+		else
+			dialog --msgbox "failed to install packages via pacstrap"
+		fi
+		'
+		echo ""
+		ARCH_INSTALL_EXIT_CODE=$?
+		if [[ $ARCH_INSTALL_EXIT_CODE -eq 0 ]]
+		then
+			dialog --msgbox "Created fstab entry. you can generate the fstab of your disk by \"executing genfstab -U {arch-chroot directory} > {arch-chroot directory}/etc/fstab\" (i.e. if anythin went wrong with the fstab entry)" 0 0
+			bootloaderid="$(dialog --inputbox "Bootloader ID - Input Any Text" 0 0)"
+			# grub-install -v --boot-directory="/mnt/boot" --bootloader-id "$bootloaderid" --efi-directory="/mnt/boot" --recheck --removable --target x86_efi-efi
+			echo "grub-install -v --boot-directory=\"/mnt/boot\" --bootloader-id \"$bootloaderid\" --efi-directory=\"/mnt/boot\" --recheck --removable --target x86_efi-efi"
+			if [[ $? -eq 0 ]]
+			then
+				MainMenu "Install Arch *"
+			else
+				dialog --msgbox "could not install grub-bootloader. you execute \'grub-install --help | less\' on one tty and run \'grub-install <options>\' on another tty. \n\nDO NOT USE THE \'--force\' option.You can open tty's by pressing ctrl+alt+<F1>-<F6> with each function key corresponding to their tty id\n\n Go back to the Main Menu or exit to the tty?"
+			fi
+		elif [[ $ARCH_INSTALL_EXIT_CODE -eq 1 ]]
+		then
+			dialog --msgbox "could not install Arch." 0 0
+		fi
+	fi
+}
 
 
 
@@ -1296,13 +1554,14 @@ MainMenu(){
 	# $1 - menu option item
 
 	clear
+    # check if dialog is installed
 	ls /usr/bin/dialog &>/dev/null
-	# which dialog &>/dev/null
+
 	if [[ $? -eq 1 ]]
 	then
 		echo -e "dialog not installed.\n"
 		read -s -n1 -p "press any key to install the git provided dialog package "
-		pacman -Uvd --noconfirm $(ls dialog*)
+		pacman -Uvd --noconfirm "$(ls dialog*)"
 		if [[ $? -eq 1 ]]
 		then
 			echo -e "\n\ndialog could not be installed.\n\nPlease install provided dialog packages by typing \"pacman -Uvd <package name>\" with or without the \"--noconfirm\" argument.\n\ncurrent directory:\n$(pwd)\n\npackages in this directory:\n$(ls *.pkg*).\n\n\nexiting...\n\n"
@@ -1320,7 +1579,6 @@ MainMenu(){
 
 	menuitem=$(dialog --default-item "${1}" --backtitle "Written by c2700" --cancel-label "Exit" --title "Install Menu" --menu "To install arch all options followed by\n  i) '**' are priority 1\n ii) '*'are priority 2\niii) '+'are priority 3\n\nThe rest are optional" 0 0 0 "${menuopt[@]}" 3>&1 1>&2 2>&3)
 
-    # check if dialog is installed
 
 	if [[ $? -eq 1 ]]
 	then
@@ -1342,87 +1600,7 @@ MainMenu(){
 			;;
 
 		"Install Arch *")
-
-            # make another condition that ensures something is mounted in the /mnt dir. this one seems senseless now that I read it
-
-			archchrootdir='/mnt'
-			# if [[ -z $archchrootdir ]]
-			if ! mountpoint /mnt
-			then
-				dialog --msgbox "root partition not mounted" 0 0
-				MainMenu "Install Arch *"
-			else
-
-				# nvidia linux nvlink/capabilities/fabric-mgmt 0
-
-				packages="base base-devel devel linu{x,x-{docs,headers}} grub efi{var,bootmgr} dkms broadcom-dkms-wl-dkms xf86-input-{libinput,synaptics} xf86-video-fbdev"
-
-				cpu_vendor=$(cat /proc/cpuinfo | grep vendor | uniq | awk '{print $3}')
-
-				amd_gpu="xf86-video-{amdgpu,ati} lib32-{amdvlk,opencl-mesa} opencl-mesa amdvlk"
-
-				intel_gpu="xf86-video-intel libva-intel-driver lib32-{libva-intel-driver,vulkan-intel} vulkan-intel intel-graphics-compiler"
-
-				nvidia_gpu="ffnvcodec-headers libvdpau opencl-nvidia xf86-video-nouveau lib32-{libvdpau,nvidia-utils,opencl-nvidia} nvidia-{dkms,lts,prime,settings,utils}"
-
-
-				# dialog --checklist "terminal text editors"
-				if [[ $cpu_vendor == "AuthenticAMD" ]]
-				then
-					packages="$packages amd-ucode"
-				elif [[ $cpu_vendor == "GenuineIntel" ]]
-				then
-					packages="$packages intel-ucode tbb intel-undervolt throttled"
-				fi
-				terminaleditorslist=("vim" "vim" off)
-				terminaleditorslist+=("neovim" "neovim" off)
-				terminaleditorslist+=("emacs" "emacs" off)
-				terminaleditorslist+=("joe" "joe" off)
-				terminaleditorslist+=("nedit" "nedit" off)
-				terminaleditorslist+=("kakoune" "kakoune" off)
-				terminaleditorslist+=("zile" "zile" off)
-				terminaleditorslist+=("mg" "mg micro emacs" off)
-
-				editors=($(dialog --extra-button --extra-label "Cancel" --cancel-label "Back" --no-tags --title "text editor selection Menu" --checklist "nano and vi will be installed by default" 0 0 0 "${terminaleditorslist[@]}" 3>&1 1>&2 2>&3))
-
-				EDITORS_EXIT_CODE=$?
-				if [[ $EDITORS_EXIT_CODE -eq 0 ]]
-				then
-					# editors="${editors[@]}"
-					if [[ $editors == "" ]]
-					then
-						packages="${packages}"
-					else
-						packages="${packages} ${editors[@]}"
-					fi
-				fi
-
-				if [[ $EDITORS_EXIT_CODE -eq 3 ]]
-				then
-					packages="${packages}"
-					# break
-				fi
-
-				if [[ $EDITORS_EXIT_CODE -eq 1 ]]
-				then
-					MainMenu "Install Arch *"
-				fi
-
-				dialog --msgbox "packages that will be installed:\n${packages}" 0 0
-
-				: '
-				pacstrap /mnt "$packages" | GuageMeter "Installing arch linux packages" 1
-				# pacstrap /mnt "$packages"
-				if [[ ${PIPESTATUS[0]} -eq 0 ]]
-				then
-					genfstab "/mnt/" > "/mnt/etc/fstab"
-				else
-					dialog --msgbox "failed to install packages via pacstrap"
-				fi
-				'
-				dialog --msgbox "Created fstab entry. you can generate the fstab of your disk by \"executing genfstab -U {arch-chroot directory} > {arch-chroot directory}/etc/fstab\" (i.e. if anythin went wrong with the fstab entry)" 0 0
-				MainMenu "Install Arch *"
-			fi
+				InstallArch
 			;;
 
 
@@ -1432,7 +1610,7 @@ MainMenu(){
 			mountpoint /mnt
 			if [[ $? -eq 1 ]]
 			then
-				# dialog --msgbox "cannot chroot" 0 0
+				# dialog --msgbox "could not chroot int /mnt" 0 0
 				dialog --msgbox "no root partition set" 0 0
 			else
 			'
@@ -1451,7 +1629,7 @@ MainMenu(){
 				if [[ $? -eq 1 ]]
 				then
 					dialog --msgbox "saved basic customization instructions" 0 0
-					# echo -e "change hostname - vim /etc/hostname\ncreate users - useradd -m\n<username> -G power,storage,wheel -g users\nset or change user password - passwd <username>\nset or change user password - passwd\nset locale - vim /etc/locale.gen, comment '#' to ignore and uncomment to generate or use the locale\n\n(DE - Desktop Environment, WM - Window Manager) to install a DE - install a minimal DE package or the group using the '-g' argument in pacman and a lockscreen manager. enable the lockscreen manager using the systemctl tool and write the DE session name in the /home/<user name>/.xinitrc file\n to install a WM - install a WM and the lockscreen manager will pick it up (if enabled)\nset timezone - soft link (ln -sf) /usr/share/zoneinfo/<continent>/<region> /etc/localtime execute hwclock -w -v (-v is optional if you prefer verbosity)" > /mnt/home/customize.txt
+					# echo -e "change hostname - vim /etc/hostname\ncreate users - useradd -m\n<username> -G power,storage,wheel -g users\nset or change user password - passwd <username>\nset or change user password - passwd\nset locale - vim /etc/locale.gen, comment '#' to ignore and uncomment to generate or use the locale\n\n(DE - Desktop Environment, WM - Window Manager) to install a DE - install a minimal DE package or the group using the '-g' argument in pacman and a lockscreen manager. enable the lockscreen manager using the systemctl tool and write the DE session name in the /home/<user name>/.xinitrc file\n to install a WM - install a WM and the lockscreen manager will pick it up (if enabled)\nset timezone - soft link (ln -sf) /usr/share/zoneinfo/<continent>/<region> /etc/localtime execute hwclock -w -v (-v is optional if you prefer verbosity (basically more details of what's going on ))" > /mnt/home/customize.txt
 				fi
 			fi
 			# reboot now -f
