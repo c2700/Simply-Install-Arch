@@ -9,6 +9,8 @@
 
 # 3>&1 1>&2 2>&3
 
+RecursiveCallCount=0
+
 GuageMeter(){
 	# $1 - guagebox text
 	# $2 - number
@@ -697,12 +699,21 @@ ConfirmMounts(){
 	Temptexts=$1[@]
 	texts=("${!Temptexts}")
 	unset Temptexts
-	echo -e "${texts[@]}"
-	read -p "nice: " -n1 
+	# echo -e "${texts[@]}"
+	# read -p "nice: " -n1 
+
 	# 0 - ok
 	# 1 - back
 	dialog --yes-label "OK" --no-label "Back" --title "partition mount confirmation" --yesno "\nPartition-----Size-----------Filesystem----------Format----MountPoint\n${texts[*]}" 20 75
-	return $?
+	CONFIRM_MOUNTS_EXIT_CODE=$?
+	if [[ $CONFIRM_MOUNTS_EXIT_CODE -eq 0 ]]
+	then
+		# MountPartitions "" "" ""
+		echo -e "MountPartitions \"\" \"\" \"\""
+	elif [[ $CONFIRM_MOUNTS_EXIT_CODE -eq 1 ]]
+	then
+		PartitionDisk
+	fi
 }
 
 
@@ -724,7 +735,6 @@ MountPartitions(){
 	# echo "${SelectedPartitionsMounted[@]}"
 	# exit
 
-	# ConfirmMounts "${SelectedPartitionsMounted[@]}"
 	ConfirmMounts SelectedPartitionsMounted
 
 	MOUNTS_EXIT_CODE=$?
@@ -846,27 +856,30 @@ DiskPartInfoTemp(){
 
 
 EditDisk(){
-	disks=$1[@]
-	diskeditors=("gdisk" "gdisk")
-	diskeditors+=("cgdisk" "cgdisk")
-	diskeditors+=("fdisk" "fdisk")
-	diskeditors+=("sfdisk" "sfdisk")
-	diskeditors+=("cfdisk" "cfdisk")
-	diskeditors+=("parted" "parted (not beginner friendly)")
+	disksArgs=$1[@]
+	disks=("${!disksArgs}")
+	unset DisksArgs
+
+	diskeditors=()
+
+	for i in "gdisk" "cgdisk" "fdisk" "sfdisk" "cfdisk" "parted"
+	do
+		diskeditors+=("$i" "$i")
+	done
 	DiskEditor=$(dialog --no-tags --cancel-label "Back" --menu "Disk Editor Menu" 0 0 0 "${diskeditors[@]}" 3>&1 1>&2 2>&3)
 	DISKEDITOR_EXIT_CODE=$?
-	reset;clear
+	unset diskeditors
 	if [[ $DISKEDITOR_EXIT_CODE -eq 1 ]]
 	then
 		PartitionDisk
 	elif [[ $DISKEDITOR_EXIT_CODE -eq 0 ]]
 	then
-		for (( i = 0; i < ${#Disks[@]}; i++ ))
+		for (( i = 0; i < ${#disks[@]}; i++ ))
 		do
-			echo -e "$DiskEditor '/dev/${Disks[$i]}'"
-			# $DiskEditor "/dev/${Disks[$i]}"
+			clear;reset
+			echo -e "Editing Disk '/dev/${disks[$i]}' with $DiskEditor\n\n\n"
+			"$DiskEditor" "/dev/${Disks[$i]}"
 		done
-		MountViewPartitions
 	fi
 }
 
@@ -888,7 +901,7 @@ PartitionDisk(){
 		if [[ "$i" =~ ^[5]$ ]] && [[ "$DiskModelString" == "" ]]
 		then
 			continue
-		elif [[ "$i" =~ ^[5]$ ]] && [[ ! (-z "$DiskModelString") ]]
+		elif [[ "$i" =~ ^[5]$ ]] && [[ ! -z "$DiskModelString" ]]
 		then
 			DiskModel+=("$DiskModelString")
 			DiskModelString=""
@@ -897,10 +910,14 @@ PartitionDisk(){
 			DiskModelString+="$i"
 		fi
 
-		if [[ "$i" == "${DiskModelTemp[-1]}" ]] && [[ ! "$i" =~ ^[5]$ ]] && [[ "$i" =~ ^[a-zA-Z0-9]* ]]
+		if [[ "$i" == "${DiskModelTemp[-1]}" ]] && [[ ! "$i" =~ ^[5]$ ]] && [[ "$i" =~ ^[a-zA-Z0-9]* ]] && [[ -z "$DiskModelString" ]]
+		then
+			continue
+		elif [[ "$i" == "${DiskModelTemp[-1]}" ]] && [[ ! "$i" =~ ^[5]$ ]] && [[ "$i" =~ ^[a-zA-Z0-9]* ]] && [[ ! -z "$DiskModelString" ]]
 		then
 			DiskModel+=("$DiskModelString")
 		fi
+
 	done
 
 	for (( i = 0; i < ${#DiskModel[@]}; i++ ))
@@ -929,12 +946,12 @@ PartitionDisk(){
 	Disks=($(dialog --scrollbar --cancel-label "Back" --column-separator "|" --title "Disk Selection Menu" --checklist "" 0 0 0 "${DiskListInfo[@]}" 3>&1 1>&2 2>&3))
 	if [[ $? -eq 0 ]]
 	then
-		if [[ -z ${Disks[*]} ]]
+		if [[ -z "${Disks[@]}" ]]
 		then
 			dialog --msgbox "please select atleast one disk" 0 0
 			PartitionDisk
 		else
-			dialog --extra-button --extra-label "Mount" --ok-label "Back" --cancel-label "Edit" --yesno "Select \"Edit\" for Editting and then mounting the partitions of this disk or select \"Mount\" to only select and mount existing ext4/efi/fat32/swap partitions" 0 0
+			dialog --extra-button --extra-label "Mount" --ok-label "Back" --cancel-label "Edit" --yesno "Select \"Edit\" for Editting and then mounting the partitions of this disk or select \"Mount\" to only select, format and mount existing Linux filesystem/EFI/swap partitions" 0 0
 			PART_MSG_BOX_EXIT_CODE=$?
 			# 0 - back
 			# 1 - edit
@@ -952,8 +969,7 @@ PartitionDisk(){
 
 				if [[ $CONTINUE_EXIT_CODE -eq 0 ]]
 				then
-					echo "EditDisk"
-					# EditDisk "${Disks[@]}"
+					EditDisk Disks
 				elif [[ $CONTINUE_EXIT_CODE -eq 1 ]]
 				then
 					PartitionDisk
@@ -972,15 +988,16 @@ PartitionDisk(){
 }
 
 
-CheckEmptyDisks(){
+CheckEmptyDisks(){		
 	DisksArgs=$1[@]
 	Disks=("${!DisksArgs}")
 	unset DisksArgs
 
 	NoPartDisksTemp=()
+	DisksTemp=()
+
 	NoPartDisks=()
 	DiskPartCheck=()
-	DisksTemp=()
 
 	disk=""
 	have=""
@@ -1047,7 +1064,19 @@ CheckEmptyDisks(){
 	elif [[ $EMPTY_DISK_EXIT_CODE -eq 3 ]]
 	then
 		unset NoPartDisksTemp
-		EditDisk
+
+		dialog --extra-button --extra-label "Edit incompatible Disks" --ok-label "Back" --cancel-label "Edit All Disks" --yesno "Edit disks that are incompatible for linux installation, edit all the disks or go back to the Disk Selection Menu?" 0 0
+		EDIT_DISK_EXIT_CODE=$?
+		if [[ $EDIT_DISK_EXIT_CODE -eq 3 ]]
+		then
+			EditDisk NoPartDisks
+		elif [[ $EDIT_DISK_EXIT_CODE -eq 1 ]]
+		then
+			EditDisk Disks
+		elif [[ $EDIT_DISK_EXIT_CODE -eq 0 ]]
+		then
+			PartitionDisk
+		fi
 	fi
 }
 
@@ -1099,10 +1128,8 @@ MountViewPartitions(){
 	home_part_count=0
 	swap_part_count=0
 
-	#statements
-	# $1 - ${Disks[@]}
-	# CheckEmptyDisks "$1[@]"
 	CheckEmptyDisks Disks
+
 	Disks=($(IFS="";sort <<<${Disks[@]}))
 
 	# for a in "${Disks[@]}"
@@ -1121,9 +1148,6 @@ MountViewPartitions(){
 	    DiskPartSizeTemp=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $2 }'))
 	    DiskPartFsTypeTemp=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $3" "$4" 1" }'))
 		DiskPartLabelTemp=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ for(i=5;i<=NF;i++){ if (i == 5){ print i" "$i } else if(i > 5){ print $i } } }'))
-		# DiskPartLabelTemp=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ for(i=5;i<=NF;++i) if(i == 5){ print i" "$i } else {print $i} }'))
-		# DiskPartLabelTemp=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ for(i=5;i<=NF;i++){ print i" "$i } }'))
-
 		if [[ -z ${DiskPartSizeTemp[*]} ]] && [[ -z ${DiskPartFsTypeTemp[*]} ]] && [[ -z ${DiskPartLabelTemp[*]} ]] && [[ -z ${DiskPartName[*]} ]]
 	    then
 	        continue
@@ -1260,6 +1284,8 @@ MountViewPartitions(){
 	done
 	# exit
 
+	echo 
+
 	# total_parts=${#fat32_efi_parts[@]}+${#linux_fs_ext4_parts[@]}+${#swap_parts[@]}+${#home_parts[@]}
 	total_parts=$(($fat32_efi_part_count+$linux_fs_ext4_part_count+$swap_part_count+$home_part_count))
 
@@ -1270,8 +1296,6 @@ MountViewPartitions(){
 		PART_EXIT_CODE=$?
 		if [[ $PART_EXIT_CODE -eq 0 ]]
 		then
-			# echo "ConfirmMounts \"${SelectedPartitionsMountedText[@]}\""
-			# ConfirmMounts "${SelectedPartitionsMountedText[@]}"
 			ConfirmMounts SelectedPartitionsMountedText
 			MOUNTS_EXIT_CODE=$?
 			if [[ $MOUNTS_EXIT_CODE -eq 1 ]]
@@ -1285,10 +1309,10 @@ MountViewPartitions(){
 			fi
 		elif [[ $PART_EXIT_CODE -eq 1 ]]
 		then
-			MountViewPartitions "${Disks[@]}"
+			# MountViewPartitions "${Disks[@]}"
 			# PartitionDisk
 			# # MountViewPartitions
-			# MountViewPartitions Disks
+			MountViewPartitions Disks
 
 		fi
 		# DiskPartListInfo=()
@@ -1299,25 +1323,26 @@ MountViewPartitions(){
 	then
 		dialog --msgbox "multiple essential linux partitions detected (boot and ext4). please select one partition for each filesystem" 0 0
 		# PartitionDisk
-		MountViewPartitions "${Disks[@]}"
-
+		# MountViewPartitions "${Disks[@]}"
+		MountViewPartitions Disks
 
 	elif [[ $fat32_efi_part_count -gt 1 ]]
 	then
 		dialog --msgbox "multiple boot partitions detected. please select one" 0 0
 		# PartitionDisk
-		MountViewPartitions "${Disks[@]}"
-
+		# MountViewPartitions "${Disks[@]}"
+		MountViewPartitions Disks
 
 	elif [[ $linux_fs_ext4_part_count -gt 1 ]]
 	then
 		dialog --msgbox "multiple linux filesystems detected. please select one" 0 0
 		# PartitionDisk
-		MountViewPartitions "${Disks[@]}"
+		# MountViewPartitions "${Disks[@]}"
+		MountViewPartitions Disks
 
 	elif [[ -z ${DiskPartName[@]} ]]
 	then
-			dialog --yes-label "Edit Disk" --no-label "Select Disk" --yesno "Disk does not contain any partitions. Edit The Disk?" 0 0
+		dialog --yes-label "Edit Disk" --no-label "Select Disk" --yesno "Disk does not contain any partitions. Edit The Disk?" 0 0
 		EMPTY_DISK_EXIT_CODE=$?
 		if [[ $EMPTY_DISK_EXIT_CODE -eq 0 ]]
 		then
@@ -1345,8 +1370,8 @@ MountViewPartitions(){
 		dialog --msgbox "no partitions selected. please select an EFI and a linux filesystem partition (mandatory). Select a few optional partitions as well (if needed or wanted but not necessary)" 0 0
 	# PartitionDisk
 	# # MountViewPartitions
-	MountViewPartitions "${Disks[@]}"
-	# MountViewPartitions Disks
+	# MountViewPartitions "${Disks[@]}"
+	MountViewPartitions Disks
 
 
 
@@ -1377,18 +1402,23 @@ MountViewPartitions(){
 			MountViewPartitions Disks
 		elif [[ $SWAP_DIALOG_EXIT_CODE -eq 0 ]]
 		then
-			# ConfirmMounts "${SelectedPartitionsMountedText[@]}"
 			ConfirmMounts SelectedPartitionsMountedText
-			# echo "ConfirmMounts \"${SelectedPartitionsMountedText[@]}\""
-			# MountPartitions "${SelectedPartitionsMountedText[@]}" "${MountPoints[@]}" "${MountBlockDev[@]}"
 			MountPartitions SelectedPartitionsMountedText MountPoints MountBlockDev
-			# echo "MountPartitions SelectedPartitionsMountedText MountPoints MountBlockDev"
 		fi
 		# DiskPartListInfo=()
 
 	elif [[ $home_part_count -eq 0 ]]
 	then
 		dialog --yesno "no home partition detected. continue without home partition?" 0 0
+		HOME_PART_EXIT_CODE=$?
+		if [[ $HOME_PART_EXIT_CODE -eq 0 ]]
+		then
+			# ConfirmMounts SelectedPartitionsTemp
+			ConfirmMounts SelectedPartitionsMountedText
+		elif [[ $HOME_PART_EXIT_CODE -eq 1 ]]
+		then
+			PartitionDisk
+		fi
 
 	elif [[ $linux_fs_ext4_part_count -eq 0 ]] && [[ $fat32_efi_part_count -eq 0 ]]
 	then
