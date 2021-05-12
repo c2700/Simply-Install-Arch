@@ -32,7 +32,7 @@ GuageMeter(){
 
 # Network Mgmnt
 
-iw_rechonnect(){
+iw_reconnect(){
 	# $1 - $?
 	# $2 - $wireless_dev
 	# $3 - $SSID
@@ -93,10 +93,10 @@ iwd_mngr(){
 	then
 		# read -p "$SSID password: " pass
 		iwctl --passphrase $pass station $wireless_dev connect $SSID
-		iw_rechonnect $? $wireless_dev $SSID "$(read -p "$SSID password: ")"
+		iw_reconnect $? $wireless_dev $SSID "$(read -p "$SSID password: ")"
 	else
 		iwctl station $wireless_dev connect $SSID
-		iw_rechonnect $? $wireless_dev $SSID
+		iw_reconnect $? $wireless_dev $SSID
 	fi
 }
 
@@ -132,7 +132,6 @@ nm_mngr(){
 
 
 ConfNet(){
-	# pacman -Syvd --noconfirm --needed
 	# ping -c4 google.com | GuageMeter "Checking for network availablity" 25
 	ping -c4 google.com &>/dev/null | GuageMeter "Checking for network availablity" 1
 	if [[ ${PIPESTATUS[0]} -eq 0 ]]
@@ -143,29 +142,15 @@ ConfNet(){
 		dialog --title "Network Status" --msgbox "network not available. will search for availble network managers" 0 0
 	fi
 
-	NMList=()
-	: '
-	for i in "wifi-menu" "networkmanager" "iwd"
-	do
-		pacman -Qqs ^"$i"$ &>/dev/null | GuageMeter "Checking if ${i} is available" 20
-		if [[ $? -eq 0 ]]
-		then
-		# if [[ ${PIPESTATUS[0]} -eq 0 ]]
-		then
-			NMList+=("$i")
-			NMList+=("")
-			# NM="$i"
-		else
-			continue
-		fi
-	done
-	'
+
 	ls /bin/wifi-menu &>/dev/null
+	
 	if [[ $? -eq 0 ]]
 	then
 		NMList+=("wifi-menu")
 		NMList+=("")
 	fi
+
 	ls /usr/lib/systemd/system/NetworkManager* &>/dev/null
 	if [[ $? -eq 0 ]]
 	then
@@ -224,11 +209,11 @@ Install_UI(){
 	# Install_UI
 	# ConfHost
 	# $1 - options in this function's menu
-	# $2=""
 
 	pkgs=""
-
+	wmopts=()
 	ui_opts=()
+
 	ui_opts+=("Window Manager")
 	ui_opts+=("Just windows and statusbars (minimal).No Graphics composition like on Gnome")
 	ui_opts+=("Desktop Environment")
@@ -240,7 +225,6 @@ Install_UI(){
 		ConfHost "Install UI"
 	fi
 
-	wmopts=()
 	wmopts+=("i3" "")
 	wmopts+=("bspwm" "")
 	wmopts+=("awesome" "")
@@ -315,7 +299,7 @@ Install_UI(){
 			;;
 	esac
 	dialog --msgbox "$pkgs" 0 0
-	# pacstrap $2 $pkgs
+	# pacstrap /mnt $pkgs
 	ConfHost "Install UI"
 }
 
@@ -380,7 +364,12 @@ SetTz(){
 			then
 			'
 				dialog --msgbox "timezone is set ${zone}" 0 0
-			# fi
+			: '
+			elif [[ ${PIPESTATUS[0]} -eq 0 ]]
+			then
+				dialog --msgbox "timezone could not be set ${zone}" 0 0
+			fi
+			'
 		fi
 	fi
 }
@@ -391,9 +380,8 @@ SetTz(){
 SetLocale(){
 
 	# user set locale
-	# $1 - arch-root dir
+
 	LOCALE=()
-	# cat "${1}/etc/locale.gen" | grep -i '#\w' | sed 's/#//' > locales.txt
 	# cat "/mnt/etc/locale.gen" | grep -i '#\w' | sed 's/#//' > locales.txt
 	cat "/etc/locale.gen" | grep -i '#\w' | sed 's/#//' > locales.txt
 	# cat "/mnt/etc/locale.gen" | grep -i '#\w' | sed 's/#//' > locales.txt
@@ -642,6 +630,7 @@ ConfHost(){
 	# 	MainMenu "Configure Host +"
 	# fi
 	# HostOpt=()
+
 	HostOpt=("set hostname *" "set your computer name")
 	HostOpt+=("set Locale *" "set your computer language")
 	HostOpt+=("set timezone" "configure which timezone you are in")
@@ -699,8 +688,8 @@ ConfirmMounts(){
 	Temptexts=$1[@]
 	texts=("${!Temptexts}")
 	unset Temptexts
-	# echo -e "${texts[@]}"
-	# read -p "nice: " -n1 
+	echo -e "${texts[@]}"
+	read -p "nice: " -n1 
 
 	# 0 - ok
 	# 1 - back
@@ -724,16 +713,15 @@ MountPartitions(){
 	# $2 - mountpt.s
 	# $3 - 
 
-	SelectedPartitionsMounted=$1[@]
-	SelectedPartitionsMounted=("${!SelectedPartitionsMounted}")
-	MntPts=$2[@]
-	MntPts=("${!MntPts}")
-	MntBlkDev=$3[@]
-	MntBlkDev=("${!MntBlkDev}")
+	MountSelectedPartitions=$1[@]
+	MountSelectedPartitions=("${!SelectedPartitionsMounted}")
+	MountPtoins=$2[@]
+	MountPtoins=("${!MntPts}")
+	MountBlkDev=$3[@]
+	MountBlkDev=("${!MntBlkDev}")
 
-	# clear
-	# echo "${SelectedPartitionsMounted[@]}"
-	# exit
+	echo "${SelectedPartitionsMounted[@]}"
+	read -p "nice" -n1
 
 	ConfirmMounts SelectedPartitionsMounted
 
@@ -832,15 +820,6 @@ DiskListTemp(){
 
 
 
-# DiskPartInfoTemp(){
-# 	if [[ -z $1 ]]
-# 	then
-# 		lsblk -nlo name,size,fstype,fsver,parttypename /dev/"$1" | grep -i '[a,s]d[a-z][0-9]' | grep -i 'linux filesystem\|ext4\|fat32\|vfat\|efi\|swap' | sed 's/1.0\s{3}//g;s/vfat   FAT32 EFI System/FAT32  EFI System/g;s/swap\s{3}1\s{5}Linux swap/swap   Linux swap/g'
-# 	else
-# 	    lsblk -nlo name,size,fstype,fsver,parttypename | grep -i '[a,s]d[a-z][0-9]' | grep -i 'linux filesystem\|ext4\|fat32\|vfat\|efi\|swap' | sed -E 's/1.0\s{3}//g;s/vfat\s{3}FAT32 EFI System/FAT32  EFI System/g;s/swap\s{3}1\s{5}Linux swap/swap   Linux swap/g'
-# 	fi
-# 	echo -e "\n"
-# }
 
 DiskPartInfoTemp(){
 
@@ -882,6 +861,87 @@ EditDisk(){
 		done
 	fi
 }
+
+
+CheckPartTable(){
+	# $1 - ${#DiskListInfo[@]}
+	# $2 - ${Disks[@]}
+
+	local DiskNamesArgs=$1[@]
+	DiskNames=("${!DiskNamesArgs}")
+	unset DiskNamesArgs
+
+	local DiskPartTablesArgs=$2[@]
+	DiskPartTables=("${!DiskPartTablesArgs}")
+	unset DiskPartTablesArgs
+
+	local disk=""
+
+	local NoneDisks=()
+	
+	# for i in "${DiskPartTables[@]}"
+	for (( i = 0; i < ${#DiskPartTables[@]}; i++ ))
+	do
+		if [[ "${DiskPartTables[$i]}" == "none" ]]
+		then
+			NoneDisks+=("${DiskNames[$i]}")
+		fi
+	done
+
+
+	if [[ ! -z "${NoneDisks[@]}" ]]
+	then
+		NoneDisksTemp=("${NoneDisks[@]}")
+		if [[ ${#NoneDisks[@]} -eq 1 ]]
+		then
+			disk="disk"
+		elif [[ ${#NoneDisks[@]} -gt 1 ]]
+		then
+			disk="disks"
+			temp="${NoneDisks[-1]}"
+			NoneDisksTemp[-1]="&"
+			NoneDisksTemp+=("$temp")
+		fi
+		dialog --yes-label "Set Table" --no-label "Discard Disk" --yesno "$disk ${NoneDisksTemp[*]} does not contain a partition table. Set a Partiton Table or Discard the disks?" 0 0
+		EMPTY_PART_TABLE_EXIT_CODE=$?
+		unset NoneDisksTemp
+		if [[ $EMPTY_PART_TABLE_EXIT_CODE -eq 0 ]]
+		then
+			PartTableTemp=()
+			PartTableTemp+=("GPT" "Supports Storage greater than 2TB, 128 primary partitions")
+			PartTableTemp+=("MBR" "Supports a max of 2TB Storage, 4 primary partitions")
+			PartTable=$(dialog --cancel-label "Back" --menu "Partition Table Menu" 0 0 0 "${PartTableTemp[@]}" 3>&1 1>&2 2>&3)
+			PART_TABLE_SET_EXIT_CODE=$?
+			unset PartTableTemp
+			if [[ $PART_TABLE_SET_EXIT_CODE -eq 0 ]]
+			then
+				EditDisk NoneDisks
+			elif [[ $PART_TABLE_SET_EXIT_CODE -eq 1 ]]
+			then
+				PartitionDisk
+			fi
+			unset PartTable
+		elif [[ $EMPTY_PART_TABLE_EXIT_CODE -eq 1 ]]
+		then
+			for i in "${NoneDisks[@]}"
+			do
+				DisksSize=${#Disks[@]}
+				for (( j = 0; j < $DisksSize; j++ ))
+				do
+					if [[ "$i" == "${Disks[$j]}" ]]
+					then
+						unset Disks[$j]
+					fi
+				done
+			done
+			dialog --msgbox "Discarded $disk ${NoneDisks[*]}" 0 0
+			unset NoneDisks
+		fi
+	else
+		unset NoneDisks
+	fi
+}
+
 
 PartitionDisk(){
 	# 3>&1 1>&2 2>&3
@@ -950,7 +1010,8 @@ PartitionDisk(){
 		then
 			dialog --msgbox "please select atleast one disk" 0 0
 			PartitionDisk
-		else
+		elif [[ ! -z "${Disks[@]}" ]]
+		then
 			dialog --extra-button --extra-label "Mount" --ok-label "Back" --cancel-label "Edit" --yesno "Select \"Edit\" for Editting and then mounting the partitions of this disk or select \"Mount\" to only select, format and mount existing Linux filesystem/EFI/swap partitions" 0 0
 			PART_MSG_BOX_EXIT_CODE=$?
 			# 0 - back
@@ -978,6 +1039,7 @@ PartitionDisk(){
 			then
 				# MountViewPartitions
 				# MountViewPartitions "${Disks[@]}"
+				CheckPartTable Disks DiskPartTable
 				MountViewPartitions Disks
 			fi
 		fi
@@ -988,96 +1050,101 @@ PartitionDisk(){
 }
 
 
-CheckEmptyDisks(){		
-	DisksArgs=$1[@]
-	Disks=("${!DisksArgs}")
-	unset DisksArgs
+CheckEmptyDisks(){
+	if [[ $RecursiveCallCount -le 1 ]]
+	then
+		DisksArgs=$1[@]
+		Disks=("${!DisksArgs}")
+		unset DisksArgs
 
-	NoPartDisksTemp=()
-	DisksTemp=()
+		NoPartDisksTemp=()
+		DisksTemp=()
 
-	NoPartDisks=()
-	DiskPartCheck=()
+		NoPartDisks=()
+		DiskPartCheck=()
 
-	disk=""
-	have=""
+		disk=""
+		have=""
 
-	for (( i = 0; i < ${#Disks[@]}; i++ ))
-	do
-		DiskPartCheck=($(DiskPartInfoTemp "${Disks[$i]}" | grep -vi 'W95 FAT32 (LBA)' | awk '{ print $1 }'))
+		for (( i = 0; i < ${#Disks[@]}; i++ ))
+		do
+			DiskPartCheck=($(DiskPartInfoTemp "${Disks[$i]}" | grep -vi 'W95 FAT32 (LBA)' | awk '{ print $1 }'))
+			if [[ -z "${DiskPartCheck[@]}" ]]
+			then
+				NoPartDisks+=("${Disks[$i]}")
+			elif [[ ${#DiskPartCheck[@]} -ge 1 ]]
+			then
+				continue
+			fi
+			unset DiskPartCheck
+		done
 
-		if [[ -z ${DiskPartCheck[@]} ]]
+		if [[ ${#NoPartDisks[@]} -gt 1 ]]
 		then
-			NoPartDisks+=("${Disks[$i]}")
-		elif [[ ${#DiskPartCheck[@]} -ge 1 ]]
+			NoPartDisksTemp=("${NoPartDisks[@]}")
+			temp="${NoPartDisksTemp[-1]}"
+			NoPartDisksTemp[-1]="&"
+			NoPartDisksTemp+=("$temp")
+			disk="disks"
+			have="have"
+		elif [[ ${#NoPartDisks[@]} -eq 1 ]]
 		then
-			continue
+			NoPartDisksTemp=("${NoPartDisks[@]}")
+			disk="disk"
+			have="has"
 		fi
-		unset DiskPartCheck
-	done
 
-	if [[ ${#NoPartDisks[@]} -gt 1 ]]
-	then
-		NoPartDisksTemp=("${NoPartDisks[@]}")
-		temp="${NoPartDisksTemp[-1]}"
-		NoPartDisksTemp[-1]="&"
-		NoPartDisksTemp+=("$temp")
-		disk="disks"
-		have="have"
-	elif [[ ${#NoPartDisks[@]} -eq 1 ]]
-	then
-		NoPartDisksTemp=("${NoPartDisks[@]}")
-		disk="disk"
-		have="has"
-	fi
+		echo "$disk $have ${NoPartDisksTemp[*]}"
+		dialog --ok-label "Back" --cancel-label "Continue" --extra-button --extra-label "Edit" --yesno "$disk ${NoPartDisksTemp[*]} does not contain any linux installation compatible partitions. Edit the $disk?" 0 0
+		EMPTY_DISK_EXIT_CODE=$?
+		# 0 - Back
+		# 1 - Continue
+		# 3 - Edit
 
-	dialog --ok-label "Back" --cancel-label "Continue" --extra-button --extra-label "Edit" --yesno "$disk ${NoPartDisksTemp[*]} does not contain any linux installation compatible partitions. Edit the $disk?" 0 0
-	EMPTY_DISK_EXIT_CODE=$?
-	# 0 - Back
-	# 1 - Continue
-	# 3 - Edit
-
-	
-	if [[ $EMPTY_DISK_EXIT_CODE -eq 0 ]]
-	then
-		PartitionDisk
-	elif [[ $EMPTY_DISK_EXIT_CODE -eq 1 ]]
-	then
-		if [[ ${#NoPartDisksTemp[@]} -ge 1 ]]
-		then
-			dialog --msgbox "$disk ${NoPartDisksTemp[*]} $have been discarded and will not be used to install any linux components" 0 0
-			unset NoPartDisksTemp
-
-			DisksTemp=("${Disks[@]}")
-			for (( i = 0; i < ${#DisksTemp[@]}; i++ ))
-			do
-				for (( j = 0; j < ${#NoPartDisks[@]}; j++ ))
-				do
-					if [[ "${Disks[$i]}" == "${NoPartDisks[$j]}" ]]
-					then
-						unset Disks[$i]
-					fi
-				done
-			done
-			unset DisksTemp
-		fi
-	elif [[ $EMPTY_DISK_EXIT_CODE -eq 3 ]]
-	then
-		unset NoPartDisksTemp
-
-		dialog --extra-button --extra-label "Edit incompatible Disks" --ok-label "Back" --cancel-label "Edit All Disks" --yesno "Edit disks that are incompatible for linux installation, edit all the disks or go back to the Disk Selection Menu?" 0 0
-		EDIT_DISK_EXIT_CODE=$?
-		if [[ $EDIT_DISK_EXIT_CODE -eq 3 ]]
-		then
-			EditDisk NoPartDisks
-		elif [[ $EDIT_DISK_EXIT_CODE -eq 1 ]]
-		then
-			EditDisk Disks
-		elif [[ $EDIT_DISK_EXIT_CODE -eq 0 ]]
+		
+		if [[ $EMPTY_DISK_EXIT_CODE -eq 0 ]]
 		then
 			PartitionDisk
+		elif [[ $EMPTY_DISK_EXIT_CODE -eq 1 ]]
+		then
+			if [[ ${#NoPartDisksTemp[@]} -ge 1 ]]
+			then
+				CheckEmptyDisks Disks
+				dialog --msgbox "$disk ${NoPartDisksTemp[*]} $have been discarded and will not be used to install any linux components" 0 0
+				unset NoPartDisksTemp
+
+				DisksTemp=("${Disks[@]}")
+				for (( i = 0; i < ${#DisksTemp[@]}; i++ ))
+				do
+					for (( j = 0; j < ${#NoPartDisks[@]}; j++ ))
+					do
+						if [[ "${Disks[$i]}" == "${NoPartDisks[$j]}" ]]
+						then
+							unset Disks[$i]
+						fi
+					done
+				done
+				unset DisksTemp
+			fi
+		elif [[ $EMPTY_DISK_EXIT_CODE -eq 3 ]]
+		then
+			unset NoPartDisksTemp
+
+			dialog --extra-button --extra-label "Edit incompatible Disks" --ok-label "Back" --cancel-label "Edit All Disks" --yesno "Edit disks that are incompatible for linux installation, edit all the disks or go back to the Disk Selection Menu?" 0 0
+			EDIT_DISK_EXIT_CODE=$?
+			if [[ $EDIT_DISK_EXIT_CODE -eq 3 ]]
+			then
+				EditDisk NoPartDisks
+			elif [[ $EDIT_DISK_EXIT_CODE -eq 1 ]]
+			then
+				EditDisk Disks
+			elif [[ $EDIT_DISK_EXIT_CODE -eq 0 ]]
+			then
+				PartitionDisk
+			fi
 		fi
 	fi
+	RecursiveCallCount=$((RecursiveCallCount+=1))
 }
 
 
@@ -1099,6 +1166,7 @@ MountViewPartitions(){
 	DisksArgs=$1[@]
 	Disks=("${!DisksArgs}")
 	unset DisksArgs
+
 
 	DiskPartNameTemp=()
 	DiskPartSizeTemp=()
@@ -1128,9 +1196,83 @@ MountViewPartitions(){
 	home_part_count=0
 	swap_part_count=0
 
-	CheckEmptyDisks Disks
 
+	RecursiveCallCount=0
 	Disks=($(IFS="";sort <<<${Disks[@]}))
+
+
+	DisksTemp=(${Disks[@]})
+	temp="${DisksTemp[-1]}"
+	DisksTemp[-1]="&"
+	DisksTemp+=("$temp")
+
+	disk=""
+	if [[ ${#Disks[@]} -gt 1 ]]
+	then
+		disk="disks"
+	else
+		disk="disk"
+	fi
+	dialog --extra-button --extra-label "Back" --msgbox "using partitions from $disk ${DisksTemp[*]}" 0 0
+	if [[ $? -eq 3 ]]
+	then
+		PartitionDisk
+	fi
+	unset DisksTemp
+
+	
+	DisksTempSize=${Disks[@]}
+	NoPartDisks=()
+	for (( i = 0; i < ${#DisksTempSize[@]}; i++ ))
+	do
+		DiskPartName=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $1 }'))
+		if [[ -z "${DiskPartName[a]}" ]]
+		then
+			NoPartDisks+=("${DiskPartName[a]}")
+		fi
+	done
+
+	disk=""
+	if [[ ! -z "${NoPartDisks[@]}" ]]
+	then
+		NoPartDisksTemp=("${NoPartDisks[@]}")
+		if [[ ${#NoPartDisks[@]} -eq 1 ]]
+		then
+			disk="disk"
+		elif [[ ${#NoPartDisks[@]} -gt 1 ]]
+		then
+			disk="disks"
+			temp="${NoPartDisksTemp[-1]}"
+			NoPartDisksTemp[-1]="&"
+			NoPartDisksTemp+=("$temp")
+		fi
+		dialog --yesno "$disk ${NoPartDisksTemp[*]} does not have any partitions. Edit the Disks?" 0 0
+		EDIT_EMPTY_DISK_EXIT_CODE=$?
+
+		if [[ $EDIT_EMPTY_DISK_EXIT_CODE -eq 0 ]]
+		then
+			EditDisk NoPartDisks
+		elif [[ $EDIT_EMPTY_DISK_EXIT_CODE -eq 1 ]]
+		then
+			DisksTempSize=${#Disks[@]}
+			for (( i = 0; i < ${#NoPartDisks[@]}; i++ ))
+			do
+				for (( j = 0; j < $DisksTempSize; j++ ))
+				do
+					if [[ "${NoPartDisks[$i]}" == "${Disks[$j]}" ]]
+					then
+						unset Disks[$j]
+					fi
+				done
+			done
+			dialog --msgbox "$disk ${NoPartDisksTemp[*]} have been discarded. using $disk ${Disks[@]}" 0 0
+		fi
+		unset NoPartDisksTemp
+
+	fi
+	unset disk
+	unset DisksTempSize
+	unset NoPartDisks
 
 	# for a in "${Disks[@]}"
 	for (( a = 0; a < ${#Disks[@]}; a++))
@@ -1158,8 +1300,6 @@ MountViewPartitions(){
 	    		if [[ "$aa" =~ [1] ]]
 	    		then
     				DiskPartFsType+=("$(echo "$DiskPartFsTypeString" | sed 's/\s$//g')")
-    				# DiskPartFsType+=("$DiskPartFsTypeString | sed 's/\s$//g'")
-    				# DiskPartFsType+=("$DiskPartFsTypeString")
 	    			DiskPartFsTypeString=""
     			elif [[ "aa" =~ [a-zA-Z] ]]
 				then
@@ -1208,29 +1348,19 @@ MountViewPartitions(){
 
 
 			# continue
-			partition=($(dialog --cancel-label "Back" --column-separator "|" --title "Partition mount menu" --extra-button --extra-label "Mount" --checklist "Partitions in /dev/${Disks[$a]}" 0 0 0 "${DiskPartListInfo[@]}" 3>&1 1>&2 2>&3))
+			partition=($(dialog --cancel-label "Back" --column-separator "|" --title "Partition Mount Menu" --extra-button --extra-label "OK" --ok-label "Mount" --checklist "Partitions in /dev/${Disks[$a]}" 0 0 0 "${DiskPartListInfo[@]}" 3>&1 1>&2 2>&3))
 			PARTITION_EXIT_CODE=$?
 			# 0 - ok
 			# 1 - back
 			# 3 - mount
 
-
-			: '
-			if [[ ${#partition[*]} -eq 0 ]] && ( [[ $PARTITION_EXIT_CODE -eq 0 ]] || [[ $PARTITION_EXIT_CODE -eq 3 ]] )
-			if [[ ${#linux_fs_ext4_parts[@]} -eq 0 ]]  && [[ ${#fat32_efi_parts[@]} -eq 0 ]]
-			if ([[ ${#linux_fs_ext4_parts[@]} -eq 0 ]]  && [[ ${#fat32_efi_parts[@]} -eq 0 ]] && [[ ${#partition[*]} -eq 0 ]] ) || ( [[ ${#swap_parts[@]} -eq 0 ]] && [[ ${#partition[*]} -eq 0 ]] )
-			then
-				dialog --msgbox "please select atleast one partition out of EFI/EXT4/swap for system use" 0 0
-				# MountViewPartitions
-				# MountViewPartitions "${Disks[@]}"
-				MountViewPartitions Disks
-			elif [[ $PARTITION_EXIT_CODE -eq 0 ]]
-			'
-
 			if [[ $PARTITION_EXIT_CODE -eq 0 ]]
 			then
+				# echo "$a - ${Disks[$a]}"
+				# echo "partition - ${partition[@]}"
 				SelectedPartitionsTemp+=("${partition[@]}")
 				# SelectedPartitionsTemp+=()
+				read -p "nice0" -n1
 				for (( c = 0; c < ${#SelectedPartitionsTemp[@]}; c++ ))
 				do
 					# a=c
@@ -1271,8 +1401,26 @@ MountViewPartitions(){
 				PartitionDisk
 			elif [[ $PARTITION_EXIT_CODE -eq 3 ]]
 			then
+				disk=""
 				SelectedPartitionsTemp+=("${partition[@]}")
+				a=$((a+1))
+				DiscardDisks=("${Disks[@]:$a}")
 				# SelectedPartitionsTemp+=()
+				# i=${#Disks[@]}
+				if [[ ${#DiscardDisks[@]} -eq 1 ]]
+				then
+					disk="disk"
+				elif [[ ${#DiscardDisks[@]} -gt 1 ]]
+				then
+					disk="disks"
+					temp="${DiscardDisks[-1]}"
+					DiscardDisks[-1]="&"
+					DiscardDisks+=("$temp")
+				fi
+				dialog --yes-label "OK" --no-label "Back" --yesno "Discarding $disk ${DiscardDisks[*]}" 0 0
+				unset DiscardDisks
+				break
+				# continue
 			fi
 		fi
 		DiskPartListInfo=()
