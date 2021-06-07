@@ -99,8 +99,9 @@ TempArrayWithAmpersand(){
 
 	# $1 - TempArray
 
-	local -a TempArray=$1[@]
-	TempArray=(${!TempArray})
+	local TempArrayArgs=$1[@]
+	local TempArray=("${!TempArrayArgs}")
+	unset TempArrayArgs
 
 	if [[ ${#TempArray[@]} -eq 1 ]]
 	then
@@ -115,7 +116,18 @@ TempArrayWithAmpersand(){
 }
 
 
-
+IsArrayEmpty(){
+	local TempArrayArgs=$1[@]
+	local TempArray=("${!TempArrayArgs}")
+	unset TempArrayArgs
+	if [[ -z "${TempArray[@]}" ]]
+	then
+		return 1
+	elif [[ -n "${TempArray[@]}" ]]
+	then
+		return 0
+	fi
+}
 
 
 
@@ -821,9 +833,13 @@ DiskPartInfoTemp(){
 
 
 EditDisk(){
+
+
 	local disksArgs=$1[@]
 	local m_Disks=("${!disksArgs}")
 	unset disksArgs
+
+	# WritePartitionTable m_Disks
 
 	local diskeditors=()
 
@@ -852,7 +868,6 @@ EditDisk(){
 					for i in "${m_Disks[@]}"
 					do
 						clear;reset
-						# echo -e "Editing Disk '/dev/${m_Disks[$i]}' with $DiskEditor\n\n\n"
 						printf "\E[1m\t\t\t\t\tEditing Disk '/dev/$i' with $DiskEditor\n\n\n\E[m"
 						# "$DiskEditor" "/dev/${m_Disks[$i]}"
 						"$DiskEditor" "/dev/$i"
@@ -881,7 +896,7 @@ EditDisk(){
 
 
 
-ReWritePartitionTable(){
+WritePartitionTable(){
 	local PartTableTemp=()
 	PartTableTemp+=("GPT" "supports 128 primary partitions, mutiple bootloaders, storage more than 2TB")
 	PartTableTemp+=("MBR" "supports 4 primary partitions, max storage of 2TB")
@@ -905,13 +920,11 @@ ReWritePartitionTable(){
 			################################
 			dialog --msgbox "$PartTable Partiton Table set on $disk ${m_DisksTemp[*]}. Press \"OK\"	 to Edit $disk ${m_DisksTemp[*]}" 0 0 3>&1 1>&2 2>&3
 			echo "$PartTable" 3>&1 1>&2 2>&3
-			# return $?			
 			;;
 		1)
 			PartitionDisk
 			;;
 	esac
-
 }
 
 
@@ -971,63 +984,161 @@ PartitionDisk(){
 		fi
 	done
 
-	Disks=($(dialog --scrollbar --cancel-label "Back" --column-separator "|" --title "Disk Selection Menu" --checklist "" 0 0 0 "${DiskListInfo[@]}" 3>&1 1>&2 2>&3))
+	# Disks=($(dialog --scrollbar --cancel-label "Back" --column-separator "|" --title "Disk Selection Menu" --checklist "" 0 0 0 "${DiskListInfo[@]}" 3>&1 1>&2 2>&3))
+	Disks=($(dialog --scrollbar --cancel-label "Back" --column-separator "|" --checklist "Disk Selection Menu" 0 0 0 "${DiskListInfo[@]}" 3>&1 1>&2 2>&3))
 	case $? in
-		0) 
+		1) MainMenu ;;
+		0)
 			if [[ -z "${Disks[@]}" ]]
 			then
-				dialog --msgbox "please select atleast one disk" 0 0
+				dialog --msgbox "please select atleast one disk" 0 0 3>&1 1>&2 2>&3 
 				PartitionDisk
 			elif [[ -n "${Disks[@]}" ]]
 			then
-				local m_EmptyDisks=($(CheckEmptyDisks Disks))
-				if [[ -z "${m_EmptyDisks[@]}" ]]
-				then
-					dialog --yes-label "Back" --no-label "Discard disk" --yesno "" 0 0
-				fi
-				# 0 - back
-				# 1 - edit
-				# 3 - mount
 				dialog --extra-button --extra-label "Mount" --ok-label "Back" --cancel-label "Edit" --yesno "Select \"Edit\" for Editting and then mounting the partitions of this disk or select \"Mount\" to only select, format and mount existing Linux filesystem/EFI/swap partitions" 0 0
 				case $? in
 					0) PartitionDisk ;;
-					1) EditDisk Disks ;;
-					3) MountViewPartitions Disks;;
+					1)
+						CheckEmptyDisks Disks
+						EditDisk Disks
+						;;
+					3)
+						CheckEmptyDisks Disks
+						MountViewPartitions Disks
+						;;
 				esac
 			fi
 			;;
-		1) MainMenu ;;
 	esac
 }
 
 
+
+
+IsPartitionTablePresent(){
+	local m_CheckDisksPartsArgs=$1[@]
+	local m_CheckDisksParts=("${!m_CheckDisksPartsArgs}")
+	Disks=("")
+
+	unset m_CheckDisksPartsArgs
+
+	local m_NoPartDisks=()
+	local m_DisksWithTable=()
+
+	for i in "${m_CheckDisksParts[@]}"
+	do
+		# local part="$(DiskPartInfoTemp "$i" | awk '{ print $3 }')"
+		local part="$(DiskListTemp "$i" | awk '{ print $3 }')"
+		if [[ "$part" == "none" ]]
+		then
+			m_NoPartDisks+=("$i")
+		elif [[ "$part" != "none" ]]
+		then
+			m_DisksWithTable+=("$i")
+		fi
+		unset part
+	done
+
+	if [[ -n "${m_NoPartDisks[@]}" ]]
+	then
+		local disk=""
+		local have=""
+		TempArrayWithAmpersandHasHaveTexts ${#m_NoPartDisks[@]} disk have
+		local m_NoPartDisksTemp=($(TempArrayWithAmpersand m_NoPartDisks))
+		if [[ -n "${m_DisksWithTable[@]}" ]]
+		then
+			local disk01="no"
+			local have01="no"
+			TempArrayWithAmpersandHasHaveTexts ${#m_DisksWithTable[@]} disk01 have01
+			local m_DisksWithTableTemp=($(TempArrayWithAmpersand m_DisksWithTable))
+			dialog --extra-button --extra-label "Set Table" --ok-label "Back" --cancel-label "Discard" --yesno "$disk ${m_NoPartDisksTemp[*]} does not contain a partition table. Set a partition table to $disk ${m_NoPartDisksTemp[*]}, go back to the disk selection menu or discard $disk ${m_NoPartDisksTemp[*]} and use $disk01 ${m_DisksWithTableTemp[*]}" 0 0
+			case $? in
+				0) PartitionDisk 3>&1 1>&2 2>&3 ;;
+				3) WritePartitionTable m_NoPartDisks 3>&1 1>&2 2>&3 ;;
+				1)
+					m_CheckDisksParts=($(DiscardFromArray m_CheckDisksParts m_NoPartDisks))
+					dialog --msgbox "Discarded $disk0 $disk ${m_NoPartDisksTemp[*]}. Using $disk0 ${m_CheckDisksParts[*]}" 0 0 3>&1 1>&2 2>&3
+					;;
+			esac
+			echo "${m_CheckDisksParts[@]}" 3>&1 1>&2 2>&3
+		elif [[ -z "${m_DisksWithTable[@]}" ]]
+		then
+			dialog --yes-label "Back" --no-label "OK" --yesno "$disk ${m_NoPartDisksTemp[*]} does not contain a partition table. Set a partition table to $disk ${m_NoPartDisksTemp[*]} or go back to the disk selection menu?" 0 0 3>&1 1>&2 2>&3
+			case $? in
+				0) PartitionDisk 3>&1 1>&2 2>&3 ;;
+				1)
+					WritePartitionTable m_NoPartDisks 3>&1 1>&2 2>&3
+					echo "${m_CheckDisksParts[@]}" 3>&1 1>&2 2>&3
+					;;
+			esac
+		fi
+	elif [[ -z "${m_NoPartDisks[@]}" ]]
+	then
+		dialog --yesno "Rewrite partition table on all selected disks?" 0 0 3>&1 1>&2 2>&3
+		case $? in
+			0)
+				WritePartitionTable m_CheckDisksParts 3>&1 1>&2 2>&3
+				echo "${m_CheckDisksParts[@]}" 3>&1 1>&2 2>&3
+				;;
+			# 1)
+			# 	;;
+		esac
+	fi
+}
+
+
 CheckEmptyDisks(){
+
 	local m_CheckDisksArgs=$1[@]
 	local m_CheckDisks=("${!m_CheckDisksArgs}")
 	unset m_CheckDisksArgs
 
 	local m_EmptyDisks=()
+	read -p "did i studr" -n1
+	# m_CheckDisks=("$(IsPartitionTablePresent m_CheckDisks 3>&1 1>&2 2>&3)")
+	# m_CheckDisks=($(IsPartitionTablePresent m_CheckDisks 3>&1 1>&2 2>&3))
+	m_CheckDisks=($(IsPartitionTablePresent m_CheckDisks 3>&1 1>&2 2>&3))
 	for i in "${m_CheckDisks[@]}"
 	do
-		local m_DiskCheck=($(DiskPartInfoTemp "$i" | awk '{ print $1 }'))
-		if [[ -z "${m_DiskCheck[@]}" ]]
+		local Disks_Temp=($(DiskPartInfoTemp "$i" | awk '{ print $1 }'))
+		if [[ -z "${Disks_Temp[@]}" ]]
 		then
 			m_EmptyDisks+=("$i")
-		elif [[ -n "${m_DiskCheck[@]}" ]]
-		then
-			continue
 		fi
-		unset m_DiskCheck
+		unset Disks_Temp
 	done
-	if [[ -n "${m_DiskCheck[@]}" ]]
-	then
-		echo "${m_DiskCheck[@]}"
-		# return 10
-	elif [[ -z "${m_DiskCheck[@]}" ]]
-	then
-		continue
-		# return 20
-	fi
+	echo -e "m_EmptyDisks - ${m_EmptyDisks[@]}\n"
+	echo -e "m_CheckDisks - ${m_CheckDisks[@]}\n"
+	read -p "nice going?" -n1
+	IsArrayEmpty m_EmptyDisks
+	case $? in
+		# 1) read -p "just work" -n1 ;;
+		0)
+			read -p "just work" -n1
+			disk=""
+			have=""
+			TempArrayWithAmpersandHasHaveTexts ${#m_EmptyDisks[@]} disk have
+			local m_EmptyDisksTemp=($(TempArrayWithAmpersand m_EmptyDisks))
+			dialog --yesno "$disk ${m_EmptyDisksTemp[*]} does not have any linux compatible partitions available. partition $disk ${m_EmptyDisksTemp[*]}?" 0 0 3>&1 1>&2 2>&3
+			case $? in
+				0)
+					read -p "did i studr? " -n1
+					dialog --msgbox "Editing $disk ${m_EmptyDisksTemp[@]}" 0 0 3>&1 1>&2 2>&3
+					EditDisk m_EmptyDisks
+					echo "${m_EmptyDisks[@]}" 3>&1 1>&2 2>&3
+					;;
+				1)
+					m_CheckDisks=($(DiscardFromArray m_CheckDisks m_EmptyDisks))
+					disk0=""
+					have0=""
+					TempArrayWithAmpersandHasHaveTexts ${#m_CheckDisks[@]} disk0 have0
+					local m_CheckDisksTemp=($(TempArrayWithAmpersand m_CheckDisks))
+					dialog --msgbox "$disk ${m_EmptyDisksTemp[@]} have been discarded. Mounting partitions available on $disk0 ${m_CheckDisksTemp[@]}" 0 0 3>&1 1>&2 2>&3
+					echo "${m_CheckDisks[@]}" 3>&1 1>&2 2>&3
+					;;
+			esac
+		;;
+	esac
 }
 
 
@@ -1268,7 +1379,7 @@ MountViewPartitions(){
 					# elif [[ ${#DiscardDisks[@]} -eq ${#Disks[@]} ]]
 					elif [[ "${DiscardDisks[@]}" == "${Disks[@]}" ]]
 					then
-						dialog --yes-label "OK" --no-label "Back" --yesno "Discarding all selected Disks. Please Select a Disk from the Disk Selection Menu" 0 0
+						dialog --msgbox "Discarding all selected Disks. Please Select a Disk from the Disk Selection Menu" 0 0
 						unset DiscardDisks
 						PartitionDisk
 					elif [[ ${#DiscardDisks[@]} -gt 1 ]] && [[ ${#DiscardDisks[@]} -ne ${#Disks} ]]
