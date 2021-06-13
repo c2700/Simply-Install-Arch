@@ -16,12 +16,12 @@
 # 3) workarounds and beahviours that I felt that needed to be added came to mind as and when  #
 # 	 I was writing and running this script.											  		  #
 # 4) With all of the above mentioned you might find this codebase to be all over the place.   #
-#                                                                                             #
+# 5) You will find a lot of "unset". I did it to use the same variable name in the local      #
+#    scope of other functions                                                                 #
 #                                                                                             #
 #                                                                                             #
 #                                                                                             #
 # Also, I'm open to any constructive criticism (IF you find the codebase to be shitty i.e. ) #
-#.............................................................................................#
 ###############################################################################################
 
 # DIALOG_OK=1
@@ -32,7 +32,6 @@
 # DIALOG_EXTRA=3
 
 # 3>&1 1>&2 2>&3
-
 # rqeuired global var
 # RecursiveCallCount=0 # wish I knew a pvt. variable way of keeping track of Recursive func calls
 
@@ -104,7 +103,7 @@ TempArrayWithAmpersand(){
 	# $1 - TempArray
 
 	local TempArrayArgs=$1[@]
-	local TempArray=("${!TempArrayArgs}")
+	local TempArray=(${!TempArrayArgs})
 	unset TempArrayArgs
 
 	if [[ ${#TempArray[@]} -eq 1 ]]
@@ -256,7 +255,7 @@ ConfNet(){
 
 
 	ls /bin/wifi-menu &>/dev/null
-	
+
 	if [[ $? -eq 0 ]]
 	then
 		NMList+=("wifi-menu")
@@ -799,7 +798,7 @@ ConfirmMounts(){
 	MountTexts=("${!MountTextsTemp}")
 	unset MountTextsTemp
 	echo -e "${MountTexts[@]}"
-	read -p "nice: " -n1 
+	read -p "nice: " -n1
 
 	# 0 - ok
 	# 1 - back
@@ -836,73 +835,85 @@ DiskPartInfoTemp(){
 
 
 CheckEditMount(){
-	local m_Disks=$1[@]
+	local m_DisksArgs=$1[@]
+	local m_Disks=${!m_DisksArgs}
+	unset m_DisksArgs
+
 	local PREVIOUS_FUNC_EXIT_CODE=$2
 	# case $2 in
 	case $PREVIOUS_FUNC_EXIT_CODE in
 		1)
-			local m_DisksTemp=($(TempArrayWithAmpersand m_Disks))
-			local diskhave=($(TempArrayWithAmpersandHasHaveTexts ${#m_Disks[@]}))
-			dialog --yes-label "Back" --no-label "Edit" --yesno "${diskhave[0]} ${m_DisksTemp[*]} have not been edited. Go Back to Editing ${diskhave[0]} ${m_DisksTemp[*]} or go back to the Disk Selection Menu" 0 0
-			case $? in
-				0) PartitionDisk ;;
-				1)
-					EditDisk m_Disks
-					DisksWithoutPartitionsPresent m_Disks
-					CHECKPARTS_EXIT_CODE=$?
-					case $CHECKPARTS_EXIT_CODE in
-						0) MountViewPartitions m_Disks ;;
-						1)
-							local m_NoPartsDisks=($(DisksWithoutPartition m_Disks))
-							CheckEditMount m_NoPartsDisks CHECKPARTS_EXIT_CODE
-							;;
-					esac
-					;;
-			esac
+			local m_NoPartsDisks=($(DisksWithoutPartitions m_Disks))
+			local m_NoPartsDisksTemp=("${m_NoPartsDisks[@]}")
+			m_NoPartsDisksTemp=($(TempArrayWithAmpersand m_NoPartsDisksTemp))
+			local diskhave=($(TempArrayWithAmpersandHasHaveTexts ${#m_NoPartsDisks[@]}))
+
+			local m_DisksTemp=("${m_Disks[@]}")
+			m_DisksTemp=($(TempArrayWithAmpersand m_Disks))
+			local diskhave0=($(TempArrayWithAmpersandHasHaveTexts ${#m_Disks[@]}))
+
+			local m_PartTableDisks=(${m_Disks[@]})
+			m_PartTableDisks=($(DiscardFromArray m_PartTableDisks m_NoPartsDisks))
+			local m_PartTableDisksTemp=($(TempArrayWithAmpersand m_PartTableDisks))
+			local diskhave12=($(TempArrayWithAmpersandHasHaveTexts ${#m_PartTableDisks[@]}))
+
+			# echo "1) m_NoPartsDisks -> ${m_NoPartsDisks[@]}"
+			# echo "2) m_NoPartsDisksTemp -> ${m_NoPartsDisksTemp[@]}"
+			# echo "3) m_Disks -> ${m_Disks[@]}"
+			# echo "4) m_DisksTemp -> ${m_DisksTemp[@]}"
+			# echo "5) m_PartTableDisks -> ${m_PartTableDisks[@]}"
+			# echo "5) m_PartTableDisksTemp -> ${m_PartTableDisksTemp[@]}"
+			read -p "did i studr?" -n1
+			if [[ "${m_NoPartsDisks[@]}" == "${m_Disks[@]}" ]]
+			then
+				dialog --yes-label "Back" --no-label "Edit" --yesno "${diskhave[0]} ${m_DisksTemp[*]} have not been edited. Go Back to Editing ${diskhave[0]} ${m_DisksTemp[*]} or go back to the Disk Selection Menu" 0 0
+				case $? in
+					0) PartitionDisk ;;
+					1)
+						EditDisk m_Disks
+						DisksWithoutPartitionsPresent m_Disks
+						local DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE=$?
+						case $? in
+							0)
+								MountViewPartitions m_Disks
+								;;
+							1)
+								CheckEditMount m_Disks DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE
+								;;
+						esac
+						;;
+				esac
+
+			elif [[ "${m_NoPartsDisks[@]}" != "${m_Disks[@]}" ]]
+			then
+				dialog --ok-label "Back" --cancel-label "Edit" --extra-button --extra-label "Discard ${diskhave12[0]}" --yesno "${diskhave[0]} ${m_NoPartsDisksTemp[*]} have not been edited. Edit ${diskhave[0]} ${m_NoPartsDisksTemp[*]}, go back to the Disk Selection Menu or Discard ${diskhave[0]} ${m_NoPartsDisksTemp[*]} and use ${diskhave12[0]} ${m_PartTableDisks[*]}?" 0 0
+				case $? in
+					0) PartitionDisk ;;
+					1)
+						EditDisk m_Disks
+						DisksWithoutPartitionsPresent m_Disks
+						local DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE=$?
+						case $? in
+							0)
+								MountViewPartitions m_Disks
+								;;
+							1)
+								CheckEditMount m_Disks DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE
+								;;
+						esac
+						;;
+					3)
+						m_Disks=($(DiscardFromArray m_Disks m_NoPartsDisks))
+						dialog --msgbox "Discarded ${diskhave0[0]}. Using ${diskhave[0]} ${m_Disks[@]}" 0 0
+						MountViewPartitions m_Disks
+						;;
+				esac
+			fi
 			;;
 		0) MountViewPartitions m_Disks ;;
 	esac
 }
 
-
-CheckDiscardEditMount(){
-	local m_Disks=$1[@]
-	local PREVIOUS_FUNC_EXIT_CODE=$2
-	# case $2 in
-	case $PREVIOUS_FUNC_EXIT_CODE in
-		1)
-			local m_DisksTemp=($(TempArrayWithAmpersand m_Disks))
-			local diskhave=($(TempArrayWithAmpersandHasHaveTexts ${#m_Disks[@]}))
-
-			local m_NoPartsDisks=($(DisksWithoutPartition m_Disks))
-			local m_NoPartsDisksTemp=($(TempArrayWithAmpersand m_NoPartsDisks))
-			local diskhave0=($(TempArrayWithAmpersandHasHaveTexts ${#m_NoPartsDisks[@]}))
-			dialog --ok-label "Back" --cancel-label "Edit" --extra-button --extra-label "Discard ${diskhave[0]}" --yesno "${diskhave0[0]} ${m_NoPartsDisksTemp[*]} have not been edited. Go Back to Editing ${diskhave0[0]} ${m_NoPartsDisksTemp[*]}, go back to the Disk Selection Menu or discard ${diskhave0[0]} ${m_NoPartsDisksTemp[*]} and use ${diskhave[0]} ${m_DisksTemp[*]}" 0 0
-			case $? in
-				0) PartitionDisk ;;
-				1)
-					EditDisk m_Disks
-					DisksWithoutPartitionsPresent m_Disks
-					CHECKPARTS_EXIT_CODE=$?
-					case $CHECKPARTS_EXIT_CODE in
-						0) MountViewPartitions m_Disks ;;
-						1)
-							local m_NoPartsDisks=($(DisksWithoutPartition m_Disks))
-							CheckDiscardEditMount m_NoPartsDisks CHECKPARTS_EXIT_CODE
-							;;
-					esac
-					;;
-				3)
-					local m_NoPartsDisks=($(DisksWithoutPartition m_Disks))
-					m_Disks=($(DiscardFromArray m_Disks m_NoPartsDisks))
-					dialog --msgbox "Discarded ${diskhave0[0]} ${m_NoPartsDisksTemp[*]}. Using ${diskhave[0]} ${m_DisksTemp[*]}" 0 0
-					MountViewPartitions m_Disks
-					;;
-			esac
-			;;
-		0) MountViewPartitions m_Disks ;;
-	esac
-}
 
 
 
@@ -971,7 +982,7 @@ DisksWithoutPartitionsPresent(){
 			break
 		fi
 	done
-	
+
 	if [[ -n "$m_NoPartsDisks" ]]
 	then
 		unset m_NoPartsDisks
@@ -988,14 +999,15 @@ DisksWithoutPartitions(){
 	local Disks=("${!DisksArgs}")
 	unset DisksArgs
 
-	m_NoPartsDisks=()
-	for i in {Disks[@]}
+	local m_NoPartsDisks=()
+	for i in ${Disks[@]}
 	do
-		local m_check=($(DiskPartInfoTemp | awk '{ print $1 }'))
+		echo "$i"
+		local m_check=($(DiskPartInfoTemp "$i" | awk '{ print $1 }'))
+		echo "${m_check[@]}" 3>&1 1>&2 2>&3
 		if [[ -n ${m_check[@]} ]]
 		then
 			m_NoPartsDisks+=("$i")
-			break
 		fi
 		unset m_check
 	done
@@ -1027,11 +1039,12 @@ EditDisk(){
 	disksTemp=($(TempArrayWithAmpersand disksTemp))
 	# local DiskEditor=""
 	# DiskEditor="$(dialog --no-tags --cancel-label "Back" --menu "Disk Editor Menu\n\nSelect a Disk Editor to Edit the $disk ${disksTemp[*]}" 0 0 0 "${diskeditors[@]}" 3>&1 1>&2 2>&3)"
-	DiskEditor="$(dialog --no-tags --cancel-label "Back" --menu "Disk Editor Menu\n\nSelect a Disk Editor to Edit the $disk ${disksTemp[*]}" 0 0 0 "${diskeditors[@]}")"
+	DiskEditor="$(dialog --no-tags --cancel-label "Back" --menu "Disk Editor Menu\n\nSelect a Disk Editor to Edit the $disk ${disksTemp[*]}" 0 0 0 "${diskeditors[@]}" 3>&1 1>&2 2>&3)"
 	case $? in
 		0)
 			local m_NonePartDisks=()
-			dialog --no-label "Back" --yes-label "OK" --yesno "Partitions are to be formatted in the diskeditor and the filesystem format is to be created using mkfs (mkfs/mkfs.ext4/mkfs.fat or whatever is used to format the partitions)\n\nPartitions to be created:\n\nMandatory:\n1) EFI partition with a FAT32 filesystem format\n2) Linux Root Partition (shows up as \"Linux filesystem\" in the partition editor) formatted in\n   ext4/ext3/ext2/ext/btrfs/xfs/zfs. Recommended - ext4/btrfs\n\nOptional but recommended:\n1) swap partition with swap filesystem\n\nOptional:\n1) Home partition with same filesystem as Linux Root Partition" 0 0
+			# dialog --no-label "Back" --yes-label "OK" --yesno "partition type -> partition filesystem\n\nPartitions to be created:\n\nMandatory:\n1) EFI system partition -> FAT32\n2) Linux filesystem -----> ext4 (This is the linux root partition)\n\nOptional but recommended:\n1) Linux swap -> swap (used when machine runs out of RAM/physical memory)\n\nOptional:\n1) Linux user's home -> same filesystem as the Linux Root Partition" 0 0
+			dialog --no-label "Back" --yes-label "OK" --yesno "					partition type ----------------> partition filesystem format\n\nPartitions to be created and formatted to:\n	Mandatory:\n		1) EFI system partition -> FAT32(This is where the bootloader and the kernel resides)\n		2) Linux filesystem -----> ext4 (This is the linux root partition)\n\n	Optional but recommended:\n		1) Linux swap -> swap (used when machine runs out of RAM/physical memory)" 0 0
 			case $? in
 				0)
 					# for (( i = 0; i < ${#m_Disks[@]}; i++ ))
@@ -1077,7 +1090,7 @@ WritePartitionTable(){
 			local m_DisksArgs=$1[@]
 			local m_Disks=("${!m_DisksArgs}")
 			unset m_DisksArgs
-	
+
 			local diskhave=($(TempArrayWithAmpersandHasHaveTexts ${#m_Disks[@]}))
 			local m_DisksTemp=("${m_Disks[@]}")
 			m_DisksTemp=($(TempArrayWithAmpersand m_DisksTemp))
@@ -1106,7 +1119,7 @@ PartitionDisk(){
 	DiskModel=()
 
 	DiskModelString=""
-	
+
 	for i in "${DiskModelTemp[@]}"
 	do
 		if [[ "$i" =~ ^[5]$ ]] && [[ "$DiskModelString" == "" ]]
@@ -1158,72 +1171,81 @@ PartitionDisk(){
 				PartitionDisk
 			elif [[ -n "${Disks[@]}" ]]
 			then
-				dialog --yesno "Change already set partition table?" 0 0 
-				case $? in
-					0) WritePartitionTable Disks ;;
-				esac
+				local m_NoPartTableDisks=($(DisksWithoutPartitionTable Disks))
+				if [[ -n "${m_NoPartTableDisks[@]}" ]]
+				then
+					local diskhave0000=($(TempArrayWithAmpersandHasHaveTexts ${#m_NoPartTableDisks[@]}))
+					if [[ "${m_NoPartTableDisks[@]}" == "${Disks[@]}" ]]
+					then
+						dialog --yes-label "Back" --no-label "Set Table" --yesno "All selected ${diskhave0000[0]} does not contain a partition table. Set a Partition Table or go Back to the Disks Selection Menu?" 0 0
+						case $? in
+							0)
+								PartitionDisk
+								unset m_NoPartTableDisks
+								;;
+							1)
+								unset m_NoPartTableDisks
+								WritePartitionTable Disks
+								EditDisk Disks
+								;;
+						esac
+					elif [[ "${m_NoPartTableDisks[@]}" != "${Disks[@]}" ]]
+					then
+						local m_DisksWithPartTable=($(DiscardFromArray Disks m_NoPartTableDisks))
+						local m_DisksTemp=("${Disks[@]}")
+						m_DisksTemp=($(TempArrayWithAmpersand m_DisksTemp))
+						local diskhave1111=($(TempArrayWithAmpersandHasHaveTexts ${#Disks[@]}))
+						local m_NoPartTableDisksTemp=("${m_NoPartTableDisks[@]}")
+						m_NoPartTableDisksTemp=($(TempArrayWithAmpersand m_NoPartTableDisksTemp))
+
+						dialog --ok-label "Back" --cancel-label "Set Table" --extra-button --extra-label "Discard ${diskhave0000[0]}" --yesno "Selected ${diskhave0000[0]} ${m_NoPartTableDisksTemp[*]} does not contain a partition table. Set a Partition Table, Discard The ${diskhave0000[0]} and use ${diskhave1111[*]} ${m_DisksWithPartTable[*]} or go Back to The Disks Selection Menu" 0 0
+						case $? in
+							0)
+								WritePartitionTable m_NoPartTableDisks
+								EditDisk m_NoPartTableDisks
+								unset m_NoPartTableDisks
+								;;
+							1)
+								PartitionDisk
+								unset m_NoPartTableDisks
+								;;
+							3)
+								Disks=($(DiscardFromArray Disks m_NoPartTableDisks))
+								dialog --msgbox "Discarded ${diskhave0000[*]} ${m_NoPartTableDisksTemp[*]}. Using ${diskhave1111[*]} ${m_DisksTemp[*]}" 0 0
+								unset m_NoPartTableDisks m_NoPartTableDisksTemp m_DisksTemp diskhave1111 diskhave0000
+								;;
+						esac
+					fi
+				fi
+
+
+        		#########################
+				# dialog --yesno "Change an already set partition table?" 0 0
+				# case $? in
+				# 	0) WritePartitionTable Disks ;;
+				# esac
 				dialog --extra-button --extra-label "Mount" --ok-label "Back" --cancel-label "Edit" --yesno "Select \"Edit\" for Editting and then mounting the partitions of this disk or select \"Mount\" to only select, format and mount existing Linux filesystem/EFI/swap partitions" 0 0
 				case $? in
 					0) PartitionDisk ;;
 					1)
-						local m_NoPartTableDisks=($(DisksWithoutPartitionTable Disks))
-						if [[ -n "${m_NoPartTableDisks[@]}" ]]
-						then
-							if [[ "${m_NoPartTableDisks[@]}" == "${Disks[@]}" ]]
-							then
-								WritePartitionTable m_NoPartTableDisks
-								EditDisk m_NoPartTableDisks
-								DisksWithoutPartitionsPresent Disks
-								CheckEditMount Disks $?
-								unset m_NoPartTableDisks
-							elif [[ "${m_NoPartTableDisks[@]}" != "${Disks[@]}" ]]
-							then
-								WritePartitionTable m_NoPartTableDisks
-								EditDisk m_NoPartTableDisks
-								DisksWithoutPartitionsPresent Disks
-								CheckDiscardEditMount Disks $?
-								unset m_NoPartTableDisks
-							fi
-						elif [[ -z "${NoPartTableDisks[@]}" ]]
-						then
-							EditDisk Disks
-						fi
+						EditDisk Disks
+						# DisksWithoutPartitionsPresent Disks
+						# local DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE=$?
+						# CheckEditMount Disks DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE
+						# case $DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE in
+						DisksWithoutPartitionsPresent Disks
+						case $? in
+						# case $DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE in
+							0) CheckEditMount Disks DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE ;;
+							1) MountViewPartitions Disks ;;
+						esac
+						unset DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE
+						# unset DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE Disks
 						;;
 					3)
-						local m_NoPartTableDisks=($(DisksWithoutPartitionTable Disks))
-						if [[ -z "${m_NoPartTableDisks[@]}" ]]
-						then
-							DisksWithoutPartitionsPresent Disks
-							case $? in
-								1) MountViewPartitions Disks ;;
-								0)  
-									local m_DisksTemp=("{Disks[@]}")
-									m_DisksTemp=($(TempArrayWithAmpersand m_DisksTemp))
-									diskhave=($(TempArrayWithAmpersandHasHaveTexts {#Disks[@]}))
-									dialog --msgbox "Editting ${diskhave[0]} ${m_DisksTemp[*]}" 0 0
-									EditDisk m_NoPartTableDisks
-									DisksWithoutPartitionsPresent Disks
-									CheckEditMount Disks $?
-									;;
-							esac
-						elif [[ -n "${m_NoPartTableDisks[@]}" ]]
-						then
-							if [[ "${m_NoPartTableDisks[@]}" == "${Disks[@]}" ]]
-							then
-								WritePartitionTable m_NoPartTableDisks
-								EditDisk m_NoPartTableDisks
-								DisksWithoutPartitionsPresent Disks
-								CheckEditMount Disks $?
-								unset m_NoPartTableDisks
-							elif [[ "${m_NoPartTableDisks[@]}" != "${Disks[@]}" ]]
-							then
-								WritePartitionTable m_NoPartTableDisks
-								EditDisk m_NoPartTableDisks
-								DisksWithoutPartitionsPresent Disks
-								CheckDiscardEditMount Disks $?
-								unset m_NoPartTableDisks
-							fi
-						fi
+						DisksWithoutPartitionsPresent Disks
+						CheckEditMount Disks $?
+						# MountViewPartitions Disks
 						;;
 				esac
 			fi
@@ -1307,18 +1329,9 @@ MountViewPartitions(){
 		dialog --yesno "${diskhave[0]} ${NoPartDisksTemp[*]} does not have any partitions. Edit the ${diskhave[0]}?" 0 0
 		case $? in
 			0) EditDisk NoPartDisks ;;
-			1) 
+			1)
 				DisksTempSize=${#Disks[@]}
-				for (( i = 0; i < ${#NoPartDisks[@]}; i++ ))
-				do
-					for (( j = 0; j < $DisksTempSize; j++ ))
-					do
-						if [[ "${NoPartDisks[$i]}" == "${Disks[$j]}" ]]
-						then
-							unset Disks[$j]
-						fi
-					done
-				done
+				Disks=($(DiscardFromArray Disks NoPartDisks))
 				dialog --msgbox "${diskhave[0]} ${NoPartDisksTemp[*]} $have been discarded. using ${diskhave[0]} ${Disks[*]}" 0 0
 				;;
 		esac
@@ -1327,7 +1340,6 @@ MountViewPartitions(){
 	fi
 	unset DisksTempSize
 	unset NoPartDisks
-
 
 	# for a in "${Disks[@]}"
 	for (( a = 0; a < ${#Disks[@]}; a++))
@@ -1342,13 +1354,13 @@ MountViewPartitions(){
 
 	    # DiskPartNameTemp=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $1 }'))
 	    DiskPartName=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $1 }'))
-	    DiskPartSizeTemp=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $2 }'))
+		DiskPartSizeTemp=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $2 }'))
 	    DiskPartFsTypeTemp=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $3" "$4" 1" }'))
 		DiskPartLabelTemp=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ for(i=5;i<=NF;i++){ if (i == 5){ print i" "$i } else if(i > 5){ print $i } } }'))
-		if [[ -z ${DiskPartSizeTemp[*]} ]] && [[ -z ${DiskPartFsTypeTemp[*]} ]] && [[ -z ${DiskPartLabelTemp[*]} ]] && [[ -z ${DiskPartName[*]} ]]
+		if [[ -z ${DiskPartSizeTemp[@]} ]] && [[ -z ${DiskPartFsTypeTemp[@]} ]] && [[ -z ${DiskPartLabelTemp[@]} ]] && [[ -z ${DiskPartName[@]} ]]
 	    then
 	        continue
-	    elif [[ -n ${DiskPartSizeTemp[*]} ]] && [[ -n ${DiskPartFsTypeTemp[*]} ]] && [[ -n ${DiskPartLabelTemp[*]} ]] && [[ -n ${DiskPartName[*]} ]]
+	    elif [[ -n ${DiskPartSizeTemp[@]} ]] && [[ -n ${DiskPartFsTypeTemp[@]} ]] && [[ -n ${DiskPartLabelTemp[@]} ]] && [[ -n ${DiskPartName[@]} ]]
     	then
 	    	DiskPartFsTypeString=""
 	    	for aa in "${DiskPartFsTypeTemp[@]}"
@@ -1436,12 +1448,9 @@ MountViewPartitions(){
 					DiskPartFsType=()
 					;;
 
-				1)	# DiskPartListInfo=()
-					PartitionDisk
-					;;
+				1)	PartitionDisk ;;
 
-
-				3) 
+				3)
 					disk=""
 					SelectedPartitionsTemp+=("${partition[@]}")
 					if [[ -z "${SelectedPartitionsTemp[@]}" ]] && [[ -z "${partition[@]}" ]]
@@ -1452,7 +1461,7 @@ MountViewPartitions(){
 						a=$((a+1))
 						DiscardDisks=("${Disks[@]:$a}")
 					fi
-	
+
 					if [[ ${#DiscardDisks[@]} -eq 1 ]] && [[ ${#Disks[@]} -eq 1 ]]
 					then
 						dialog --yes-label "OK" --no-label "Back" --yesno "No Disk/Partiton selected for insallation. Please Select a Disk and few Partitions" 0 0
@@ -1502,7 +1511,7 @@ MountViewPartitions(){
 	then
 		dialog --yesno "no home or swap partitions detected. Continue without them?" 0 0
 		case $? in
-			0) 
+			0)
 				# ConfirmMounts SelectedPartitionsMountedText
 				echo "ConfirmMounts SelectedPartitionsMountedText"
 				case $? in
@@ -1533,10 +1542,10 @@ MountViewPartitions(){
 		local diskhave=($(TempArrayWithAmpersandHasHaveTexts ${#DisksTemp[@]}))
 		local DisksTemp=("${Disks[@]}")
 		DisksTemp=($(TempArrayWithAmpersand DisksTemp))
-		dialog --yes-label "Continue" --no-label "Disk Menu" --yesno "Using ${diskhave[0]} ${DisksTemp[*]}. Continue to use ${diskhave[0]} or go back to the Disk Selection Menu?" 0 0
+		dialog --no-label "Continue" --yes-label "Disk Menu" --yesno "Using ${diskhave[0]} ${DisksTemp[*]}. Continue to use the ${diskhave[0]} or go back to the Disk Selection Menu?" 0 0
 		case $? in
-			0) MountViewPartitions Disks ;;
-			1) PartitionDisk ;;
+			0) PartitionDisk ;;
+			1) MountViewPartitions Disks ;;
 		esac
 		unset temp
 		unset DisksTemp
@@ -1746,20 +1755,28 @@ MainMenu(){
 	clear
     # check if dialog is installed
 	ls /usr/bin/dialog &>/dev/null
+	case $? in
+		0)
+			echo ""
+			;;
+		1)
+			echo -e "dialog not installed.\n"
+			read -s -n1 -p "press any key to install the git provided dialog package "
+			pacman -Uvd --noconfirm "$(ls dialog*)"
+			case $? in
+				0)
+					dialog --msgbox "installed dialog" 0 0
+					;;
+				1)
+					clear
+					echo -e "\n\ndialog could not be installed"
+					# echo -e "\n\ndialog could not be installed.\n\nPlease install provided dialog packages by typing \"pacman -Uvd <package name>\" with or without the \"--noconfirm\" argument.\n\ncurrent directory:\n$(pwd)\n\npackages in this directory:\n$(ls *.pkg*).\n\n\nexiting...\n\n"
+					exit
+					;;
+			esac
+			;;
+	esac
 
-	if [[ $? -eq 1 ]]
-	then
-		echo -e "dialog not installed.\n"
-		read -s -n1 -p "press any key to install the git provided dialog package "
-		pacman -Uvd --noconfirm "$(ls dialog*)"
-		if [[ $? -eq 1 ]]
-		then
-			echo -e "\n\ndialog could not be installed.\n\nPlease install provided dialog packages by typing \"pacman -Uvd <package name>\" with or without the \"--noconfirm\" argument.\n\ncurrent directory:\n$(pwd)\n\npackages in this directory:\n$(ls *.pkg*).\n\n\nexiting...\n\n"
-			exit
-		else
-			dialog --msgbox "installed dialog" 0 0
-		fi
-	fi
 
 	menuopt=("Partition Disk **" "format/Partition/select Hard Disks and mount partitions")
 	menuopt+=("Configure Network **" "Check connectivity and connect to a network")
@@ -1837,4 +1854,3 @@ MainMenu(){
 # trap '' 2
 # Repo_Enable
 MainMenu "Partition Disk **" 3>&1 1>&2 2>&3
-
