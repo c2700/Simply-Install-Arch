@@ -56,10 +56,10 @@ DiscardFromArray(){
 	# $1 - Array to unset from
 	# $2 - Reference Array
 
-	UnsetArray=$1[@]
+	local UnsetArray=$1[@]
 	UnsetArray=(${!UnsetArray})
 
-	RefArray=$2[@]
+	local RefArray=$2[@]
 	RefArray=(${!RefArray})
 
 	for i in "${RefArray[@]}"
@@ -797,8 +797,6 @@ ConfirmMounts(){
 	MountTextsTemp=$1[@]
 	MountTexts=("${!MountTextsTemp}")
 	unset MountTextsTemp
-	echo -e "${MountTexts[@]}"
-	read -p "nice: " -n1
 
 	# 0 - ok
 	# 1 - back
@@ -809,7 +807,7 @@ ConfirmMounts(){
 
 
 DiskListTemp(){
-	Disk=$1
+	local Disk=$1
 	if [[ -n "$Disk" ]]
 	then
 		lsblk "/dev/$Disk" -dno name,size,pttype,vendor,model | grep -iv 'loop\|sr[0-9]*' | sed -E 's/\s{8}/ none   /g'
@@ -857,13 +855,6 @@ CheckEditMount(){
 			local m_PartTableDisksTemp=($(TempArrayWithAmpersand m_PartTableDisks))
 			local diskhave12=($(TempArrayWithAmpersandHasHaveTexts ${#m_PartTableDisks[@]}))
 
-			# echo "1) m_NoPartsDisks -> ${m_NoPartsDisks[@]}"
-			# echo "2) m_NoPartsDisksTemp -> ${m_NoPartsDisksTemp[@]}"
-			# echo "3) m_Disks -> ${m_Disks[@]}"
-			# echo "4) m_DisksTemp -> ${m_DisksTemp[@]}"
-			# echo "5) m_PartTableDisks -> ${m_PartTableDisks[@]}"
-			# echo "5) m_PartTableDisksTemp -> ${m_PartTableDisksTemp[@]}"
-			read -p "did i studr?" -n1
 			if [[ "${m_NoPartsDisks[@]}" == "${m_Disks[@]}" ]]
 			then
 				dialog --yes-label "Back" --no-label "Edit" --yesno "${diskhave[0]} ${m_DisksTemp[*]} have not been edited. Go Back to Editing ${diskhave[0]} ${m_DisksTemp[*]} or go back to the Disk Selection Menu" 0 0
@@ -924,7 +915,7 @@ IsPartitionTablePresent(){
 	# local m_Disks=("${!m_disksArgs}")
 	# unset m_disksArgs
 
-	local m_parttable="$(DiskListTemp "$1" | awk '{ print $3 }')"
+	local m_parttable="$(DiskListTemp "$m_disksArgs" | awk '{ print $3 }')"
 	if [[ "$m_parttable" == "none" ]]
 	then
 		return 1
@@ -936,7 +927,7 @@ IsPartitionTablePresent(){
 
 DisksWithoutPartitionTable(){
 	local m_disksArgs=$1[@]
-	local m_Disks=("${!m_disksArgs}")
+	local m_Disks=(${!m_disksArgs})
 	unset m_disksArgs
 	local m_NoPartTableDisks=()
 
@@ -955,16 +946,15 @@ DisksWithoutPartitionTable(){
 		esac
 	done
 
-	if [[ -n "$m_NoPartTableDisk" ]]
-	then
-		# for (( i = $a; i < ${#m_Disks[@]}; i++ ))
-		for i in ${m_Disks[@]:$a}
-		do
-			m_NoPartTableDisks+=("$i")
-			# m_NoPartTableDisks+=("${m_Disks[$i]}")
-		done
-		echo "${m_NoPartTableDisks[@]}"
-	fi
+	for i in ${m_Disks[@]:$a}
+	do
+		IsPartitionTablePresent "$i"
+		case $? in
+			0) continue ;;
+			1) m_NoPartTableDisks+=("$i") ;;
+		esac
+	done
+	echo "${m_NoPartTableDisks[@]}"
 }
 
 DisksWithoutPartitionsPresent(){
@@ -1002,9 +992,7 @@ DisksWithoutPartitions(){
 	local m_NoPartsDisks=()
 	for i in ${Disks[@]}
 	do
-		echo "$i"
 		local m_check=($(DiskPartInfoTemp "$i" | awk '{ print $1 }'))
-		echo "${m_check[@]}" 3>&1 1>&2 2>&3
 		if [[ -n ${m_check[@]} ]]
 		then
 			m_NoPartsDisks+=("$i")
@@ -1192,38 +1180,43 @@ PartitionDisk(){
 					elif [[ "${m_NoPartTableDisks[@]}" != "${Disks[@]}" ]]
 					then
 						local m_DisksWithPartTable=($(DiscardFromArray Disks m_NoPartTableDisks))
+						local m_DisksWithPartTableTemp=("${m_DisksWithPartTable[*]}")
+						m_DisksWithPartTableTemp=($(TempArrayWithAmpersand m_DisksWithPartTable))
+						local diskhave1100=($(TempArrayWithAmpersandHasHaveTexts ${#m_DisksWithPartTableTemp[@]}))
+
 						local m_DisksTemp=("${Disks[@]}")
 						m_DisksTemp=($(TempArrayWithAmpersand m_DisksTemp))
 						local diskhave1111=($(TempArrayWithAmpersandHasHaveTexts ${#Disks[@]}))
+
 						local m_NoPartTableDisksTemp=("${m_NoPartTableDisks[@]}")
 						m_NoPartTableDisksTemp=($(TempArrayWithAmpersand m_NoPartTableDisksTemp))
 
-						dialog --ok-label "Back" --cancel-label "Set Table" --extra-button --extra-label "Discard ${diskhave0000[0]}" --yesno "Selected ${diskhave0000[0]} ${m_NoPartTableDisksTemp[*]} does not contain a partition table. Set a Partition Table, Discard The ${diskhave0000[0]} and use ${diskhave1111[*]} ${m_DisksWithPartTable[*]} or go Back to The Disks Selection Menu" 0 0
+						dialog --ok-label "Back" --cancel-label "Set Table" --extra-button --extra-label "Discard ${diskhave0000[0]}" --yesno "Selected ${diskhave0000[0]} ${m_NoPartTableDisksTemp[*]} does not contain a partition table. Set a Partition Table to the ${diskhave0000[0]}, Discard ${diskhave0000[0]} ${m_NoPartTableDisksTemp[*]} and use ${diskhave1100[0]} ${m_DisksWithPartTableTemp[*]} or go Back to the Disk Selection Menu" 0 0
 						case $? in
 							0)
-								WritePartitionTable m_NoPartTableDisks
-								EditDisk m_NoPartTableDisks
-								unset m_NoPartTableDisks
+								PartitionDisk
+								unset m_NoPartTableDisks m_NoPartTableDisksTemp m_DisksTemp diskhave1111 diskhave0000 diskhave1100 m_DisksWithPartTable m_DisksWithPartTableTemp
 								;;
 							1)
-								PartitionDisk
-								unset m_NoPartTableDisks
+								WritePartitionTable m_NoPartTableDisks
+								EditDisk m_NoPartTableDisks
+								unset m_NoPartTableDisks m_NoPartTableDisksTemp m_DisksTemp diskhave1111 diskhave0000 diskhave1100 m_DisksWithPartTable m_DisksWithPartTableTemp
 								;;
 							3)
 								Disks=($(DiscardFromArray Disks m_NoPartTableDisks))
-								dialog --msgbox "Discarded ${diskhave0000[*]} ${m_NoPartTableDisksTemp[*]}. Using ${diskhave1111[*]} ${m_DisksTemp[*]}" 0 0
-								unset m_NoPartTableDisks m_NoPartTableDisksTemp m_DisksTemp diskhave1111 diskhave0000
+								dialog --msgbox "Discarded ${diskhave0000[0]} ${m_NoPartTableDisksTemp[*]}. Using ${diskhave1100[0]} ${m_DisksWithPartTableTemp[*]}" 0 0
+								unset m_NoPartTableDisks m_NoPartTableDisksTemp m_DisksTemp diskhave1111 diskhave0000 diskhave1100 m_DisksWithPartTable m_DisksWithPartTableTemp
 								;;
 						esac
 					fi
 				fi
 
 
-        		#########################
 				# dialog --yesno "Change an already set partition table?" 0 0
 				# case $? in
 				# 	0) WritePartitionTable Disks ;;
 				# esac
+
 				dialog --extra-button --extra-label "Mount" --ok-label "Back" --cancel-label "Edit" --yesno "Select \"Edit\" for Editting and then mounting the partitions of this disk or select \"Mount\" to only select, format and mount existing Linux filesystem/EFI/swap partitions" 0 0
 				case $? in
 					0) PartitionDisk ;;
@@ -1234,8 +1227,9 @@ PartitionDisk(){
 						# CheckEditMount Disks DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE
 						# case $DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE in
 						DisksWithoutPartitionsPresent Disks
-						case $? in
-						# case $DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE in
+						DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE=$?
+						# case $? in
+						case $DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE in
 							0) CheckEditMount Disks DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE ;;
 							1) MountViewPartitions Disks ;;
 						esac
@@ -1244,7 +1238,9 @@ PartitionDisk(){
 						;;
 					3)
 						DisksWithoutPartitionsPresent Disks
-						CheckEditMount Disks $?
+						DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE=$?
+						CheckEditMount Disks $DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE
+						# CheckEditMount Disks $?
 						# MountViewPartitions Disks
 						;;
 				esac
@@ -1332,7 +1328,7 @@ MountViewPartitions(){
 			1)
 				DisksTempSize=${#Disks[@]}
 				Disks=($(DiscardFromArray Disks NoPartDisks))
-				dialog --msgbox "${diskhave[0]} ${NoPartDisksTemp[*]} $have been discarded. using ${diskhave[0]} ${Disks[*]}" 0 0
+				dialog --msgbox "Discarded ${diskhave[0]} ${NoPartDisksTemp[0]}. using ${diskhave[0]} ${Disks[*]}" 0 0
 				;;
 		esac
 		unset NoPartDisksTemp
@@ -1697,7 +1693,7 @@ InstallArch(){
 			*) dialog --msgbox "failed to install packages via pacstrap"
 		esac
 		'
-		echo ""
+
 		case $? in
 			0)
 				dialog --msgbox "Created fstab entry. you can generate the fstab of your disk by \"executing genfstab -U /mnt > /mnt/etc/fstab\" (i.e. if anythin went wrong with the fstab entry)" 0 0
@@ -1756,9 +1752,9 @@ MainMenu(){
     # check if dialog is installed
 	ls /usr/bin/dialog &>/dev/null
 	case $? in
-		0)
-			echo ""
-			;;
+		# 0)
+		# 	echo ""
+		# 	;;
 		1)
 			echo -e "dialog not installed.\n"
 			read -s -n1 -p "press any key to install the git provided dialog package "
