@@ -784,6 +784,18 @@ ConfHost(){
 }
 
 
+MountPartitions(){
+	MountTextsTemp=$1[@]
+	MountTexts=("${!MountTextsTemp}")
+	unset MountTextsTemp
+	# mount for EFI
+	# mount for linux fs
+	# mount for swap
+	# mount for home
+
+	genfstab "/mnt/" > "/mnt/etc/fstab" ;;
+	dialog --msgbox "Created fstab entry. you can generate the fstab of your disk by \"executing genfstab -U /mnt > /mnt/etc/fstab\" (i.e. if anythin went wrong with the fstab entry)" 0 0
+}
 
 ConfirmMounts(){
 
@@ -1601,7 +1613,7 @@ InstallArch(){
 	elif mountpoint /mnt &>/dev/null
 	then
 		# nvidia linux nvlink/capabilities/fabric-mgmt 0
-		packages=()
+		local packages=()
 		packages_temp=(base base-devel devel linu{x,x-{docs,headers}} grub efi{var,bootmgr} dkms broadcom-dkms-wl-dkms xf86-input-{libinput,synaptics} xf86-video-fbdev)
 		for i in "${packages_temp[@]}"
 		do
@@ -1609,19 +1621,26 @@ InstallArch(){
 		done
 		unset packages_temp
 
+		: '
+		pacstrap /mnt "${packages[@]}" | GuageMeter "Installing Arch Base system packages" 1
+		# pacstrap /mnt "${packages[@]}"
+		case $? in
+		case ${PIPESTATUS[0]} in
+			0)
+				dialog --msgbox "Installed Arch Base system" 0 0
+				;;
+			*)
+				dialog --msgbox "Failed to install Arch Base system. Exiting the Installer" 0 0
+				exit
+				;;
+		esac
+		'
+		packages=()
+
 		cpu_vendor=$(cat /proc/cpuinfo | grep vendor | uniq | awk '{print $3}')
 
-		amd_gpu=()
-		amd_gpu_temp=(xf86-video-{amdgpu,ati} lib32-{amdvlk,opencl-mesa} opencl-mesa amdvlk)
-		for i in "${packages_temp[@]}"
-		do
-			amd_gpu+=("$i")
-		done
-		unset amd_gpu_temp
-
-
-		intel_gpu=()
-		intel_gpu_temp=(xf86-video-intel libva-intel-driver lib32-{libva-intel-driver,vulkan-intel} vulkan-intel intel-graphics-compiler)
+		local intel_gpu=()
+		local intel_gpu_temp=(libva-intel-driver lib32-{libva-intel-driver,vulkan-intel} vulkan-intel intel-graphics-compiler)
 		for i in "${packages_temp[@]}"
 		do
 			intel_gpu+=("$i")
@@ -1629,8 +1648,8 @@ InstallArch(){
 		unset intel_gpu_temp
 
 
-		nvidia_gpu=()
-		nvidia_gpu_temp=(ffnvcodec-headers libvdpau opencl-nvidia xf86-video-nouveau lib32-{libvdpau,nvidia-utils,opencl-nvidia} nvidia-{dkms,lts,prime,settings,utils})
+		local nvidia_gpu=()
+		local nvidia_gpu_temp=(ffnvcodec-headers libvdpau opencl-nvidia xf86-video-nouveau lib32-{libvdpau,nvidia-utils,opencl-nvidia} nvidia-{dkms,lts,prime,settings,utils})
 		for i in "${packages_temp[@]}"
 		do
 			nvidia_gpu+=("$i")
@@ -1642,11 +1661,22 @@ InstallArch(){
 		# dialog --checklist "terminal text editors"
 		if [[ $cpu_vendor == "AuthenticAMD" ]]
 		then
-			packages="$packages amd-ucode"
+			packages=("amd-ucode")
+			packages+=("amdvlk")
+			packages+=("lib32-amdvlk")
+			packages+=("opencl-mesa")
+			packages+=("lib32-opencl-mesa")
+			packages+=("xf86-video-amdgpu")
 		elif [[ $cpu_vendor == "GenuineIntel" ]]
 		then
-			packages="$packages intel-ucode tbb intel-undervolt throttled"
+			packages=("intel-ucode")
+			packages+=("tbb")
+			packages+=("intel-undervolt")
+			packages+=("throttled")
+			packages+=("xf86-video-intel")
 		fi
+
+		local terminaleditorslist=()
 		terminaleditorslist=("vim" "vim" off)
 		terminaleditorslist+=("neovim" "neovim" off)
 		terminaleditorslist+=("emacs" "emacs" off)
@@ -1657,43 +1687,45 @@ InstallArch(){
 		terminaleditorslist+=("mg" "mg micro emacs" off)
 
 		editors=($(dialog --extra-button --extra-label "Cancel" --cancel-label "Back" --no-tags --title "text editor selection Menu" --checklist "nano and vi will be installed by default" 0 0 0 "${terminaleditorslist[@]}" 3>&1 1>&2 2>&3))
-
 		case $? in
 			0)
-				# editors="${editors[@]}"
-				if [[ $editors == "" ]]
-				then
-					packages="${packages[@]}"
-				else
+				unset terminaleditorslist
+				if [[ -n "${editors[@]}" ]]
 					packages="${packages[@]} ${editors[@]}"
+				elif [[ -z "${editors[@]}" ]]
+				then
+					# packages="${packages[@]}"
+					:
 				fi
 				;;
-			1) MainMenu "Install Arch *" ;;
-			3) packages="${packages[@]}"; break ;;
-			# 3) packages="${packages[@]}"; break ;;
+			1)
+				unset terminaleditorslist
+				MainMenu "Install Arch *"
+				;;
+			3)
+				:
+				unset terminaleditorslist
+				# packages="${packages[@]}"
+				break
+				;;
 		esac
 
-
-
-
-
-
-		dialog --msgbox "packages that will be installed:\n${packages[*]}" 0 0
+		dialog --msgbox "Extra packages that will be installed:\n${packages[*]}" 0 0
 
 		: '
-		pacstrap /mnt "$packages" | GuageMeter "Installing arch linux packages" 1
+		pacstrap /mnt "$packages" | GuageMeter "Installing extra linux packages" 1
 		# pacstrap /mnt "$packages"
 
+		case $? in
 		case ${PIPESTATUS[0]} in
-			0) genfstab "/mnt/" > "/mnt/etc/fstab" ;;
-			*) dialog --msgbox "failed to install packages via pacstrap"
+			0) dialog --msgbox "Extra Linux packages have been installed packages" ;;
+			*) dialog --msgbox "failed to install Extra Linux packages" ;;
 		esac
 		'
 
 		case $? in
 			0)
-				dialog --msgbox "Created fstab entry. you can generate the fstab of your disk by \"executing genfstab -U /mnt > /mnt/etc/fstab\" (i.e. if anythin went wrong with the fstab entry)" 0 0
-				bootloaderid="$(dialog --inputbox "Bootloader ID - Input Any Text" 0 0)"
+				bootloaderid="$(dialog --inputbox "Bootloader ID - Input Any Text" 0 0 3>&1 1>&2 2>&3)"
 				# grub-install -v --boot-directory="/mnt/boot" --bootloader-id "$bootloaderid" --efi-directory="/mnt/boot" --recheck --removable --target x86_efi-efi
 				echo "grub-install -v --boot-directory=\"/mnt/boot\" --bootloader-id \"$bootloaderid\" --efi-directory=\"/mnt/boot\" --recheck --removable --target x86_efi-efi"
 				case $? in
