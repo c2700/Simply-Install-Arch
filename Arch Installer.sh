@@ -785,27 +785,42 @@ ConfHost(){
 
 
 MountPartitions(){
-	MountTextsTemp=$1[@]
-	MountTexts=("${!MountTextsTemp}")
-	unset MountTextsTemp
+	local MountPartitionsTextsTemp=$1[@]
+	local MountPartitionsTexts=("${!MountPartitionsTextsTemp}")
+	unset MountPartitionsTextsTemp
+
+	# genfstab "/mnt/" > "/mnt/etc/fstab" ;;
+	dialog --msgbox "Created fstab entry. you can generate the fstab of your disk by \"executing genfstab -U /mnt > /mnt/etc/fstab\" (i.e. if anything went wrong with the fstab entry)" 0 0
+}
+
+ConfirmMounts(){
+
+	local m_MountDisksArgs=$1[@]
+	local m_MountDisksTemp=("${!m_MountDisksArgs}")
+	unset m_MountDisksArgs
+
+	local MountPartitionsTextsArgs=$2[@]
+	local MountPartitionsTextsTemp=("${!MountPartitionsTextsArgs}")
+	unset MountPartitionsTextsArgs
+
+	local MountTexts=()
+
+	for i in ${m_MountDisksTemp[@]}
+	do
+		MountTexts+=("$i\n\n")
+	done
+
 	# mount for EFI
 	# mount for linux fs
 	# mount for swap
 	# mount for home
 
-	genfstab "/mnt/" > "/mnt/etc/fstab" ;;
-	dialog --msgbox "Created fstab entry. you can generate the fstab of your disk by \"executing genfstab -U /mnt > /mnt/etc/fstab\" (i.e. if anythin went wrong with the fstab entry)" 0 0
-}
 
-ConfirmMounts(){
-
-	MountTextsTemp=$1[@]
-	MountTexts=("${!MountTextsTemp}")
-	unset MountTextsTemp
 
 	# 0 - ok
 	# 1 - back
 	dialog --yes-label "OK" --no-label "Back" --title "partition mount confirmation" --yesno "\nPartition-----Size-----------Filesystem----------Format----MountPoint\n${MountTexts[*]}" 20 75
+	exit
 	return =$?
 }
 
@@ -1503,11 +1518,11 @@ MountViewPartitions(){
 			esac
 		fi
 		unset DiskPartSize DiskPartLabel DiskPartFsType DiskPartFsFormat DiskPartName DiskPartSizeTemp DiskPartFsTypeTemp
-		SelectedPartitions+=("${partition[@]}")
+		# SelectedPartitions+=("${partition[@]}")
 	done
 
 
-	set -xEt
+	set -xEeTtBo emacs
 	total_parts=$((${#linux_fs_parts[@]}+${#linux_swap_parts[@]}+${#linux_home_parts[@]}+${#linux_user_home_parts[@]}+${#efi_parts[@]}))
 
 	local diskhave=($(TempArrayWithAmpersandHasHaveTexts ${#Disks[@]}))
@@ -1593,8 +1608,9 @@ MountViewPartitions(){
 				;;
 		esac
 	fi
-	set +xEt
-	dialog --msgbox "Selected partitions ${SelectedPartitions[*]}" 0 0
+	# set +xEeTtB +o emacs
+	set +xEeTtB -o
+	# dialog --msgbox "Selected partitions ${SelectedPartitions[*]}" 0 0
 }
 
 
@@ -1621,27 +1637,32 @@ InstallArch(){
 		done
 		unset packages_temp
 
-		: '
-		pacstrap /mnt "${packages[@]}" | GuageMeter "Installing Arch Base system packages" 1
-		# pacstrap /mnt "${packages[@]}"
-		case $? in
-		case ${PIPESTATUS[0]} in
-			0)
-				dialog --msgbox "Installed Arch Base system" 0 0
-				;;
-			*)
-				dialog --msgbox "Failed to install Arch Base system. Exiting the Installer" 0 0
-				exit
-				;;
-		esac
-		'
+		# pacstrap /mnt "${packages[@]}" | GuageMeter "Installing Arch Base system packages" 1
+		# # pacstrap /mnt "${packages[@]}"
+		# case $? in
+		# case ${PIPESTATUS[0]} in
+		# 	0)
+		# 		bootloaderid="$(dialog --inputbox "Bootloader ID - Input Any Text" 0 0 3>&1 1>&2 2>&3)"
+		# 		grub-install -v --boot-directory="/mnt/boot" --bootloader-id "$bootloaderid" --efi-directory="/mnt/boot" --recheck --removable --target x86_efi-efi
+		# 		echo "grub-install -v --boot-directory=\"/mnt/boot\" --bootloader-id \"$bootloaderid\" --efi-directory=\"/mnt/boot\" --recheck --removable --target x86_efi-efi"
+		# 		case $? in
+		# 			0) dialog --msgbox "Grub successfully installed" 0 0;MainMenu "Install Arch *" ;;
+		# 			1) dialog --msgbox "could not install grub-bootloader. you execute \'grub-install --help | less\' on one tty and run \'grub-install <options>\' on another tty. \n\nDO NOT USE THE \'--force\' option.You can open tty's by pressing ctrl+alt+<F1>-<F6> with each function key corresponding to their tty id\n\n Go back to the Main Menu or exit to the tty?" ;;
+		# 		esac
+		# 		dialog --msgbox "Installed Arch Base system" 0 0
+		# 		;;
+		# 	*)
+		# 		dialog --msgbox "Failed to install Arch Base system. Exiting the Installer" 0 0
+		# 		exit
+		# 		;;
+		# esac
 		packages=()
 
 		cpu_vendor=$(cat /proc/cpuinfo | grep vendor | uniq | awk '{print $3}')
 
 		local intel_gpu=()
 		local intel_gpu_temp=(libva-intel-driver lib32-{libva-intel-driver,vulkan-intel} vulkan-intel intel-graphics-compiler)
-		for i in "${packages_temp[@]}"
+		for i in ${packages_temp[@]}
 		do
 			intel_gpu+=("$i")
 		done
@@ -1650,7 +1671,7 @@ InstallArch(){
 
 		local nvidia_gpu=()
 		local nvidia_gpu_temp=(ffnvcodec-headers libvdpau opencl-nvidia xf86-video-nouveau lib32-{libvdpau,nvidia-utils,opencl-nvidia} nvidia-{dkms,lts,prime,settings,utils})
-		for i in "${packages_temp[@]}"
+		for i in ${packages_temp[@]}
 		do
 			nvidia_gpu+=("$i")
 		done
@@ -1674,6 +1695,7 @@ InstallArch(){
 			packages+=("intel-undervolt")
 			packages+=("throttled")
 			packages+=("xf86-video-intel")
+			packages+=("${intel_gpu[@]}")
 		fi
 
 		local terminaleditorslist=()
@@ -1691,6 +1713,7 @@ InstallArch(){
 			0)
 				unset terminaleditorslist
 				if [[ -n "${editors[@]}" ]]
+				then
 					packages="${packages[@]} ${editors[@]}"
 				elif [[ -z "${editors[@]}" ]]
 				then
@@ -1722,19 +1745,6 @@ InstallArch(){
 			*) dialog --msgbox "failed to install Extra Linux packages" ;;
 		esac
 		'
-
-		case $? in
-			0)
-				bootloaderid="$(dialog --inputbox "Bootloader ID - Input Any Text" 0 0 3>&1 1>&2 2>&3)"
-				# grub-install -v --boot-directory="/mnt/boot" --bootloader-id "$bootloaderid" --efi-directory="/mnt/boot" --recheck --removable --target x86_efi-efi
-				echo "grub-install -v --boot-directory=\"/mnt/boot\" --bootloader-id \"$bootloaderid\" --efi-directory=\"/mnt/boot\" --recheck --removable --target x86_efi-efi"
-				case $? in
-					0) dialog --msgbox "Grub successfully installed" 0 0;MainMenu "Install Arch *" ;;
-					1) dialog --msgbox "could not install grub-bootloader. you execute \'grub-install --help | less\' on one tty and run \'grub-install <options>\' on another tty. \n\nDO NOT USE THE \'--force\' option.You can open tty's by pressing ctrl+alt+<F1>-<F6> with each function key corresponding to their tty id\n\n Go back to the Main Menu or exit to the tty?" ;;
-				esac
-				;;
-			1) dialog --msgbox "could not install Arch." 0 0 ;;
-		esac
 	fi
 }
 
