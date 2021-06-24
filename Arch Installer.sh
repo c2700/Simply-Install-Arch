@@ -136,11 +136,6 @@ IsArrayEmpty(){
 
 
 
-
-
-
-
-
 # Network Mgmnt
 
 iw_reconnect(){
@@ -621,11 +616,7 @@ add_users(){
 BashPromptPreview(){
 	# $1 - bash prompt
 	clear
-	mv /root/.bashrc /root/.bashrc.bak &>/dev/null
-	cp -rfv bashrc/$1 /root/.bashrc &>/dev/null
-	bash
-	rm -rfv /root/.bashrc &>/dev/null
-	mv /root/.bashrc.bak /root/.bashrc &>/dev/null
+	bash --rcfile "$PWD/shell rc/bash/$1"
 }
 
 SetPrompt(){
@@ -656,55 +647,56 @@ SetBashPrompt(){
 	$1="${bashrc_opts[0]}"
 	bashrc=$(dialog --ok-label "set bashrc" --default-item "$1" --extra-button --extra-label "preview" --cancel-label "back" --menu "bashrc selection menu\n\nselected menuitem will be saved as \".bashrc\" in the home directory" 0 0 0 "${bashrc_opts[@]}" 3>&1 1>&2 2>&3)
 
-	if [[ $? -eq 3 ]]
-	then
-		dialog --msgbox "you will enter a subshell. execute \"exit\" to exit to the installer" 0 0
-		case $bashrc in
-			'default')
-				BashPromptPreview default_bashrc
-				SetBashPrompt "deafult"
-				;;
+	case $? in
+		0)
+			case $bashrc in
+				'default')
+					SetPrompt default_bashrc
+					SetBashPrompt "deafult"
+					;;
 
-			'modded parrot')
-				BashPromptPreview modded_parrot_bashrc
-				SetBashPrompt "modded parrot"
-				;;
+				'modded parrot')
+					SetPrompt modded_parrot_bashrc
+					SetBashPrompt "modded parrot"
+					;;
 
-			'parrot')
-				BashPromptPreview parrot_bashrc
-				SetBashPrompt "parrot"
-				;;
+				'parrot')
+					SetPrompt parrot_bashrc
+					SetBashPrompt "parrot"
+					;;
 
-			'pop OS')
-				BashPromptPreview bashrc_pop
-				SetBashPrompt "pop OS"
-				;;
-		esac
+				'pop OS')
+					SetPrompt bashrc_pop
+					SetBashPrompt "pop OS"
+					;;
+			esac
+			;;
+		1) ConfHost "Set Bash Prompt" ;;
+		3)
+			dialog --msgbox "you will enter a subshell. execute \"exit\" to exit to the installer" 0 0
+			case $bashrc in
+				'default')
+					BashPromptPreview default_bashrc
+					SetBashPrompt "deafult"
+					;;
 
-	elif [[ $? -eq 0 ]]
-	then
-		case $bashrc in
-			'default')
-				SetPrompt default_bashrc
-				SetBashPrompt "deafult"
-				;;
+				'modded parrot')
+					BashPromptPreview modded_parrot_bashrc
+					SetBashPrompt "modded parrot"
+					;;
 
-			'modded parrot')
-				SetPrompt modded_parrot_bashrc
-				SetBashPrompt "modded parrot"
-				;;
+				'parrot')
+					BashPromptPreview parrot_bashrc
+					SetBashPrompt "parrot"
+					;;
 
-			'parrot')
-				SetPrompt parrot_bashrc
-				SetBashPrompt "parrot"
-				;;
-
-			'pop OS')
-				SetPrompt bashrc_pop
-				SetBashPrompt "pop OS"
-				;;
-		esac
-	fi
+				'pop OS')
+					BashPromptPreview bashrc_pop
+					SetBashPrompt "pop OS"
+					;;
+			esac
+			;;
+	esac
 }
 
 SetRootPassword(){
@@ -730,62 +722,63 @@ SetRootPassword(){
 
 ConfHost(){
 	# $1 - menu option item
-	# if [[ -z $1 ]]
 
-    # need to give a different condition to reassure mnt. pt.
-	# if [[ -z $2 ]]
-	# then
-	# 	dialog "mount the partitions" 0 0
-	# 	MainMenu "Configure Host +"
-	# fi
-	# HostOpt=()
-
-	HostOpt=("set hostname *" "set your computer name")
-	HostOpt+=("set Locale *" "set your computer language")
-	HostOpt+=("set timezone" "configure which timezone you are in")
-	HostOpt+=("add users **" "add users")
-	HostOpt+=("root password *" "set root password")
-	HostOpt+=("Install UI" "Install Desktop Environment or Window Manager")
-	HostOpt+=("Set Bash Prompt" "File that's used to tell how the terminal prompt should look like")
-	$1="${HostOpt[0]}"
-	opt=$(dialog --cancel-label "BACK" --default-item "${1}" --menu "Host Configuration Menu" 0 0 0 "${HostOpt[@]}" 3>&1 1>&2 2>&3)
-	if [[ $? -eq 1 ]]
-	then
-		MainMenu "Configure Host +"
-	fi
-	case $opt in
-		"set hostname *")
-			SetHostName
-			ConfHost "set hostname *"
+	mountpoint /mnt &>/dev/null
+	case $? in
+		0)
+			HostOpt=("set hostname *" "set your computer name")
+			HostOpt+=("set Locale *" "set your computer language")
+			HostOpt+=("set timezone" "configure which timezone you are in")
+			HostOpt+=("add users **" "add users")
+			HostOpt+=("root password *" "set root password")
+			HostOpt+=("Install UI" "Install Desktop Environment or Window Manager")
+			HostOpt+=("Set Bash Prompt" "File that's used to tell how the terminal prompt should look like")
+			$1="${HostOpt[0]}"
+			opt=$(dialog --cancel-label "BACK" --default-item "${1}" --menu "Host Configuration Menu" 0 0 0 "${HostOpt[@]}" 3>&1 1>&2 2>&3)
+			case $? in
+				0)
+					case $opt in
+						"set hostname *")
+							SetHostName
+							ConfHost "set hostname *"
+							;;
+						"set Locale *")
+							SetLocale
+							ConfHost "set Locale *"
+							;;
+						"set timezone")
+							SetTz
+							ConfHost "set timezone"
+							;;
+						"add users **")
+							add_users
+							ConfHost "add users **"
+							;;
+						# "set root password")
+						"root password *")
+							dialog --msgbox "you won't see the characters as you type" 0 0
+							SetRootPassword && ConfHost "set root password"
+							;;
+						"Install UI")
+							Install_UI "Window Manager"
+							ConfHost "Install UI"
+							;;
+						"Set Bash Prompt")
+							SetBashPrompt
+							ConfHost "Set Bash Prompt"
+							;;
+						*)
+							dialog --msgbox "sike" 0 0
+							ConfHost "root password *"
+							;;
+					esac
+					;;
+				1) MainMenu "Configure Host +" ;;
+			esac
 			;;
-		"set Locale *")
-			SetLocale
-			ConfHost "set Locale *"
-			;;
-		"set timezone")
-			SetTz
-			ConfHost "set timezone"
-			;;
-		"add users **")
-			add_users
-			ConfHost "add users **"
-			;;
-		# "set root password")
-		"root password *")
-			dialog --msgbox "you won't see the characters as you type" 0 0
-			SetRootPassword && ConfHost "set root password"
-			;;
-		"Install UI")
-			Install_UI "Window Manager"
-			ConfHost "Install UI"
-			;;
-		"Set Bash Prompt")
-			SetBashPrompt
-			ConfHost "Set Bash Prompt"
-			;;
-		*)
-			dialog --msgbox "sike" 0 0
-			ConfHost "root password *"
+		1) 
+			dialog --msgbox "cannot configure host without a linux root partition" 0 0
+			MainMenu "Configure Host +"
 			;;
 	esac
 }
@@ -821,13 +814,20 @@ DiskListTemp(){
 
 
 DiskPartInfoTemp(){
-
 	if [[ -z $1 ]]
 	then
-		lsblk -nlo name,size,parttypename,partlabel | grep -ie '[a,s]d[a-z][0-9]|\.\|\linux filesystem\|vfat\|efi\|swap\|linux*home' | sed -E 's/\s{13}/  /g'
-
+		lsblk -nlo name,size,partlabel,parttypename | grep -ie '[has]d[a-z][0-9]\|linux filesystem\|efi\|swap\|linux.*home' | sed -E 's/\s{13}/  /g' | grep -iv 'microsoft\|Windows'
 	else
-	    lsblk /dev/"$1" -nlo name,size,parttypename,partlabel | grep -ie '[a,s]d[a-z][0-9]|\.\|\linux filesystem\|ext4\|fat32\|vfat\|efi\|swap\|linux*home' | sed -E 's/\s{13}/  /g'
+		lsblk /dev/"$1" -nlo name,size,partlabel,parttypename | grep -ie '[has]d[a-z][0-9]\|linux filesystem\|efi\|swap\|linux.*home\|Windows recovery environment' | grep -i 'Microsoft Basic data\|Microsoft reserved\|' | sed -E 's/\s{13}/  /g' | grep -iv 'microsoft\|Windows'
+	fi
+}
+
+DiskPartTypeName(){
+	if [[ -z $1 ]]
+	then
+		lsblk -nlo name,size,parttypename | grep -ie '[has]d[a-z][0-9]\|linux filesystem\|efi\|swap\|linux.*home' | sed -E 's/\s{13}/  /g' | grep -iv 'microsoft\|Windows\|Basic data partition'
+	else
+		lsblk /dev/"$1" -nlo name,size,parttypename | grep -ie '[has]d[a-z][0-9]\|linux filesystem\|efi\|swap\|linux.*home\|Windows recovery environment' | grep -i 'Microsoft Basic data\|Microsoft reserved\|' | sed -E 's/\s{13}/  /g' | grep -iv 'microsoft\|Windows\|Basic data partition'
 	fi
 }
 
@@ -838,10 +838,16 @@ CheckEditMount(){
 	unset m_DisksArgs
 
 	local PREVIOUS_FUNC_EXIT_CODE=$2
-	# case $2 in
+
+	local m_NoPartsDisks=(${m_Disks[@]})
+	m_NoPartsDisks=($(DisksWithoutPartitions m_NoPartsDisks))
+
+	local m_DiskParts=(${m_Disks[@]})
+	m_DiskParts=($(DisksWithPartitions m_DiskParts))
+
 	case $PREVIOUS_FUNC_EXIT_CODE in
+		0) MountViewPartitions m_Disks ;;
 		1)
-			local m_NoPartsDisks=($(DisksWithoutPartitions m_Disks))
 			local m_NoPartsDisksTemp=("${m_NoPartsDisks[@]}")
 			m_NoPartsDisksTemp=($(TempArrayWithAmpersand m_NoPartsDisksTemp))
 			local diskhave=($(TempArrayWithAmpersandHasHaveTexts ${#m_NoPartsDisks[@]}))
@@ -850,10 +856,8 @@ CheckEditMount(){
 			m_DisksTemp=($(TempArrayWithAmpersand m_Disks))
 			local diskhave0=($(TempArrayWithAmpersandHasHaveTexts ${#m_Disks[@]}))
 
-			local m_PartTableDisks=(${m_Disks[@]})
-			m_PartTableDisks=($(DiscardFromArray m_PartTableDisks m_NoPartsDisks))
-			local m_PartTableDisksTemp=($(TempArrayWithAmpersand m_PartTableDisks))
-			local diskhave12=($(TempArrayWithAmpersandHasHaveTexts ${#m_PartTableDisks[@]}))
+			local m_DiskPartsTemp=($(TempArrayWithAmpersand m_DiskParts))
+			local diskhave12=($(TempArrayWithAmpersandHasHaveTexts ${#m_DiskParts[@]}))
 
 			if [[ "${m_NoPartsDisks[@]}" == "${m_Disks[@]}" ]]
 			then
@@ -865,43 +869,35 @@ CheckEditMount(){
 						DisksWithoutPartitionsPresent m_Disks
 						local DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE=$?
 						case $? in
-							0)
-								MountViewPartitions m_Disks
-								;;
-							1)
-								CheckEditMount m_Disks DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE
-								;;
+							0) MountViewPartitions m_Disks ;;
+							1) CheckEditMount m_Disks $DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE ;;
 						esac
 						;;
 				esac
 
 			elif [[ "${m_NoPartsDisks[@]}" != "${m_Disks[@]}" ]]
 			then
-				dialog --ok-label "Back" --cancel-label "Edit" --extra-button --extra-label "Discard ${diskhave12[0]}" --yesno "${diskhave[0]} ${m_NoPartsDisksTemp[*]} have not been edited. Edit ${diskhave[0]} ${m_NoPartsDisksTemp[*]}, go back to the Disk Selection Menu or Discard ${diskhave[0]} ${m_NoPartsDisksTemp[*]} and use ${diskhave12[0]} ${m_PartTableDisks[*]}?" 0 0
+				dialog --ok-label "Back" --cancel-label "Edit" --extra-button --extra-label "Discard ${diskhave[0]}" --yesno "${diskhave[0]} ${m_NoPartsDisksTemp[*]} have not been edited. Edit ${diskhave[0]} ${m_NoPartsDisksTemp[*]}, go back to the Disk Selection Menu or Discard ${diskhave[0]} ${m_NoPartsDisksTemp[*]} and use ${diskhave12[0]} ${m_DiskParts[*]}?" 0 0
 				case $? in
 					0) PartitionDisk ;;
 					1)
-						EditDisk m_Disks
+						EditDisk m_NoPartsDisks
 						DisksWithoutPartitionsPresent m_Disks
 						local DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE=$?
-						case $? in
-							0)
-								MountViewPartitions m_Disks
-								;;
-							1)
-								CheckEditMount m_Disks DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE
-								;;
+						case $DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE in
+							0) MountViewPartitions m_Disks ;;
+							1) CheckEditMount m_Disks $DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE ;;
 						esac
 						;;
 					3)
 						m_Disks=($(DiscardFromArray m_Disks m_NoPartsDisks))
-						dialog --msgbox "Discarded ${diskhave0[0]}. Using ${diskhave[0]} ${m_Disks[@]}" 0 0
+						dialog --msgbox "Discarded ${diskhave0[0]}. Using ${diskhave[0]} ${m_Disks[*]}" 0 0
 						MountViewPartitions m_Disks
 						;;
 				esac
 			fi
 			;;
-		0) MountViewPartitions m_Disks ;;
+		
 	esac
 }
 
@@ -962,11 +958,11 @@ DisksWithoutPartitionsPresent(){
 	local Disks=("${!DisksArgs}")
 	unset DisksArgs
 
-	m_NoPartsDisks=""
-	for i in {Disks[@]}
+	local m_NoPartsDisks=""
+	for i in ${Disks[@]}
 	do
-		local m_check=($(DiskPartInfoTemp | awk '{ print $1 }'))
-		if [[ -n ${m_check[@]} ]]
+		local m_check=($(DiskPartInfoTemp "$i" | awk '{ print $1 }'))
+		if [[ -z "${m_check[@]}" ]]
 		then
 			m_NoPartsDisks="$i"
 			break
@@ -975,9 +971,10 @@ DisksWithoutPartitionsPresent(){
 
 	if [[ -n "$m_NoPartsDisks" ]]
 	then
+		# echo "30 $m_NoPartsDisks" 3>&1 1>&2 2>&3
 		unset m_NoPartsDisks
 		return 1
-	elif [[ -z ${m_NoPartsDisks[@]} ]]
+	elif [[ -z "$m_NoPartsDisks" ]]
 	then
 		unset m_NoPartsDisks
 		return 0
@@ -993,7 +990,7 @@ DisksWithoutPartitions(){
 	for i in ${Disks[@]}
 	do
 		local m_check=($(DiskPartInfoTemp "$i" | awk '{ print $1 }'))
-		if [[ -n ${m_check[@]} ]]
+		if [[ -z ${m_check[@]} ]]
 		then
 			m_NoPartsDisks+=("$i")
 		fi
@@ -1003,9 +1000,29 @@ DisksWithoutPartitions(){
 }
 
 
+DisksWithPartitions(){
+	local DisksArgs=$1[@]
+	local Disks=("${!DisksArgs}")
+	unset DisksArgs
+
+	local m_PartsDisks=()
+	for i in ${Disks[@]}
+	do
+		local m_check=($(DiskPartInfoTemp "$i" | awk '{ print $1 }'))
+		if [[ -n ${m_check[@]} ]]
+		then
+			m_PartsDisks+=("$i")
+		fi
+		unset m_check
+	done
+	echo "${m_PartsDisks[@]}"
+}
+
+
 EditDisk(){
 	local disksArgs=$1[@]
-	local m_Disks=("${!disksArgs}")
+	# local m_Disks=("${!disksArgs}")
+	local m_Disks=(${!disksArgs})
 	unset disksArgs
 
 	# WritePartitionTable m_Disks
@@ -1096,61 +1113,66 @@ WritePartitionTable(){
 
 PartitionDisk(){
 	# 3>&1 1>&2 2>&3
-	DiskList=($(DiskListTemp | awk '{print $1}'))
-	DiskSize=($(DiskListTemp | awk '{print $2}'))
-	DiskPartTable=($(DiskListTemp | awk '{print $3}'))
-	DiskVendor=($(DiskListTemp | awk '{print $4}'))
-	DiskModelTemp=($(DiskListTemp | awk '{ for(i=5;i<=NF;i++){ if (i == 5){ print i" "$i } else if(i > 5){ print $i } } }'))
+	local DiskList=($(DiskListTemp | awk '{print $1}'))
+	declare -A DiskSize
+	declare -A DiskPartTable
+	declare -A DiskVendor
+	declare -A DiskModelTemp
+	declare -A DiskName
 
-	DiskListInfo=()
-	DiskName=()
-	DiskModel=()
+	local DiskListInfo=()
 
-	DiskModelString=""
-
-	for i in "${DiskModelTemp[@]}"
+	for i in ${DiskList[@]}
 	do
-		if [[ "$i" =~ ^[5]$ ]] && [[ "$DiskModelString" == "" ]]
-		then
-			continue
-		elif [[ "$i" =~ ^[5]$ ]] && [[ -n "$DiskModelString" ]]
-		then
-			DiskModel+=("$DiskModelString")
-			DiskModelString=""
-		elif [[ ! ("$i" =~ ^[5]$) ]]
-		then
-			DiskModelString+="$i"
-		fi
-
-		if [[ "$i" == "${DiskModelTemp[-1]}" ]] && [[ ! "$i" =~ ^[5]$ ]] && [[ "$i" =~ ^[a-zA-Z0-9]* ]] && [[ -z "$DiskModelString" ]]
-		then
-			continue
-		elif [[ "$i" == "${DiskModelTemp[-1]}" ]] && [[ ! "$i" =~ ^[5]$ ]] && [[ "$i" =~ ^[a-zA-Z0-9]* ]] && [[ -n "$DiskModelString" ]]
-		then
-			DiskModel+=("$DiskModelString")
-		fi
+		DiskSize["$i"]="$(DiskListTemp "$i" | awk '{ print $2 }')"
+		DiskPartTable["$i"]="$(DiskListTemp "$i" | awk '{ print $3 }')"
+		DiskVendor["$i"]="$(DiskListTemp "$i" | awk '{ print $4 }')"
+		DiskModelTemp["$i"]="$(DiskListTemp "$i" | awk '{ print $5 }')"
 	done
 
-	for (( i = 0; i < ${#DiskList[@]}; i++ ))
+
+	local DiskModelString=""
+	for i in ${DiskList[@]}
 	do
-		DiskName+=("${DiskVendor[$i]} ${DiskModel[$i]}")
+		DiskModelString="${DiskVendor[$i]} ${DiskModelTemp[$i]}"
+		DiskName[$i]+="$DiskModelString"
+		DiskModelString=""
 	done
 
-	for (( i = 0; i < ${#DiskList[@]}; i++ ))
+	for i in ${DiskList[@]}
 	do
 		if [[ -z ${DiskPartTable[$i]} ]] && [[ -z ${DiskSize[$i]} ]] && [[ -z ${DiskName[$i]} ]]
 		then
             continue
         else
-            DiskListInfo+=("${DiskList[$i]}")
+            DiskListInfo+=("$i")
 			DiskListInfo+=("${DiskPartTable[$i]} | ${DiskSize[$i]} | ${DiskName[$i]}")
 			DiskListInfo+=(0)
 		fi
 	done
 
-	# Disks=($(dialog --scrollbar --cancel-label "Back" --column-separator "|" --title "Disk Selection Menu" --checklist "" 0 0 0 "${DiskListInfo[@]}" 3>&1 1>&2 2>&3))
 	Disks=($(dialog --scrollbar --cancel-label "Back" --column-separator "|" --checklist "Disk Selection Menu" 0 0 0 "${DiskListInfo[@]}" 3>&1 1>&2 2>&3))
-	case $? in
+	DISKS_EXIT_CODE=$?
+
+	if [[ ${#Disks[@]} -eq 1 ]]
+	then
+	    # local DiskPartsCheck=("$(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $1 }')")
+	    local DiskPartsCheck=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $1 }'))
+	    # echo "${DiskPartsCheck[@]}"
+	    if [[ ${#DiskPartsCheck[@]} -eq 1 ]]
+	    then
+	    	local m_DisksTemp=("${Disks[@]}")
+	    	m_DisksTemp=($(TempArrayWithAmpersand Disks))
+	    	local diskshave=($(TempArrayWithAmpersandHasHaveTexts ${#Disks[@]}))
+	    	dialog --yes-label "Back" --no-label "Edit" --yesno "A minimum of two partitions are required to install the linux system. 3 partitions if you plan on using swap. Edit the ${diskshave[0]} ${m_DisksTemp[*]} or go back to the Disks Selection Menu" 0 0
+	    	case $? in
+	    		0) PartitionDisk ;;
+	    		1) EditDisk Disks ;;
+	    	esac
+	    fi
+	fi
+
+	case $DISKS_EXIT_CODE in
 		1) MainMenu ;;
 		0)
 			if [[ -z "${Disks[@]}" ]]
@@ -1228,9 +1250,8 @@ PartitionDisk(){
 						# case $DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE in
 						DisksWithoutPartitionsPresent Disks
 						DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE=$?
-						# case $? in
 						case $DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE in
-							0) CheckEditMount Disks DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE ;;
+							0) CheckEditMount Disks $DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE ;;
 							1) MountViewPartitions Disks ;;
 						esac
 						unset DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE
@@ -1266,56 +1287,38 @@ MountViewPartitions(){
 
 	# $1 - Disks
 
-	DisksArgs=$1[@]
-	Disks=("${!DisksArgs}")
+	local DisksArgs=$1[@]
+	local Disks=("${!DisksArgs}")
 	unset DisksArgs
 
 
-	DiskPartNameTemp=()
-	DiskPartSizeTemp=()
-	SelectedPartitionsTemp=()
-	DiskPartLabelTemp=()
-	DiskPartFsTypeTemp=()
-	DiskPartListInfo=()
-	DiskPartName=()
-	DiskPartFsFormat=()
-	DiskPartFsType=()
-	DiskPartTypeLabel=()
-	DiskPartLabel=()
-	SelectedPartitionsMountedText=("")
-	MountPoints=()
-	MountBlockDev=()
-	partitions=()
+	local Disks=($(IFS="";sort <<<${Disks[@]}))
 
-	NoPartDisks=()
-
-	fat32_efi_parts=()
-	linux_fs_ext4_parts=()
-	home_parts=()
-	swap_parts=()
-
-	fat32_efi_part_count=0
-	linux_fs_ext4_part_count=0
-	home_part_count=0
-	swap_part_count=0
+	local DisksTemp=("${Disks[@]}")
+	local DisksTemp=($(TempArrayWithAmpersand DisksTemp))
+	local NoPartDisks=("${Disks[@]}")
+	local NoPartDisks=($(DisksWithoutPartitions NoPartDisks))
 
 
-	Disks=($(IFS="";sort <<<${Disks[@]}))
+	local efi_parts
+	local linux_fs_parts
+	local linux_swap_parts
+	local linux_home_parts
+	local linux_user_home_parts
 
-	DisksTemp=("${Disks[@]}")
-	DisksTemp=($(TempArrayWithAmpersand DisksTemp))
-	disk=""
-	DisksTempSize=${Disks[@]}
-	NoPartDisks=()
-	for (( i = 0; i < ${#DisksTempSize[@]}; i++ ))
-	do
-		DiskPartName=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $1 }'))
-		if [[ -z "${DiskPartName[$a]}" ]]
-		then
-			NoPartDisks+=("${DiskPartName[$a]}")
-		fi
-	done
-	unset disk
+	# local DiskPartSizeTemp=()
+	# local DiskPartFsTypeTemp=()
+	# # local DiskPartFsFormatTemp=()
+	declare -A SelectedPartitions
+
+	# local DiskPartName=()
+	# local DiskPartListInfo=()
+	# local SelectedPartitions=()
+
+	# declare -A DiskPartSize
+	# declare -A DiskPartLabel
+	# declare -A DiskPartFsType
+	# declare -A DiskPartFsFormat
 
 	if [[ -n "${NoPartDisks[@]}" ]]
 	then
@@ -1326,267 +1329,262 @@ MountViewPartitions(){
 		case $? in
 			0) EditDisk NoPartDisks ;;
 			1)
-				DisksTempSize=${#Disks[@]}
 				Disks=($(DiscardFromArray Disks NoPartDisks))
 				dialog --msgbox "Discarded ${diskhave[0]} ${NoPartDisksTemp[0]}. using ${diskhave[0]} ${Disks[*]}" 0 0
 				;;
 		esac
-		unset NoPartDisksTemp
-		unset diskhave
+		unset NoPartDisksTemp diskhave NoPartDisks
 	fi
-	unset DisksTempSize
-	unset NoPartDisks
 
 	# for a in "${Disks[@]}"
 	for (( a = 0; a < ${#Disks[@]}; a++))
 	do
-		# echo "$a - ${Disks[$a]}"
-		# echo "$a"
-		# continue
-		# DiskPartName=($(DiskPartInfoTemp "$a" | awk '{ print $1 }'))
-		# DiskPartSizeTemp=($(DiskPartInfoTemp "$a" | awk '{ print $2 }'))
-		# DiskPartFsTypeTemp=($(DiskPartInfoTemp "$a" | awk '{ print $3" "$4" 1" }'))
-		# DiskPartLabelTemp=($(DiskPartInfoTemp "$a" | awk '{ for(i=5;i<=NF;i++){ if (i == 5){ print i" "$i } else if(i > 5){ print $i } } }'))
+		local DiskPartName=($(DiskPartInfoTemp "${Disks[$i]}" | awk '{ print $1 }'))
+		local DiskPartSizeTemp=($(DiskPartInfoTemp "${Disks[$i]}" | awk '{ print $2}'))
+		local DiskPartFsTypeTemp=($(DiskPartTypeName "${Disks[$i]}" | awk '{ $1=$2=NULL; gsub("^\\s*",""); for(i=1;i<=NF;i++){ if(i == NF){ print $i" "i} else { print $i } } }'))
 
-	    # DiskPartNameTemp=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $1 }'))
-	    DiskPartName=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $1 }'))
-		DiskPartSizeTemp=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $2 }'))
-	    DiskPartFsTypeTemp=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $3" "$4" 1" }'))
-		DiskPartLabelTemp=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ for(i=5;i<=NF;i++){ if (i == 5){ print i" "$i } else if(i > 5){ print $i } } }'))
-		if [[ -z ${DiskPartSizeTemp[@]} ]] && [[ -z ${DiskPartFsTypeTemp[@]} ]] && [[ -z ${DiskPartLabelTemp[@]} ]] && [[ -z ${DiskPartName[@]} ]]
+		declare -A DiskPartSize
+		declare -A DiskPartLabel
+		declare -A DiskPartFsType
+		declare -A DiskPartFsFormat
+
+		if [[ -z ${DiskPartSizeTemp[@]} ]] && [[ -z ${DiskPartFsTypeTemp[@]} ]] && [[ -z ${DiskPartName[@]} ]]
 	    then
 	        continue
-	    elif [[ -n ${DiskPartSizeTemp[@]} ]] && [[ -n ${DiskPartFsTypeTemp[@]} ]] && [[ -n ${DiskPartLabelTemp[@]} ]] && [[ -n ${DiskPartName[@]} ]]
+	    elif [[ -n ${DiskPartSizeTemp[@]} ]] && [[ -n ${DiskPartFsTypeTemp[@]} ]] && [[ -n ${DiskPartName[@]} ]]
     	then
-	    	DiskPartFsTypeString=""
-	    	for aa in "${DiskPartFsTypeTemp[@]}"
-	    	do
-	    		if [[ "$aa" =~ [1] ]]
-	    		then
-    				DiskPartFsType+=("$(echo "$DiskPartFsTypeString" | sed 's/\s$//g')")
-	    			DiskPartFsTypeString=""
-    			elif [[ "aa" =~ [a-zA-Z] ]]
-				then
-	    			DiskPartFsTypeString+="$aa "
-	    		fi
-	    	done
-	    	unset DiskPartFsTypeString
-	    	# DiskPartFsType=(${DiskPartFsType[@]/\s$/})
-	    	# echo ${DiskPartFsType[@]}
+			DiskPartName=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $1 }'))
+			# DiskPartSizeTemp=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $2 }'))
+			# DiskPartLabelTemp=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $1=$2=NULL;gsub("^\\s+","");print $0 }'))
 
-	        # for (( b=0; b < ${#DiskPartNameTemp[@]}; b++ ))
-	        for (( b=0; b < ${#DiskPartName[@]}; b++ ))
-	        do
-				LabelStrings=""
-				for (( c = 0; c < ${#DiskPartLabelTemp[@]}; c++ ))
-				do
-					if [[ "${DiskPartLabelTemp[$c]}" =~ [a-zA-Z] ]]
+			#for partition size
+			for i in ${DiskPartName[@]}
+			do
+				DiskPartSize["$i"]="$(lsblk /dev/"$i" -nlo size | sed 's/^\s*//g')"
+			done
+
+			#for partition label
+			for i in ${DiskPartName[@]}
+			do
+				local m_label="$(lsblk /dev/"$i" -nlo partlabel | sed 's/^\s*//g')"
+				if [[ -n "$m_label" ]]
+				then
+					DiskPartLabel["$i"]="$m_label"
+				elif [[ -z "$m_label" ]]
+				then
+					DiskPartLabel["$i"]="(No Label)"
+				fi
+			done
+
+			# for partition fstype name
+			for i in ${DiskPartName[@]}
+			do
+				DiskPartFsType["$i"]="$(lsblk /dev/"$i" -nlo parttypename | sed 's/^\s*//g')"
+			done
+
+
+			# to form an array of partition for the checkbox
+			local DiskPartListInfo
+			for i in ${DiskPartName[@]}
+			do
+				local partinfo="${DiskPartSize[$i]} | ${DiskPartFsType[$i]} | ${DiskPartLabel[$i]}"
+				DiskPartListInfo+=("$i")
+				DiskPartListInfo+=("$partinfo")
+				DiskPartListInfo+=(0)
+				unset partinfo
+			done
+			unset DiskPartName DiskPartFsTypeTemp DiskPartSize DiskPartLabel DiskPartFsType
+
+			# link to keep associative arrays in order -> https://stackoverflow.com/questions/29161323/how-to-keep-associative-array-order#29161460
+
+			local m_DiskVendor="$(lsblk "/dev/${Disks[$a]}" -dnlo vendor | sed 's/\s*$//g')"
+			local m_DiskModel="$(lsblk "/dev/${Disks[$a]}" -dnlo model)"
+			local m_DiskSize="$(lsblk "/dev/${Disks[$a]}" -dnlo size | sed 's/G/ GB/g;s/M/ MB/g;s/T/ TB/')"
+			local m_DiskNameString="$m_DiskVendor $m_DiskModel"
+			unet m_DiskVendor m_DiskModel
+
+			local DisksSize=$((${#Disks[@]}-1))
+			partition=($(dialog --cancel-label "Back" --column-separator "|" --title "Partition Mount Menu" --extra-button --extra-label "Mount" --checklist "Partitions in /dev/${Disks[$a]} ($m_DiskNameString - $m_DiskSize) \n\ncheckbox items format:\nPartition--size--(filesystem type)--(partition label)" 0 0 0 "${DiskPartListInfo[@]}" 3>&1 1>&2 2>&3))
+			PARTITION_EXIT_CODE=$?
+			for g in ${partition[@]}
+			do
+				local fstype="$(lsblk "/dev/$g" -nlo parttypename)"
+				if [[ "$fstype" ==  "EFI System" ]]
+				then
+					efi_parts+=("$g")
+				elif [[ "$fstype" ==  "Linux filesystem" ]]
+				then
+					linux_fs_parts+=("$g")
+				elif [[ "$fstype" ==  "Linux swap" ]]
+				then
+					linux_swap_parts+=("$g")
+				elif [[ "$fstype" ==  "Linux home" ]]
+				then
+					linux_home_parts+=("$g")
+				elif [[ "$fstype" ==  "Linux user's home" ]]
+				then
+					linux_user_home_parts+=("$g")
+				fi
+				unset fstype
+			done
+
+			# case $? in
+			case $PARTITION_EXIT_CODE in
+				0)
+					# local SelectedPartitionsTemp+=("${partition[@]}")
+					# if [[ -z "${SelectedPartitionsTemp[@]}" ]] && [[ -z "${partition[@]}" ]]
+					if [[ -z "${partition[@]}" ]]
 					then
-						LabelStrings+="${DiskPartLabelTemp[$c]} "
-					elif [[ "${DiskPartLabelTemp[$c]}" =~ [5] ]]
+						unset DisksSize
+						# DiscardDisks=("${Disks[@]}")
+						DiscardDisks=("${Disks[@]:$a}")
+					# elif [[ -z "${SelectedPartitionsTemp[@]}" ]] && [[ -n "${partition[@]}" ]]
+					elif [[ ! -z ${partition[@]} ]]
 					then
-						if [[ "$LabelStrings" != "" ]]
+						if  [[ $a -lt $DisksSize ]]
 						then
-							# DiskPartLabel+=("$LabelStrings")
-							DiskPartLabel+=("$(echo "$LabelStrings" | sed 's/\s$//g')")
-							LabelStrings=""
-						elif [[ "$LabelStrings" == "" ]]
-						then
-							continue
+							unset DisksSize
+							a=$((a+1))
+							DiscardDisks=("${Disks[@]:$a}")
+							break
 						fi
 					fi
-					if [[ "${DiskPartLabelTemp[$c]}" == "${DiskPartLabelTemp[-1]}" ]]
+
+					if [[ ${#DiscardDisks[@]} -eq 1 ]] && [[ "${DiscardDisks[@]}" == "${Disks[@]}" ]]
 					then
-						# DiskPartLabel+=("$LabelStrings")
-						DiskPartLabel+=("$(echo "$LabelStrings" | sed 's/\s$//g')")
-						LabelStrings=""
-					fi
-				done
-
-				unset LabelStrings
-            	DiskPartInfo="${DiskPartSizeTemp[$b]} | ${DiskPartFsType[$b]} | ${DiskPartLabel[$b]}"
-				DiskPartListInfo+=("${DiskPartName[$b]}" "$DiskPartInfo" 0)
-				# DiskPartListInfo+=("${DiskPartNameTemp[$b]}" "$DiskPartInfo" 0)
-				# DiskPartLabel=()
-	        done
-
-			partition=($(dialog --cancel-label "Back" --column-separator "|" --title "Partition Mount Menu" --extra-button --extra-label "OK" --ok-label "Mount" --checklist "Partitions in /dev/${Disks[$a]}" 0 0 0 "${DiskPartListInfo[@]}" 3>&1 1>&2 2>&3))
-			# 0 - ok
-			# 1 - back
-			# 3 - mount
-
-			case $? in
-				0)
-					SelectedPartitionsTemp+=("${partition[@]}")
-					for (( c = 0; c < ${#SelectedPartitionsTemp[@]}; c++ ))
-					do
-						for (( d = 0; d < ${#DiskPartName[@]}; d++ ))
-						do
-							if [[ "${SelectedPartitionsTemp[$c]}" == "${DiskPartName[$d]}" ]]
-							then
-								if [[ "${DiskPartFsType[$d]}" == "Linux filesystem" ]]
-								then
-									linux_fs_ext4_parts+=("${DiskPartFsType[$c]}")
-									((linux_fs_ext4_part_count+=1))
-								elif [[ "${DiskPartFsType[$d]}" == "Linux swap" ]]
-								then
-									swap_parts+=("${DiskPartFsType[$c]}")
-									((swap_part_count+=1))
-								elif [[ "${DiskPartFsType[$d]}" == "EFI System" ]]
-								then
-									fat32_efi_parts+=("${DiskPartFsType[$c]}")
-									((fat32_efi_part_count+=1))
-								fi
-							fi
-						done
-					done
-					DiskPartListInfo=()
-					DiskPartFsType=()
-					;;
-
-				1)	PartitionDisk ;;
-
-				3)
-					disk=""
-					SelectedPartitionsTemp+=("${partition[@]}")
-					if [[ -z "${SelectedPartitionsTemp[@]}" ]] && [[ -z "${partition[@]}" ]]
-					then
-						DiscardDisks=("${Disks[@]:$a}")
-					elif [[ -z "${SelectedPartitionsTemp[@]}" ]] && [[ -n "${partition[@]}" ]]
-					then
-						a=$((a+1))
-						DiscardDisks=("${Disks[@]:$a}")
-					fi
-
-					if [[ ${#DiscardDisks[@]} -eq 1 ]] && [[ ${#Disks[@]} -eq 1 ]]
-					then
-						dialog --yes-label "OK" --no-label "Back" --yesno "No Disk/Partiton selected for insallation. Please Select a Disk and few Partitions" 0 0
+						dialog --msgbox "No Disk/Partiton selected for insallation. Please Select a Disk and few Partitions" 0 0
 						unset DiscardDisks
 						PartitionDisk
-					elif [[ ${#DiscardDisks[@]} -eq 1 ]] && [[ ${#Disks[@]} -gt 1 ]]
+					elif [[ ${#DiscardDisks[@]} -eq 1 ]] && [[ "${DiscardDisks[@]}" != "${Disks[@]}" ]]
 					then
-						disk="disk"
-						dialog --yes-label "OK" --no-label "Back" --yesno "Discarding $disk ${DiscardDisks[*]}" 0 0
-						unset DiscardDisks
+						local diskhave=($(TempArrayWithAmpersandHasHaveTexts ${#DiscardDisks[@]}))
+						local m_DiscardDisksTemp=(${DiscardDisks[@]})
+						m_DiscardDisksTemp=($(TempArrayWithAmpersand m_DiscardDisksTemp))
+						dialog --yes-label "OK" --no-label "Back" --yesno "Discarding $diskhave[0] ${m_DiscardDisksTemp[*]}" 0 0
+						unset DiscardDisks m_DiscardDisksTemp diskhave
 						break
-					# elif [[ ${#DiscardDisks[@]} -eq ${#Disks[@]} ]]
-					elif [[ "${DiscardDisks[@]}" == "${Disks[@]}" ]]
-					then
-						dialog --msgbox "Discarding all selected Disks. Please Select a Disk from the Disk Selection Menu" 0 0
-						unset DiscardDisks
-						PartitionDisk
-					elif [[ ${#DiscardDisks[@]} -gt 1 ]] && [[ ${#DiscardDisks[@]} -ne ${#Disks} ]]
-					then
-						DiscardDisksTemp=($(TempArrayWithAmpersand DiscardDisks))
-						dialog --yes-label "OK" --no-label "Back" --yesno "Discarding $disk ${DiscardDisksTemp[*]}" 0 0
-						unset DiscardDisksTemp
-						break
-					# elif [[ ${#DiscardDisks[@]} -gt 1 ]] && [[ ${#DiscardDisks[@]} -eq ${#Disks[@]} ]]
 					elif [[ ${#DiscardDisks[@]} -gt 1 ]] && [[ "${DiscardDisks[@]}" == "${Disks[@]}" ]]
 					then
+						unset DiscardDisks
 						dialog --yes-label "Select Disk" --no-label "Select Partition" --yesno "No disk or partition selected for installation. Select Disks or Select Partitions from already Selected Disks?\n\nSelected Disks: ${Disks[*]}" 0 0
 						case $? in
 							0) PartitionDisk ;;
 							1) MountViewPartitions Disks ;;
 						esac
+					elif [[ ${#DiscardDisks[@]} -gt 1 ]] && [[ "${DiscardDisks[@]}" != "${Disks}" ]]
+					then
+						local diskhave=($(TempArrayWithAmpersandHasHaveTexts ${#DiscardDisks[@]}))
+						local m_DiscardDisksTemp=(${DiscardDisks[@]})
+						m_DiscardDisksTemp=($(TempArrayWithAmpersand m_DiscardDisksTemp))
+						dialog --yes-label "OK" --no-label "Back" --yesno "Discarding $diskhave[0] ${m_DiscardDisksTemp[*]}" 0 0
+						unset DiscardDisks m_DiscardDisksTemp diskhave
+						break
 					fi
+					;;
+				1) PartitionDisk ;;
+
+				3)
+					SelectedPartitions+=("${partition[@]}")
+					DiskPartListInfo=()
+					DiskPartFsType=()
 					;;
 			esac
 		fi
-		DiskPartListInfo=()
-		DiskPartSizeTemp=()
-		DiskPartFsType=()
-		DiskPartLabel=()
+		unset DiskPartSize DiskPartLabel DiskPartFsType DiskPartFsFormat DiskPartName DiskPartSizeTemp DiskPartFsTypeTemp
+		SelectedPartitions+=("${partition[@]}")
 	done
 
-	# total_parts=${#fat32_efi_parts[@]}+${#linux_fs_ext4_parts[@]}+${#swap_parts[@]}+${#home_parts[@]}
-	total_parts=$(($fat32_efi_part_count+$linux_fs_ext4_part_count+$swap_part_count+$home_part_count))
 
+	set -xEt
+	read -p "continue?" -n1
+	total_parts=$((${#linux_fs_parts[@]}+${#linux_swap_parts[@]}+${#linux_home_parts[@]}+${#linux_user_home_parts[@]}+${#efi_parts[@]}))
 
-	if [[ $swap_part_count -eq 0 ]] && [[ $home_part_count -eq 0 ]] && [[ $fat32_efi_part_count -gt 1 ]] && [[ $linux_fs_ext4_part_count -gt 1 ]] && [[ $swap_part_count -eq 1 ]]
+	local diskhave=($(TempArrayWithAmpersandHasHaveTexts ${#Disks[@]}))
+	local m_DisksTemp=("${Disks[@]}")
+	m_DisksTemp=($(TempArrayWithAmpersand m_DisksTemp))
+
+	if [[ $total_parts -eq 0 ]]
 	then
-		dialog --yesno "no home or swap partitions detected. Continue without them?" 0 0
+		read -p "problem?" -n1
+		local diskhave=($(TempArrayWithAmpersandHasHaveTexts ${#Disks[@]}))
+		local m_DisksTemp=($(TempArrayWithAmpersand ${Disks[@]}))
+		m_DisksTemp=($(TempArrayWithAmpersand m_DisksTemp))
+		dialog --yes-label "Disk Menu" --no-label "Partition Menu" --yesno "No partitions selected for linux installation. Go Back to the Disk selection menu or select from selected ${diskhave[0]} ${m_DisksTemp[*]}" 0 0
 		case $? in
 			0)
-				# ConfirmMounts SelectedPartitionsMountedText
-				echo "ConfirmMounts SelectedPartitionsMountedText"
-				case $? in
-					# 0) MountPartitions SelectedPartitionsMountedText MountPoints MountBlockDev ;;
-					0) echo "MountPartitions" ;;
-					1) PartitionDisk ;;
-				esac
+				unset diskhave m_DisksTemp SelectedPartitions
+				PartitionDisk
 				;;
-			1) MountViewPartitions Disks ;;
+			1)
+				unset diskhave m_DisksTemp SelectedPartitions
+				MountViewPartitions Disks
+				;;
 		esac
-
-	# elif ( [[ ${#fat32_efi_parts[@]} -gt 1 ]] && [[ ${#linux_fs_ext4_parts[@]} -gt 1 ]] ) || [[ $total_parts -gt 4 ]]
-	elif [[ $fat32_efi_part_count -gt 1 ]] && [[ $linux_fs_ext4_part_count -gt 1 ]]
+	elif [[ ${#linux_fs_parts[@]} -eq 0 ]]
 	then
-		dialog --msgbox "multiple essential linux partitions detected (boot and ext4). please select one partition for each filesystem" 0 0
+		dialog --msgbox "No Disk with Linux filesystem selected. please select one from the partitions of the selected ${diskhave[0]} ${m_DisksTemp[*]}" 0 0
+		unset diskhave m_DisksTemp SelectedPartitions
 		MountViewPartitions Disks
-	elif [[ $fat32_efi_part_count -gt 1 ]]
+	elif [[ ${linux_fs_parts[@]} -gt 1 ]]
 	then
-		dialog --msgbox "multiple boot partitions detected. please select one" 0 0
+		dialog --msgbox "Use one Linux filesystem partition. Using ${diskhave[0]} ${m_DisksTemp[*]}" 0 0
+		unset diskhave m_DisksTemp SelectedPartitions
 		MountViewPartitions Disks
-	elif [[ $linux_fs_ext4_part_count -gt 1 ]]
+	elif [[ ${#efi_parts[@]} -eq 0 ]]
 	then
-		dialog --msgbox "multiple linux filesystems detected. please select one" 0 0
+		dialog --msgbox "No EFI partition selected. Please Select one. (The EFI partition is basically where the kernel and the boot files reside)" 0 0
+		unset SelectedPartitions
 		MountViewPartitions Disks
-	elif [[ $total_parts -eq 0 ]]
+	elif [[ ${#efi_parts[@]} -gt 1 ]]
 	then
-		dialog --msgbox "no partitions selected. please select an EFI and a linux filesystem partition (mandatory). Select a few optional partitions as well (if needed or wanted but not necessary)" 0 0
-		local diskhave=($(TempArrayWithAmpersandHasHaveTexts ${#DisksTemp[@]}))
-		local DisksTemp=("${Disks[@]}")
-		DisksTemp=($(TempArrayWithAmpersand DisksTemp))
-		dialog --no-label "Continue" --yes-label "Disk Menu" --yesno "Using ${diskhave[0]} ${DisksTemp[*]}. Continue to use the ${diskhave[0]} or go back to the Disk Selection Menu?" 0 0
+		dialog --msgbox "Use not more than one EFI partition (This is basically where the kernel and the boot files reside)" 0 0
+		unset SelectedPartitions
+		MountViewPartitions Disks
+	elif [[ ${#efi_parts[@]} -eq 1 ]] && [[ ${#linux_fs_parts[@]} -eq 1 ]] && [[ ${#linux_swap_parts[@]} -eq 0 ]]
+	then
+		dialog --yes-label "Back" --no-label "continue" --yesno "No swap partition selected. Recommended to have a swap partition. Continue without a swap partition or Go Back to the partition mount menu to select a swap partition?" 0 0
 		case $? in
-			0) PartitionDisk ;;
-			1) MountViewPartitions Disks ;;
+			0)
+				unset SelectedPartitions
+				MountViewPartitions Disks
+				;;
 		esac
-		unset temp
-		unset DisksTemp
-	elif [[ $fat32_efi_part_count -eq 0 ]]
+	elif ([[ ${#linux_home_parts[@]} -eq 0 ]] || [[ ${#linux_user_home_parts[@]} -eq 0 ]]) && [[ ${#linux_swap_parts[@]} -ge 1 ]] && [[ ${#efi_parts[@]} -eq 1 ]] && [[ ${linux_fs_parts[@]} -eq 1 ]]
 	then
-		dialog --msgbox "no boot partition detected" 0 0
-		# DiskPartListInfo=()
-		PartitionDisk
-	elif [[ $linux_fs_ext4_part_count -eq 0 ]]
-	then
-		dialog --msgbox "no linux root system partition detected" 0 0
-		# DiskPartListInfo=()
-		PartitionDisk
-	elif [[ $swap_part_count -eq 0 ]]
-	then
-		dialog --yesno "no swap partition detected. Recommended to have one. continue without a swap partition?" 0 0
+		dialog --yes-label "Back" --no-label "continue" --yesno "No linux home or linux user's home partition selected. Continue without one of these partitions or Go Back to the partition mount menu to select a home partition?" 0 0
 		case $? in
-			0) echo "MountPartitions" ;;
-			# 0) ConfirmMounts SelectedPartitionsMountedText ;;
-			# 0) MountPartitions SelectedPartitionsMountedText MountPoints MountBlockDev ;;
-			1) MountViewPartitions Disks;;
+			0)
+				unset SelectedPartitions
+				MountViewPartitions Disks
+				;;
 		esac
-		# DiskPartListInfo=()
-
-	elif [[ $home_part_count -eq 0 ]]
+	elif [[ ${#efi_parts[@]} -gt 1 ]] && [[ ${#linux_fs_parts[@]} -gt 1 ]]
 	then
-		dialog --yesno "no home partition detected. continue without home partition?" 0 0
+		dialog --yes-label "Disk Menu" --no-label "Use Selected Disks" --yesno "Too many Linux essential partitions selected. Please select one linux filesystem and one EFI partition. The linux filesystem and one EFI partition are mandatory and the rest are optional though swap is a recommended optional. Go back to the Disk Selection Menu or Use the currently selected ${diskhave[0]} ${m_DisksTemp[*]}" 0 0
 		case $? in
-			0) echo "ConfirmMounts SelectedPartitionsMountedText" ;;
-			# 0) ConfirmMounts SelectedPartitionsMountedText ;;
-			1) PartitionDisk ;;
+			0) 
+				unset m_DisksTemp diskhave SelectedPartitions
+				PartitionDisk
+				;;
+			1)
+				unset m_DisksTemp diskhave SelectedPartitions
+				MountViewPartitions Disks
+				;;
 		esac
-	elif [[ $linux_fs_ext4_part_count -eq 0 ]] && [[ $fat32_efi_part_count -eq 0 ]]
+	elif [[ ${#efi_parts[@]} -eq 1 ]] && [[ ${#linux_fs_parts[@]} -eq 1 ]] && ( [[ ${#linux_home_parts[@]} -eq 0 ]] || [[ ${#linux_user_home_parts[@]} -eq 0 ]] ) && [[ ${#linux_swap_parts[@]} -eq 0 ]]
 	then
-		dialog --msgbox "no boot and system partitions detected. system cannot be installed." 0 0
-		# MountViewPartitions Disks
-		# DiskPartListInfo=()
-		PartitionDisk
-	elif [[ $home_part_count -eq 0 ]] && [[ $swap_part_count -eq 0 ]]
-	then
-		# 1 - no
-		# 0 - yes
-		dialog --msgbox "no boot and system partitions detected. system cannot be installed. Please Select Disks for linux installation from the Disk Menu" 0 0
-		PartitionDisk
+		dialog --yes-label "Back" --no-label "Continue" --yesno "No swap and linux home partitions selected. Continue without them or go back to the partition selection menu?" 0 0
+		case $? in
+			0)
+				unset SelectedPartitions
+				MountViewPartitions Disks
+				;;
+			*)
+				;;
+		esac
 	fi
+	set +xEt
+	dialog --msgbox "Selected partitions ${SelectedPartitions[*]}" 0 0
 }
 
 
