@@ -1496,7 +1496,6 @@ MountViewPartitions(){
 
 
 	set -xEt
-	read -p "continue?" -n1
 	total_parts=$((${#linux_fs_parts[@]}+${#linux_swap_parts[@]}+${#linux_home_parts[@]}+${#linux_user_home_parts[@]}+${#efi_parts[@]}))
 
 	local diskhave=($(TempArrayWithAmpersandHasHaveTexts ${#Disks[@]}))
@@ -1505,7 +1504,6 @@ MountViewPartitions(){
 
 	if [[ $total_parts -eq 0 ]]
 	then
-		read -p "problem?" -n1
 		local diskhave=($(TempArrayWithAmpersandHasHaveTexts ${#Disks[@]}))
 		local m_DisksTemp=($(TempArrayWithAmpersand ${Disks[@]}))
 		m_DisksTemp=($(TempArrayWithAmpersand m_DisksTemp))
