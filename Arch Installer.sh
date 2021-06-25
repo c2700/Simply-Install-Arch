@@ -321,7 +321,7 @@ Install_UI(){
 	ui_opts=()
 
 	ui_opts+=("Window Manager")
-	ui_opts+=("Just windows and statusbars (minimal).No Graphics composition like on Gnome")
+	ui_opts+=("Just windows, statusbars, dmenus (minimal).No Graphics composition like on Gnome")
 	ui_opts+=("Desktop Environment")
 	ui_opts+=("Gnome, KDE, cinnamon and stuff like that")
 
@@ -784,30 +784,37 @@ ConfHost(){
 }
 
 
-MountPartitions(){
-	local MountPartitionsTextsTemp=$1[@]
-	local MountPartitionsTexts=("${!MountPartitionsTextsTemp}")
-	unset MountPartitionsTextsTemp
-
-	# genfstab "/mnt/" > "/mnt/etc/fstab" ;;
-	dialog --msgbox "Created fstab entry. you can generate the fstab of your disk by \"executing genfstab -U /mnt > /mnt/etc/fstab\" (i.e. if anything went wrong with the fstab entry)" 0 0
-}
-
 ConfirmMounts(){
 
 	local m_MountDisksArgs=$1[@]
 	local m_MountDisksTemp=("${!m_MountDisksArgs}")
 	unset m_MountDisksArgs
 
-	local MountPartitionsTextsArgs=$2[@]
-	local MountPartitionsTextsTemp=("${!MountPartitionsTextsArgs}")
-	unset MountPartitionsTextsArgs
+	local m_MountPartitionsTextsArgs=$2[@]
+	local m_MountPartitionsTextsTemp=("${!m_MountPartitionsTextsArgs}")
+	unset m_MountPartitionsTextsArgs
 
+	local MountParts=()
 	local MountTexts=()
 
-	for i in ${m_MountDisksTemp[@]}
+	for i in ${m_MountPartitionsTextsTemp[@]}
 	do
-		MountTexts+=("$i\n\n")
+		MountParts+=("$/dev/i")
+	done
+
+
+	for i in ${m_MountPartitionsTextsTemp[@]}
+	do
+		if [[ "$i" == ${m_MountPartitionsTextsTemp[0]} ]]
+		then
+			MountTexts+=("  |-/dev/$i\n")
+		elif [[ "$i" == ${m_MountPartitionsTextsTemp[-1]} ]]
+		then
+			MountTexts+=(" \`-/dev/$i\n")
+		else
+			MountTexts+=(" |-/dev/$i\n")
+		fi
+
 	done
 
 	# mount for EFI
@@ -815,13 +822,17 @@ ConfirmMounts(){
 	# mount for swap
 	# mount for home
 
+	dialog --yes-label "OK" --no-label "Back" --title "partition mount confirmation" --yesno "\nPartition-----Size-----------Filesystem----------Format----MountPoint\n\n${MountTexts[*]}" 20 75
+	case $? in
+		0)
+			# make fs and mount the partitions
+			dialog --msgbox "formatted partitions with appropriate fs formats and mounted them" 0 0
+			# genfstab "/mnt/" > "/mnt/etc/fstab" ;;
+			dialog --msgbox "Created fstab entry. you can generate the fstab of your disk by executing \"genfstab -U /mnt > /mnt/etc/fstab\" (if anything went wrong with the fstab entry i.e.)" 0 0
+			;;
+		1) PartitionDisk ;;
+	esac
 
-
-	# 0 - ok
-	# 1 - back
-	dialog --yes-label "OK" --no-label "Back" --title "partition mount confirmation" --yesno "\nPartition-----Size-----------Filesystem----------Format----MountPoint\n${MountTexts[*]}" 20 75
-	exit
-	return =$?
 }
 
 
@@ -1336,11 +1347,12 @@ MountViewPartitions(){
 	# local DiskPartSizeTemp=()
 	# local DiskPartFsTypeTemp=()
 	# # local DiskPartFsFormatTemp=()
-	declare -A SelectedPartitions
+	# declare -A SelectedPartitions
 
 	# local DiskPartName=()
 	# local DiskPartListInfo=()
-	# local SelectedPartitions=()
+	local SelectedPartitions=()
+	local DiscardDisks=()
 
 	# declare -A DiskPartSize
 	# declare -A DiskPartLabel
@@ -1411,7 +1423,7 @@ MountViewPartitions(){
 
 
 			# to form an array of partition for the checkbox
-			local DiskPartListInfo
+			local DiskPartListInfo=()
 			for i in ${DiskPartName[@]}
 			do
 				local partinfo="${DiskPartSize[$i]} | ${DiskPartFsType[$i]} | ${DiskPartLabel[$i]}"
@@ -1428,11 +1440,12 @@ MountViewPartitions(){
 			local m_DiskModel="$(lsblk "/dev/${Disks[$a]}" -dnlo model)"
 			local m_DiskSize="$(lsblk "/dev/${Disks[$a]}" -dnlo size | sed 's/G/ GB/g;s/M/ MB/g;s/T/ TB/')"
 			local m_DiskNameString="$m_DiskVendor $m_DiskModel"
-			unet m_DiskVendor m_DiskModel
+			unset m_DiskVendor m_DiskModel
 
 			local DisksSize=$((${#Disks[@]}-1))
 			partition=($(dialog --cancel-label "Back" --column-separator "|" --title "Partition Mount Menu" --extra-button --extra-label "Mount" --checklist "Partitions in /dev/${Disks[$a]} ($m_DiskNameString - $m_DiskSize) \n\ncheckbox items format:\nPartition--size--(filesystem type)--(partition label)" 0 0 0 "${DiskPartListInfo[@]}" 3>&1 1>&2 2>&3))
 			PARTITION_EXIT_CODE=$?
+			unset m_DiskSize m_DiskNameString
 			for g in ${partition[@]}
 			do
 				local fstype="$(lsblk "/dev/$g" -nlo parttypename)"
@@ -1468,7 +1481,9 @@ MountViewPartitions(){
 					# elif [[ -z "${SelectedPartitionsTemp[@]}" ]] && [[ -n "${partition[@]}" ]]
 					elif [[ ! -z ${partition[@]} ]]
 					then
-						if  [[ $a -lt $DisksSize ]]
+						SelectedPartitions+=("${partition[@]}")
+						# if  [[ $a -lt $DisksSize ]]
+						if [[ "${Disks[-1]}" != "${Disks[$a]}" ]]
 						then
 							unset DisksSize
 							a=$((a+1))
@@ -1487,7 +1502,7 @@ MountViewPartitions(){
 						local diskhave=($(TempArrayWithAmpersandHasHaveTexts ${#DiscardDisks[@]}))
 						local m_DiscardDisksTemp=(${DiscardDisks[@]})
 						m_DiscardDisksTemp=($(TempArrayWithAmpersand m_DiscardDisksTemp))
-						dialog --yes-label "OK" --no-label "Back" --yesno "Discarding $diskhave[0] ${m_DiscardDisksTemp[*]}" 0 0
+						dialog --yes-label "OK" --no-label "Back" --yesno "Discarding ${diskhave[0]} ${m_DiscardDisksTemp[*]}" 0 0
 						unset DiscardDisks m_DiscardDisksTemp diskhave
 						break
 					elif [[ ${#DiscardDisks[@]} -gt 1 ]] && [[ "${DiscardDisks[@]}" == "${Disks[@]}" ]]
@@ -1503,7 +1518,7 @@ MountViewPartitions(){
 						local diskhave=($(TempArrayWithAmpersandHasHaveTexts ${#DiscardDisks[@]}))
 						local m_DiscardDisksTemp=(${DiscardDisks[@]})
 						m_DiscardDisksTemp=($(TempArrayWithAmpersand m_DiscardDisksTemp))
-						dialog --yes-label "OK" --no-label "Back" --yesno "Discarding $diskhave[0] ${m_DiscardDisksTemp[*]}" 0 0
+						dialog --yes-label "OK" --no-label "Back" --yesno "Discarding ${diskhave[0]} ${m_DiscardDisksTemp[*]}" 0 0
 						unset DiscardDisks m_DiscardDisksTemp diskhave
 						break
 					fi
@@ -1511,23 +1526,39 @@ MountViewPartitions(){
 				1) PartitionDisk ;;
 
 				3)
-					SelectedPartitions+=("${partition[@]}")
+					if [[ -z "${partition[@]}" ]]
+					then
+						unset DisksSize
+						DiscardDisks=("${Disks[$a]}")
+					# elif [[ -z "${SelectedPartitionsTemp[@]}" ]] && [[ -n "${partition[@]}" ]]
+					elif [[ -n ${partition[@]} ]]
+					then
+						# if  [[ $a -lt $DisksSize ]]
+						if [[ "${Disks[-1]}" != "${Disks[$a]}" ]]
+						then
+							SelectedPartitions+=("${partition[@]}")
+						elif [[ "${Disks[-1]}" == "${Disks[$a]}" ]]
+						then
+							SelectedPartitions+=("${partition[@]}")
+							break
+						fi
+					fi
 					DiskPartListInfo=()
 					DiskPartFsType=()
 					;;
 			esac
+
 		fi
 		unset DiskPartSize DiskPartLabel DiskPartFsType DiskPartFsFormat DiskPartName DiskPartSizeTemp DiskPartFsTypeTemp
-		# SelectedPartitions+=("${partition[@]}")
 	done
 
-
-	set -xEeTtBo emacs
 	total_parts=$((${#linux_fs_parts[@]}+${#linux_swap_parts[@]}+${#linux_home_parts[@]}+${#linux_user_home_parts[@]}+${#efi_parts[@]}))
 
 	local diskhave=($(TempArrayWithAmpersandHasHaveTexts ${#Disks[@]}))
 	local m_DisksTemp=("${Disks[@]}")
 	m_DisksTemp=($(TempArrayWithAmpersand m_DisksTemp))
+	Disks=($(DiscardFromArray Disks DiscardDisks))
+	unset DiscardDisks
 
 	if [[ $total_parts -eq 0 ]]
 	then
@@ -1545,26 +1576,31 @@ MountViewPartitions(){
 				MountViewPartitions Disks
 				;;
 		esac
-	elif [[ ${#linux_fs_parts[@]} -eq 0 ]]
+	elif ([[ ${#linux_home_parts[@]} -eq 0 ]] || [[ ${#linux_user_home_parts[@]} -eq 0 ]]) && [[ ${#linux_swap_parts[@]} -ge 1 ]] && [[ ${#efi_parts[@]} -eq 1 ]] && [[ ${#linux_fs_parts[@]} -eq 1 ]] && [[ $total_parts -ge 3 ]]
 	then
-		dialog --msgbox "No Disk with Linux filesystem selected. please select one from the partitions of the selected ${diskhave[0]} ${m_DisksTemp[*]}" 0 0
-		unset diskhave m_DisksTemp SelectedPartitions
-		MountViewPartitions Disks
-	elif [[ ${linux_fs_parts[@]} -gt 1 ]]
+		dialog --yes-label "Back" --no-label "continue" --yesno "No linux home or linux user's home partition selected. Continue without one of these partitions or Go Back to the partition mount menu to select a home partition?" 0 0
+		case $? in
+			0)
+				unset SelectedPartitions
+				MountViewPartitions Disks
+				;;
+			1)
+				echo "nice"
+				ConfirmMounts Disks SelectedPartitions
+				;;
+		esac
+	elif [[ ${#efi_parts[@]} -eq 1 ]] && [[ ${#linux_fs_parts[@]} -eq 1 ]] && ( [[ ${#linux_home_parts[@]} -eq 0 ]] || [[ ${#linux_user_home_parts[@]} -eq 0 ]] ) && [[ ${#linux_swap_parts[@]} -eq 0 ]]
 	then
-		dialog --msgbox "Use one Linux filesystem partition. Using ${diskhave[0]} ${m_DisksTemp[*]}" 0 0
-		unset diskhave m_DisksTemp SelectedPartitions
-		MountViewPartitions Disks
-	elif [[ ${#efi_parts[@]} -eq 0 ]]
-	then
-		dialog --msgbox "No EFI partition selected. Please Select one. (The EFI partition is basically where the kernel and the boot files reside)" 0 0
-		unset SelectedPartitions
-		MountViewPartitions Disks
-	elif [[ ${#efi_parts[@]} -gt 1 ]]
-	then
-		dialog --msgbox "Use not more than one EFI partition (This is basically where the kernel and the boot files reside)" 0 0
-		unset SelectedPartitions
-		MountViewPartitions Disks
+		dialog --yes-label "Back" --no-label "Continue" --yesno "No swap and linux home partitions selected. Continue without them or go back to the partition selection menu?" 0 0
+		case $? in
+			0)
+				unset SelectedPartitions
+				MountViewPartitions Disks
+				;;
+			1)
+				ConfirmMounts Disks SelectedPartitions
+				;;
+		esac
 	elif [[ ${#efi_parts[@]} -eq 1 ]] && [[ ${#linux_fs_parts[@]} -eq 1 ]] && [[ ${#linux_swap_parts[@]} -eq 0 ]]
 	then
 		dialog --yes-label "Back" --no-label "continue" --yesno "No swap partition selected. Recommended to have a swap partition. Continue without a swap partition or Go Back to the partition mount menu to select a swap partition?" 0 0
@@ -1573,14 +1609,8 @@ MountViewPartitions(){
 				unset SelectedPartitions
 				MountViewPartitions Disks
 				;;
-		esac
-	elif ([[ ${#linux_home_parts[@]} -eq 0 ]] || [[ ${#linux_user_home_parts[@]} -eq 0 ]]) && [[ ${#linux_swap_parts[@]} -ge 1 ]] && [[ ${#efi_parts[@]} -eq 1 ]] && [[ ${linux_fs_parts[@]} -eq 1 ]]
-	then
-		dialog --yes-label "Back" --no-label "continue" --yesno "No linux home or linux user's home partition selected. Continue without one of these partitions or Go Back to the partition mount menu to select a home partition?" 0 0
-		case $? in
-			0)
-				unset SelectedPartitions
-				MountViewPartitions Disks
+			1)
+				ConfirmMounts Disks SelectedPartitions
 				;;
 		esac
 	elif [[ ${#efi_parts[@]} -gt 1 ]] && [[ ${#linux_fs_parts[@]} -gt 1 ]]
@@ -1596,20 +1626,27 @@ MountViewPartitions(){
 				MountViewPartitions Disks
 				;;
 		esac
-	elif [[ ${#efi_parts[@]} -eq 1 ]] && [[ ${#linux_fs_parts[@]} -eq 1 ]] && ( [[ ${#linux_home_parts[@]} -eq 0 ]] || [[ ${#linux_user_home_parts[@]} -eq 0 ]] ) && [[ ${#linux_swap_parts[@]} -eq 0 ]]
+	elif [[ ${#linux_fs_parts[@]} -eq 0 ]]
 	then
-		dialog --yes-label "Back" --no-label "Continue" --yesno "No swap and linux home partitions selected. Continue without them or go back to the partition selection menu?" 0 0
-		case $? in
-			0)
-				unset SelectedPartitions
-				MountViewPartitions Disks
-				;;
-			*)
-				;;
-		esac
+		dialog --msgbox "No Disk with Linux filesystem selected. please select one from the partitions of the selected ${diskhave[0]} ${m_DisksTemp[*]}" 0 0
+		unset diskhave m_DisksTemp SelectedPartitions
+		MountViewPartitions Disks
+	elif [[ ${#linux_fs_parts[@]} -gt 1 ]]
+	then
+		dialog --msgbox "Use one Linux filesystem partition. Using ${diskhave[0]} ${m_DisksTemp[*]}" 0 0
+		unset diskhave m_DisksTemp SelectedPartitions
+		MountViewPartitions Disks
+	elif [[ ${#efi_parts[@]} -eq 0 ]]
+	then
+		dialog --msgbox "No EFI partition selected. Please Select one. (The EFI partition is basically where the kernel and the boot files reside)" 0 0
+		unset SelectedPartitions
+		MountViewPartitions Disks
+	elif [[ ${#efi_parts[@]} -gt 1 ]]
+	then
+		dialog --msgbox "Use not more than one EFI partition (This is basically where the kernel and the boot files reside)" 0 0
+		unset SelectedPartitions
+		MountViewPartitions Disks
 	fi
-	# set +xEeTtB +o emacs
-	set +xEeTtB -o
 	# dialog --msgbox "Selected partitions ${SelectedPartitions[*]}" 0 0
 }
 
