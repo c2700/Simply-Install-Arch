@@ -51,7 +51,6 @@ GuageMeter(){
 	# ) | dialog --gauge "${1}" 0 0 0
 }
 
-
 DiscardFromArray(){
 	# $1 - Array to unset from
 	# $2 - Reference Array
@@ -80,7 +79,6 @@ DiscardFromArray(){
 	echo "${UnsetArray[@]}"
 }
 
-
 TempArrayWithAmpersandHasHaveTexts(){
 	# $1 - Size of Temp Array
 	local TempArraySize=$1
@@ -96,7 +94,6 @@ TempArrayWithAmpersandHasHaveTexts(){
 	fi
 	echo "$disk $have"
 }
-
 
 TempArrayWithAmpersand(){
 
@@ -118,7 +115,6 @@ TempArrayWithAmpersand(){
 	echo "${TempArray[@]}"
 }
 
-
 IsArrayEmpty(){
 	local TempArrayArgs=$1[@]
 	local TempArray=("${!TempArrayArgs}")
@@ -137,7 +133,6 @@ IsArrayEmpty(){
 
 
 # Network Mgmnt
-
 iw_reconnect(){
 	# $1 - $?
 	# $2 - $wireless_dev
@@ -159,21 +154,21 @@ iw_reconnect(){
 			elif [[ $line == "n" ]]
 			then
 				dialog --yesno "use a different network manager?" 0 0
-				if [[ $? -eq 1 ]]
-				then
-					iwd_mngr
-				elif [[ $? -eq 0 ]]
-				then
-					ConfNet
-				fi
+				case $? in
+					0) iwd_mngr ;;
+					1) ConfNet ;;
+				esac
 			fi
 		done
 	fi
 }
 
 iwd_mngr(){
-	systemctl enable iwd
-	systemctl start iwd
+
+	systemctl enable --now iwd
+
+	# systemctl enable iwd
+	# systemctl start iwd
 
 	#select wireless card
 	wireless_devs=($(iwctl station list | grep -iv 'name\|devices\|\-' | awk '{print $1}'))
@@ -195,15 +190,17 @@ iwd_mngr(){
 	clear
 	iwctl station "$wireless_dev" get-networks | more && read -p "Enter Wireless network to connect to : " SSID
 	dialog --yesno "view wireless passphrase in plaintext as you enter?" 0 0
-	if [[ $? -eq 0 ]]
-	then
-		# read -p "$SSID password: " pass
-		iwctl --passphrase $pass station $wireless_dev connect $SSID
-		iw_reconnect $? $wireless_dev $SSID "$(read -p "$SSID password: ")"
-	else
-		iwctl station $wireless_dev connect $SSID
-		iw_reconnect $? $wireless_dev $SSID
-	fi
+	case $? in
+		0)
+			# read -p "$SSID password: " pass
+			iwctl --passphrase $pass station $wireless_dev connect $SSID
+			iw_reconnect $? $wireless_dev $SSID "$(read -p "$SSID password: ")"
+			;;
+		1)
+			iwctl station $wireless_dev connect $SSID
+			iw_reconnect $? $wireless_dev $SSID
+			;;
+	esac
 }
 
 
@@ -212,30 +209,33 @@ nm_mngr(){
 	systemctl start NetworkManager
 	nmcli networking on
 	nmcli radio wifi on
-	if [[ $? -eq 1 ]]
-	then
-		con_name=$(dialog --inputbox "set a name for this wired connection" 0 0 3>&1 1>&2 2>&3)
-		nmcli connection add con-name "$con_name" type ethernet autoconnect yes
-	else
-		nmcli device wifi rescan
-		clear
-		dialog --msgbox "press 'q' to exit the upcoming wifi list" 0 0
-		nmcli device wifi list && read -p "Enter SSID to connect to: " wifi_name
-		nmcli device wifi connect "$wifi_name" -a
-		if [[ $? -eq 1 ]]
-		then
-			# for (( rechonnect = "n"; rechonnect != "n" ;))
-			for (( rechonnect="n"; rechonnect == "y" ;))
-			do
+
+
+	case $? in
+		0)
+			nmcli device wifi rescan
+				clear
+				dialog --msgbox "press 'q' to exit the upcoming wifi list" 0 0
 				nmcli device wifi list && read -p "Enter SSID to connect to: " wifi_name
 				nmcli device wifi connect "$wifi_name" -a
-				read -p "rescan and connect to another ssid? [y/n]" rechonnect
-			done
-		fi
-	fi
+				case $? in
+					1)
+						# for (( reconnect = "n"; reconnect != "n" ;))
+						for (( reconnect="n"; reconnect == "y" ;))
+						do
+							nmcli device wifi list && read -p "Enter SSID to connect to: " wifi_name
+							nmcli device wifi connect "$wifi_name" -a
+							read -p "rescan and connect to another ssid? [y/n]" reconnect
+						done
+						;;
+				esac
+			;;
+		1)
+			con_name=$(dialog --inputbox "set a name for this wired connection" 0 0 3>&1 1>&2 2>&3)
+			nmcli connection add con-name "$con_name" type ethernet autoconnect yes
+			;;
+	esac
 }
-
-
 
 ConfNet(){
 	NMList=()
@@ -282,508 +282,39 @@ ConfNet(){
 
 	NM=$(dialog --cancel-label "BACK" --menu "Availble Network Managers" 0 0 0  "${NMList[@]}" 3>&1 1>&2 2>&3)
 
-	if [[ $? -eq 255 ]]
-	then
-		ConfNet
-	fi
-
-	case $NM in
-		"wifi-menu")
-			# "${NM}"
-			wifi-menu
-			;;
-		"networkmanager")
-			# nm_mngr
-			dialog --msgbox "networkmanager used" 0 0
-			MainMenu "Configure Network **"
-			;;
-		"iwd")
-			# iwd_mngr
-			dialog --msgbox "iwd used" 0 0
-			MainMenu "Configure Network **"
-			;;
-		*)
-			MainMenu "Configure Network **"
-			;;
-	esac
-}
-
-
-
-# UI
-Install_UI(){
-	# Install_UI
-	# ConfHost
-	# $1 - options in this function's menu
-
-	pkgs=""
-	wmopts=()
-	ui_opts=()
-
-	ui_opts+=("Window Manager")
-	ui_opts+=("Just windows, statusbars, dmenus (minimal).No Graphics composition like on Gnome")
-	ui_opts+=("Desktop Environment")
-	ui_opts+=("Gnome, KDE, cinnamon and stuff like that")
-
-	UI=$(dialog --cancel-label "BACK" --default-item "${1}" --menu "UI Menu" 0 0 0 "${ui_opts[@]}" 3>&1 1>&2 2>&3)
-	if [[ $? -eq 1 ]]
-	then
-		ConfHost "Install UI"
-	fi
-
-	wmopts+=("i3" "")
-	wmopts+=("bspwm" "")
-	wmopts+=("awesome" "")
-
-	deopts=()
-	deopts+=("KDE" "")
-	deopts+=("Gnome" "")
-	deopts+=("cinnamon" "")
-	deopts+=("deepin" "")
-	deopts+=("lxde" "")
-	deopts+=("lxqt" "")
-	deopts+=("mate" "")
-	deopts+=("Unity" "")
-
-	case $UI in
-		"Desktop Environment")
-			DE=$(dialog --cancel-label "BACK" --menu "Desktop Environment Menu" 0 0 0 "${deopts[@]}" 3>&1 1>&2 2>&3)
-			if [[ $? -eq 1 ]]
-			then
-				Install_UI "Desktop Environment"
-			fi
-			case $DE in
-				"KDE")
-					pkgs="$(pacman -Sg plasma kde-{applications,system,graphics,network,accessibility} kf{5,5-aids} | awk '{print $2}' | uniq)"
-					;;
-				"Gnome")
-					pkgs="gnome gnome-extra"
-					;;
-				"cinnamon")
-					pkgs="$(pacman -Ssq cinnamon)"
-					;;
-				"deepin")
-					pkgs="deepi{n,n-extra}"
-					;;
-				"lxde")
-					pkgs="lxd{e,e-gtk3}"
-					;;
-				"lxqt")
-					pkgs="lxqt"
-					;;
-				"mate")
-					pkgs="mat{e,e-extra}"
-					;;
-				*)
-					dialog --msgbox "no DE installed"
-					Install_UI "Desktop Environment"
-					;;
-			esac
-			;;
-		"Window Manager")
-			WM=$(dialog --cancel-label "BACK" --menu "Window Manager Menu" 0 0 0 "${wmopts[@]}"  3>&1 1>&2 2>&3)
-			if [[ $? -eq 1 ]]
-			then
-				Install_UI "Window Manager"
-			fi
-				case $WM in
-					"i3")
-						pkgs=$(pacman -Ssq i3 | grep -iv 'py\|7\|perl\|sway')
-						;;
-					"bspwm")
-						pkgs="bspwm"
-						;;
-					"awesome")
-						pkgs="awesom{e,e-terminal-fonts} vicious powerline "
-						;;
-					*)
-						dialog --msgbox "no window managers available"
-				esac
-			;;
-		*)
-			dialog --menu "SIKE" 0 0
-			;;
-	esac
-	dialog --msgbox "$pkgs" 0 0
-	# pacstrap /mnt $pkgs
-	ConfHost "Install UI"
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-SetTz(){
-	# $1 - default option
-	regions=()
-	regions_dir_temp=($(ls -d /usr/share/zoneinfo/* | grep -iv 'right\|posix\|\.[a-zA-Z0-9]*'))
-	regions_temp=($(ls /usr/share/zoneinfo/ | grep -iv 'right\|posix\|\.[a-zA-Z0-9]*'))
-
-	a=0
-	for b in "${regions_dir_temp[@]}"
-	do
-		if [[ -d "$b" ]]
-		then
-			regions+=("$b")
-			regions+=("${regions_temp[$a]}")
-		fi
-		((a+=1))
-	done
-
-	# unset regions_temp regions_dir_temp
-	region=$(dialog --cancel-label "Back" --no-tags --menu "select the continent you are in" 0 0 0 "${regions[@]}" 3>&1 1>&2 2>&3)
-	if [[ $? -eq 1 ]]
-	then
-		ConfHost "set timezone"
-	else
-		a=0
-		zones=()
-		zones_temp=($(ls $region))
-		zones_temp_dir=($(ls -d $region/*))
-
-		for b in "${zones_temp_dir[@]}"
-		do
-			if [[ -f "$b" ]] && [[ -r "$b" ]]
-			then
-				zones+=($b)
-				zones+=(${zones_temp[$a]})
-			fi
-			((a+=1))
-		done
-		zone=$(dialog --cancel-label "back" --no-tags --menu "select the region you are in" 0 0 0 "${zones[@]}" 3>&1 1>&2 2>&3)
-		if [[ $? -eq 1 ]]
-		then
-			SetTz
-		else
-			: '
-			ln -sf $zone /mnt/etc/localtime &>/dev/null
-			arch-chroot /mnt/ hwclock -wrv | dialog --programbox 0 0
-			if [[ ${PIPESTATUS[0]} -eq 0 ]]
-			then
-			'
-				dialog --msgbox "timezone is set ${zone}" 0 0
-			: '
-			elif [[ ${PIPESTATUS[0]} -eq 0 ]]
-			then
-				dialog --msgbox "timezone could not be set ${zone}" 0 0
-			fi
-			'
-		fi
-	fi
-}
-
-
-
-
-SetLocale(){
-
-	# user set locale
-
-	LOCALE=()
-	# cat "/mnt/etc/locale.gen" | grep -i '#\w' | sed 's/#//' > locales.txt
-	cat "/etc/locale.gen" | grep -i '#\w' | sed 's/#//' > locales.txt
-	# cat "/mnt/etc/locale.gen" | grep -i '#\w' | sed 's/#//' > locales.txt
-
-	dialog --msgbox "when you press a character and you don't see the character, just keep that charcter held until you see the cursor" 0 0
-
-	while read txt
-	do
-		LOCALE+=("$txt")
-		LOCALE+=("$txt")
-		LOCALE+=(OFF)
-	done < locales.txt
-
-	rm -rf locales.txt
-	# back - 1
-	# ok - 0
-	LocaleDialog=$(dialog --scrollbar --visit-items --cancel-label "BACK" --title "Locale Selection Menu" --buildlist "\nUse the space bar to move locale options between the panes and use the tab for moving in between spacess. If no locale is selected then the deafult UTF-8 and ISO-8859 versions of the US english locales will be set \n\n       disabled locales enabled locales" 0 0 0 "${LOCALE[@]}" 3>&1 1>&2 2>&3)
-
-	echo "${LocaleDialog[@]}" | sed 's/" "/"\n"/g;s/"//g' > locales.txt
-	while read txt
-	do
-		# arch-chroot /mnt sed -i s/"#$txt"/"$txt"/g /etc/locale.gen
-		# arch-chroot /mnt locale-gen
-		sed -i s/"#$txt"/"$txt"/g locale.gen
-		# awk '{print ARGV}'
-	done < locales.txt
-	# nicepl=("$(cat locales.txt)")
-	# echo -e "locales\n${nicepl[*]}" | sed 's/"\n"//g'
-	LocaleFormat=$(echo -e "\n\n${LocaleDialog[*]}\n" | sed 's/" "/"\n"/g')
-	# LocaleFormat=$(echo -e "\n\n${LocaleDialog[@]}\n" | sed 's/" "/"\n"/g')
-	dialog --msgbox "locales set:$LocaleFormat" 0 0
-	# locale-gen
-	# rm -rfv locales.txt &2>/dev/null
-
-
-	: '
-	$? - 2 - help
-	$? - 1 - cancel
-	$? - 0 - ok
-	'
-}
-
-
-
-SetHostName(){
-	hostname=$(dialog --inputbox "Set host name" 0 0 3>&1 1>&2 2>&3)
-	if [[ -z $hostname ]]
-	then
-		dialog --yesno "Default name 'arch' will be assigned as hostname. continue?" 0 0
-		case $? in
-			0) hostname="arch" ;;
-			1) SetHostName ;;
-		esac
-	fi
-	# arch-chroot /mnt echo "$hostname" > "/mnt/etc/hostname"
-	dialog --msgbox "set $hostname as hostname. You can change the hostname in the /etc/hostname file in the arch-chroot directory" 0 0
-	# arch-chroot /mnt echo -e "127.0.0.1\tlocalhost\n      ::1\tlocalhost" > "/mnt/etc/hostname"
-}
-
-SetPassword(){
-	NewPassword=$(dialog --passwordbox "set password for username $username" 0 0 3>&1 1>&2 2>&3)
-	if [[ $? -eq 1 ]]
-	then
-		# ConfHost "add users"
-		add_users
-	else
-		if [[ ${#NewPassword} -eq 0 ]]
-		# if [[ -z ${NewPassword} ]]
-		then
-			dialog --yesno "Accounts without passwords is as good as an inaccessible account (i.e. if the passwordless account is the only non-root account you have created). linux will prompt you for a password regardless of password state on an account/username.\nYou can login into the passwordless account by doing one, select few or all of the following\n1) logging in with an account that contains a password (if you have created one i.e.) and then logging in with the 'passwordless account' from the currently active account\n2) logging in as root and then loggin in with the 'passwordless account'.\n3) going to line 79 of /etc/sudoers and adding '<passwordless account name> ALL=(ALL) NOPASSWD: ALL'\n\nAll the above is as per my experience.\nProceed setting the passwordless account regardless?" 0 0
-			if [[ $? -eq 1 ]]
-			then
-				SetPassword
-			else
-				password=$NewPassword
-			fi
-		else
-			if [[ ${#NewPassword} -lt 8 ]] && [[ ${#NewPassword} -gt 0 ]]
-			then
-				dialog --msgbox "password need to be atleast 8 characters long" 0 0
-				SetPassword
-			elif [[ ${#NewPassword} -ge 8 ]]
-			then
-				ConfirmPassword=$(dialog --passwordbox "Confirm password for username $username" 0 0 3>&1 1>&2 2>&3)
-				if [[ $ConfirmPassword == $NewPassword ]]
-				then
-					password=$NewPassword
-				elif [[ "$ConfirmPassword" != "$NewPassword" ]]
-				then
-					dialog --msgbox "passwords do not match" 0 0
-					SetPassword
-				fi
-			fi
-		fi
-	fi
-}
-
-add_users(){
-	password=""
-	username=$(dialog --inputbox "Username" 0 0 3>&1 1>&2 2>&3)
-	if [[ $? -eq 1 ]]
-	then
-		ConfHost "add users **"
-	fi
-
-	if [[ ${#username} -eq 0 ]]
-	then
-		dialog --msgbox "username cannot be an empty string" 0 0
-		add_users
-	else
-		dialog --msgbox "you won't see the password characters as they are typed" 0 0
-		SetPassword
-	fi
-
-	# dialog --msgbox "created username ${username} and password ${password} is set" 0 0
-	dialog --msgbox "created username ${username} and password is set" 0 0
-	# arch-chroot /mnt useradd -m $username -G users -g power,wheel,storage &>/dev/null
-	# arch-chroot /mnt passwd $username &>/dev/null
-	# if [[ $? -eq 2 ]]
-	# then
-	# 	dialog --msgbox "user ${username} exists"
-	# 	add_users
-	# fi
-}
-
-BashPromptPreview(){
-	# $1 - bash prompt
-	clear
-	bash --rcfile "$PWD/shell rc/bash/$1"
-}
-
-SetPrompt(){
-	# $1 - bashrc file
-
-	Users=($(grep [1-9][0-9][0-9][0-9] /mnt/etc/passwd | grep -iv nobody | sed 's/\:/ \: /g' | awk '{print $1}'))
-	# cp -rfv bashrc/"$1" /mnt/home/$Users/.bashrc &>/dev/null
-	# cp -rfv bashrc/"$1" /mnt/home/$Users/.bashrc &>/dev/null
-	cp -rfv bashrc/"$1" /home/$Users/.bashrc &>/dev/null
-	dialog --msgbox "set $1 as the bash prompt" 0 0
-}
-
-SetBashPrompt(){
-	# $1 - "menu option item"
-
-	bashrc_opts=("default" "it's the same as you see on the live iso")
-	bashrc_opts+=("modded parrot" "my personalized version of the parrot OS bash prompt")
-	bashrc_opts+=("parrot" "bash prompt taken from parrot OS")
-	bashrc_opts+=("pop OS" "pop OS bash prompt")
-	# bashrc_opts+=()
-	Users=($(grep [1-9][0-9][0-9][0-9] /etc/passwd | grep -iv nobody | sed 's/\:/ \: /g' | awk '{print $1}'))
-
-	# exit code references
-	# 0 - ok
-	# 3 - preview
-	# 1 - back
-
-	$1="${bashrc_opts[0]}"
-	bashrc=$(dialog --ok-label "set bashrc" --default-item "$1" --extra-button --extra-label "preview" --cancel-label "back" --menu "bashrc selection menu\n\nselected menuitem will be saved as \".bashrc\" in the home directory" 0 0 0 "${bashrc_opts[@]}" 3>&1 1>&2 2>&3)
-
 	case $? in
 		0)
-			case $bashrc in
-				'default')
-					SetPrompt default_bashrc
-					SetBashPrompt "deafult"
+			case $NM in
+				"wifi-menu")
+					# "${NM}"
+					wifi-menu
 					;;
-
-				'modded parrot')
-					SetPrompt modded_parrot_bashrc
-					SetBashPrompt "modded parrot"
+				"networkmanager")
+					# nm_mngr
+					dialog --msgbox "networkmanager used" 0 0
+					MainMenu "Configure Network **"
 					;;
-
-				'parrot')
-					SetPrompt parrot_bashrc
-					SetBashPrompt "parrot"
-					;;
-
-				'pop OS')
-					SetPrompt bashrc_pop
-					SetBashPrompt "pop OS"
+				"iwd")
+					# iwd_mngr
+					dialog --msgbox "iwd used" 0 0
+					MainMenu "Configure Network **"
 					;;
 			esac
 			;;
-		1) ConfHost "Set Bash Prompt" ;;
-		3)
-			dialog --msgbox "you will enter a subshell. execute \"exit\" to exit to the installer" 0 0
-			case $bashrc in
-				'default')
-					BashPromptPreview default_bashrc
-					SetBashPrompt "deafult"
-					;;
-
-				'modded parrot')
-					BashPromptPreview modded_parrot_bashrc
-					SetBashPrompt "modded parrot"
-					;;
-
-				'parrot')
-					BashPromptPreview parrot_bashrc
-					SetBashPrompt "parrot"
-					;;
-
-				'pop OS')
-					BashPromptPreview bashrc_pop
-					SetBashPrompt "pop OS"
-					;;
-			esac
-			;;
-	esac
-}
-
-SetRootPassword(){
-	RootPassword=$(dialog --no-cancel --passwordbox "Enter root password. Default root password is 'password'. if default password is set please change the default root password post installation as it can be cracked through rainbow tables, dictionary or brute force attacks" 0 0 3>&1 1>&2 2>&3)
-	if [[ -z $RootPassword ]]
-	then
-		RootPassword="password"
-		# arch-chroot "echo $RootPassword;echo $RootPassword" | passwd &>/dev/null
-		dialog --msgbox "default root password 'password' is set " 0 0
-	else
-		ConirmRootPassword=$(dialog --passwordbox "confirm root password" 0 0 3>&1 1>&2 2>&3)
-		if [[ $RootPassword != $ConfirmPassword ]]
-		then
-			dialog --msgbox "root password does not match" 0 0
-			SetRootPassword
-		elif [[ $RootPassword == $ConfirmPassword ]]
-		then
-			dialog --msgbox "root password is set" 0 0
-			# arch-chroot "echo $RootPassword;echo $RootPassword" | passwd &>/dev/null
-		fi
-	fi
-}
-
-ConfHost(){
-	# $1 - menu option item
-
-	mountpoint /mnt &>/dev/null
-	case $? in
-		0)
-			HostOpt=("set hostname *" "set your computer name")
-			HostOpt+=("set Locale *" "set your computer language")
-			HostOpt+=("set timezone" "configure which timezone you are in")
-			HostOpt+=("add users **" "add users")
-			HostOpt+=("root password *" "set root password")
-			HostOpt+=("Install UI" "Install Desktop Environment or Window Manager")
-			HostOpt+=("Set Bash Prompt" "File that's used to tell how the terminal prompt should look like")
-			$1="${HostOpt[0]}"
-			opt=$(dialog --cancel-label "BACK" --default-item "${1}" --menu "Host Configuration Menu" 0 0 0 "${HostOpt[@]}" 3>&1 1>&2 2>&3)
-			case $? in
-				0)
-					case $opt in
-						"set hostname *")
-							SetHostName
-							ConfHost "set hostname *"
-							;;
-						"set Locale *")
-							SetLocale
-							ConfHost "set Locale *"
-							;;
-						"set timezone")
-							SetTz
-							ConfHost "set timezone"
-							;;
-						"add users **")
-							add_users
-							ConfHost "add users **"
-							;;
-						# "set root password")
-						"root password *")
-							dialog --msgbox "you won't see the characters as you type" 0 0
-							SetRootPassword && ConfHost "set root password"
-							;;
-						"Install UI")
-							Install_UI "Window Manager"
-							ConfHost "Install UI"
-							;;
-						"Set Bash Prompt")
-							SetBashPrompt
-							ConfHost "Set Bash Prompt"
-							;;
-						*)
-							dialog --msgbox "sike" 0 0
-							ConfHost "root password *"
-							;;
-					esac
-					;;
-				1) MainMenu "Configure Host +" ;;
-			esac
-			;;
-		1) 
-			dialog --msgbox "cannot configure host without a linux root partition" 0 0
-			MainMenu "Configure Host +"
-			;;
+		1) MainMenu "Configure Network **" ;;
+		255) ConfNet ;;
+		# 1|255) ConfNet ;;
+		# 1) ConfNet ;;
 	esac
 }
 
 
+
+
+
+######################################### Disk Editing, formatting and mounting ############################################
+
+# confirm and mount selected partitions
 ConfirmMounts(){
 
 	local m_MountDisksArgs=$1[@]
@@ -830,13 +361,15 @@ ConfirmMounts(){
 			# genfstab "/mnt/" > "/mnt/etc/fstab" ;;
 			dialog --msgbox "Created fstab entry. you can generate the fstab of your disk by executing \"genfstab -U /mnt > /mnt/etc/fstab\" (if anything went wrong with the fstab entry i.e.)" 0 0
 			;;
-		1) PartitionDisk ;;
+		1)
+			local diskhave=($(TempArrayWithAmpersandHasHaveTexts ${#m_MountDisksTemp[@]}))
+			dialog --yesno "Selected " 0 0
+			PartitionDisk
+			;;
 	esac
-
 }
 
-
-
+# Disk Info
 DiskListTemp(){
 	local Disk=$1
 	if [[ -n "$Disk" ]]
@@ -848,9 +381,7 @@ DiskListTemp(){
 	fi
 }
 
-
-
-
+# Partition Info
 DiskPartInfoTemp(){
 	if [[ -z $1 ]]
 	then
@@ -860,6 +391,7 @@ DiskPartInfoTemp(){
 	fi
 }
 
+# Partition Info (used for extracting partition label)
 DiskPartTypeName(){
 	if [[ -z $1 ]]
 	then
@@ -869,7 +401,7 @@ DiskPartTypeName(){
 	fi
 }
 
-
+# Check if disks have been edited, edit the array containing disks and then go to the partition viewer
 CheckEditMount(){
 	local m_DisksArgs=$1[@]
 	local m_Disks=${!m_DisksArgs}
@@ -939,10 +471,7 @@ CheckEditMount(){
 	esac
 }
 
-
-
-
-
+# check if disk has a partition table
 IsPartitionTablePresent(){
 	local m_disksArgs="$1"
 	# local m_disksArgs=$1[@]
@@ -959,6 +488,7 @@ IsPartitionTablePresent(){
 	fi
 }
 
+# Return disks without a partition table
 DisksWithoutPartitionTable(){
 	local m_disksArgs=$1[@]
 	local m_Disks=(${!m_disksArgs})
@@ -991,6 +521,7 @@ DisksWithoutPartitionTable(){
 	echo "${m_NoPartTableDisks[@]}"
 }
 
+# check if disk has partitions
 DisksWithoutPartitionsPresent(){
 	local DisksArgs=$1[@]
 	local Disks=("${!DisksArgs}")
@@ -1019,6 +550,7 @@ DisksWithoutPartitionsPresent(){
 	fi
 }
 
+# Return disks not containing partitions
 DisksWithoutPartitions(){
 	local DisksArgs=$1[@]
 	local Disks=("${!DisksArgs}")
@@ -1037,7 +569,7 @@ DisksWithoutPartitions(){
 	echo "${m_NoPartsDisks[@]}"
 }
 
-
+# Return disks containing partitions
 DisksWithPartitions(){
 	local DisksArgs=$1[@]
 	local Disks=("${!DisksArgs}")
@@ -1056,7 +588,6 @@ DisksWithPartitions(){
 	echo "${m_PartsDisks[@]}"
 }
 
-
 EditDisk(){
 	local disksArgs=$1[@]
 	# local m_Disks=("${!disksArgs}")
@@ -1070,12 +601,10 @@ EditDisk(){
 	for i in "gdisk" "cgdisk" "fdisk" "sfdisk" "cfdisk" "parted"
 	do
 		which "$i" &>/dev/null
-		if [[ $? -eq 0 ]]
-		then
-			diskeditors+=("$i" "$i")
-		else
-			continue
-		fi
+		case $? in
+			0) diskeditors+=("$i" "$i") ;;
+			1) continue ;;
+		esac
 	done
 
 	local disksTemp=("${m_Disks[@]}")
@@ -1119,8 +648,6 @@ EditDisk(){
 	esac
 	unset diskeditors
 }
-
-
 
 WritePartitionTable(){
 	local PartTableTemp=()
@@ -1308,19 +835,7 @@ PartitionDisk(){
 	esac
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+# View and mount all disks containing only linux install compatible partitions
 MountViewPartitions(){
 
 	# $1 - Disks
@@ -1650,11 +1165,538 @@ MountViewPartitions(){
 	# dialog --msgbox "Selected partitions ${SelectedPartitions[*]}" 0 0
 }
 
+###################################################### end of disk editing #################################################
 
 
 
 
+################################################## host configuration ######################################################
 
+Install_UI(){
+	# Install_UI
+	# ConfHost
+	# $1 - options in this function's menu
+
+	pkgs=""
+	wmopts=()
+	ui_opts=()
+
+	ui_opts+=("Window Manager")
+	ui_opts+=("Just windows, statusbars, dmenus (minimal).No Graphics composition like on Gnome")
+	ui_opts+=("Desktop Environment")
+	ui_opts+=("Gnome, KDE, cinnamon and stuff like that")
+
+	UI=$(dialog --cancel-label "BACK" --default-item "${1}" --menu "UI Menu" 0 0 0 "${ui_opts[@]}" 3>&1 1>&2 2>&3)
+	case $? in
+		1) ConfHost "Install UI" ;;
+		0)
+			wmopts+=("i3" "")
+			wmopts+=("bspwm" "")
+			wmopts+=("awesome" "")
+
+			deopts=()
+			deopts+=("KDE" "")
+			deopts+=("Gnome" "")
+			deopts+=("cinnamon" "")
+			deopts+=("deepin" "")
+			deopts+=("lxde" "")
+			deopts+=("lxqt" "")
+			deopts+=("mate" "")
+			deopts+=("Unity" "")
+
+			case $UI in
+				"Desktop Environment")
+					DE=$(dialog --cancel-label "BACK" --menu "Desktop Environment Menu" 0 0 0 "${deopts[@]}" 3>&1 1>&2 2>&3)
+					case $? in
+						1) Install_UI "Desktop Environment" ;;
+						0) 
+							case $DE in
+								"KDE")
+									pkgs="$(pacman -Sg plasma kde-{applications,system,graphics,network,accessibility} kf{5,5-aids} | awk '{print $2}' | uniq)"
+									;;
+								"Gnome")
+									pkgs="gnome gnome-extra"
+									;;
+								"cinnamon")
+									pkgs="$(pacman -Ssq cinnamon)"
+									;;
+								"deepin")
+									pkgs="deepi{n,n-extra}"
+									;;
+								"lxde")
+									pkgs="lxd{e,e-gtk3}"
+									;;
+								"lxqt")
+									pkgs="lxqt"
+									;;
+								"mate")
+									pkgs="mat{e,e-extra}"
+									;;
+								*)
+									dialog --msgbox "no DE installed"
+									Install_UI "Desktop Environment"
+									;;
+							esac
+							;;
+					esac
+					;;
+				"Window Manager")
+					WM=$(dialog --cancel-label "BACK" --menu "Window Manager Menu" 0 0 0 "${wmopts[@]}"  3>&1 1>&2 2>&3)
+
+					case $? in
+						1) Install_UI "Window Manager" ;;
+						0)
+							case $WM in
+								"i3")
+									pkgs=$(pacman -Ssq i3 | grep -iv 'py\|7\|perl\|sway')
+									;;
+								"bspwm")
+									pkgs="bspwm"
+									;;
+								"awesome")
+									pkgs="awesom{e,e-terminal-fonts} vicious powerline "
+									;;
+								*)
+									dialog --msgbox "no window managers available"
+							esac
+							;;
+					esac
+					;;
+				*)
+					dialog --menu "SIKE" 0 0
+					;;
+			esac
+			dialog --msgbox "$pkgs" 0 0
+			# pacstrap /mnt $pkgs
+			ConfHost "Install UI"
+			;;
+	esac
+
+}
+
+SetTz(){
+	# $1 - default option
+	regions=()
+	regions_dir_temp=($(ls -d /usr/share/zoneinfo/* | grep -iv 'right\|posix\|\.[a-zA-Z0-9]*'))
+	regions_temp=($(ls /usr/share/zoneinfo/ | grep -iv 'right\|posix\|\.[a-zA-Z0-9]*'))
+
+	a=0
+	for b in "${regions_dir_temp[@]}"
+	do
+		if [[ -d "$b" ]]
+		then
+			regions+=("$b")
+			regions+=("${regions_temp[$a]}")
+		fi
+		((a+=1))
+	done
+
+	# unset regions_temp regions_dir_temp
+	region=$(dialog --cancel-label "Back" --no-tags --menu "select the continent you are in" 0 0 0 "${regions[@]}" 3>&1 1>&2 2>&3)
+	case $? in
+		1) ConfHost "set timezone" ;;
+		0)
+			a=0
+			zones=()
+			zones_temp=($(ls "/usr/share/zoneinfo/$region"))
+			zones_temp_dir=($(ls -d "/usr/share/zoneinfo/$region/*"))
+			# zones_temp=($(ls $region))
+			# zones_temp_dir=($(ls -d $region/*))
+
+			for b in "${zones_temp_dir[@]}"
+			do
+				if [[ -f "$b" ]] && [[ -r "$b" ]]
+				then
+					zones+=($b)
+					zones+=(${zones_temp[$a]})
+				fi
+				((a+=1))
+			done
+			zone=$(dialog --cancel-label "back" --no-tags --menu "select the region you are in" 0 0 0 "${zones[@]}" 3>&1 1>&2 2>&3)
+			case $? in
+				1) SetTz ;;
+				0)
+					: '
+					ln -sf $zone /mnt/etc/localtime &>/dev/null
+					arch-chroot /mnt/ hwclock -wrv | dialog --programbox 0 0
+					if [[ ${PIPESTATUS[0]} -eq 0 ]]
+					then
+					'
+						dialog --msgbox "timezone is set $zone" 0 0
+					: '
+					elif [[ ${PIPESTATUS[0]} -eq 0 ]]
+					then
+						dialog --msgbox "timezone could not be set ${zone}" 0 0
+					fi
+					'
+					;;
+			esac
+			;;
+	esac
+}
+
+SetLocale(){
+
+	# user set locale
+
+	LOCALE=()
+	# cat "/mnt/etc/locale.gen" | grep -i '#\w' | sed 's/#//' > locales.txt
+	cat "/etc/locale.gen" | grep -i '#\w' | sed 's/#//' > locales.txt
+
+	dialog --msgbox "when you press a character and you don't see the character, just keep that charcter held until you see the cursor" 0 0
+
+	while read txt
+	do
+		LOCALE+=("$txt")
+		LOCALE+=("$txt")
+		LOCALE+=(OFF)
+	done < locales.txt
+
+	rm -rf locales.txt
+	# back - 1
+	# ok - 0
+	LocaleDialog=$(dialog --scrollbar --visit-items --cancel-label "BACK" --title "Locale Selection Menu" --buildlist "\nUse the space bar to move locale options between the panes and use the tab for moving in between spacess. If no locale is selected then the deafult UTF-8 and ISO-8859 versions of the US english locales will be set \n\n       disabled locales enabled locales" 0 0 0 "${LOCALE[@]}" 3>&1 1>&2 2>&3)
+
+	echo "${LocaleDialog[@]}" | sed 's/" "/"\n"/g;s/"//g' > locales.txt
+	while read txt
+	do
+		# arch-chroot /mnt sed -i s/"#$txt"/"$txt"/g /etc/locale.gen
+		# arch-chroot /mnt locale-gen
+		sed -i s/"#$txt"/"$txt"/g locale.gen
+		# awk '{print ARGV}'
+	done < locales.txt
+	# nicepl=("$(cat locales.txt)")
+	# echo -e "locales\n${nicepl[*]}" | sed 's/"\n"//g'
+	LocaleFormat=$(echo -e "\n\n${LocaleDialog[*]}\n" | sed 's/" "/"\n"/g')
+	# LocaleFormat=$(echo -e "\n\n${LocaleDialog[@]}\n" | sed 's/" "/"\n"/g')
+	dialog --msgbox "locales set:$LocaleFormat" 0 0
+	# locale-gen
+	# rm -rfv locales.txt &2>/dev/null
+
+
+	: '
+	$? - 2 - help
+	$? - 1 - cancel
+	$? - 0 - ok
+	'
+}
+
+SetHostName(){
+	hostname=$(dialog --inputbox "Set host name" 0 0 3>&1 1>&2 2>&3)
+	if [[ -z $hostname ]]
+	then
+		dialog --yesno "Default name 'arch' will be assigned as hostname. continue?" 0 0
+		case $? in
+			0) hostname="arch" ;;
+			1) SetHostName ;;
+		esac
+	fi
+	# echo "$hostname" > "/mnt/etc/hostname"
+	dialog --msgbox "set $hostname as hostname. You can change the hostname in the /etc/hostname file (if you are not in live mode i.e.) or if you are in live mode then edit the /mnt/etc/hostname file" 0 0
+	# arch-chroot /mnt echo -e "127.0.0.1\tlocalhost\n      ::1\tlocalhost" > "/mnt/etc/hostname"
+}
+
+SetPassword(){
+	NewPassword=$(dialog --passwordbox "set password for username $username" 0 0 3>&1 1>&2 2>&3)
+	case $? in
+		1)
+			# ConfHost "add users"
+			add_users
+			;;
+		0)
+			if [[ ${#NewPassword} -eq 0 ]]
+			# if [[ -z ${NewPassword} ]]
+			then
+				dialog --yesno "Accounts without passwords is as good as an inaccessible account (i.e. if the passwordless account is the only non-root account you have created). linux will prompt you for a password regardless of password state on an account/username.\nYou can login into the passwordless account by doing one, select few or all of the following\n1) logging in with an account that contains a password (if you have created one i.e.) and then logging in with the 'passwordless account' from the currently active account\n2) logging in as root and then loggin in with the 'passwordless account'.\n3) going to line 79 of /etc/sudoers and adding '<passwordless account name> ALL=(ALL) NOPASSWD: ALL'\n\nAll the above is as per my experience.\nProceed setting the passwordless account regardless?" 0 0
+				case $? in
+					1) SetPassword ;;
+					0) password="$NewPassword" ;;
+				esac
+			else
+				if [[ ${#NewPassword} -lt 8 ]] && [[ ${#NewPassword} -gt 0 ]]
+				then
+					dialog --msgbox "password need to be atleast 8 characters long" 0 0
+					SetPassword
+				elif [[ ${#NewPassword} -ge 8 ]]
+				then
+					ConfirmPassword=$(dialog --passwordbox "Confirm password for username $username" 0 0 3>&1 1>&2 2>&3)
+					if [[ $ConfirmPassword == $NewPassword ]]
+					then
+						password=$NewPassword
+					elif [[ "$ConfirmPassword" != "$NewPassword" ]]
+					then
+						dialog --msgbox "passwords do not match" 0 0
+						SetPassword
+					fi
+				fi
+			fi
+			;;
+	esac
+}
+
+add_users(){
+	password=""
+	username=$(dialog --inputbox "Username" 0 0 3>&1 1>&2 2>&3)
+	case $? in
+		1) ConfHost "add users **" ;;
+		0)
+			if [[ -z $username ]]
+			then
+				dialog --msgbox "username cannot be an empty string" 0 0
+				add_users
+			elif [[ -n $username ]]
+			then
+				dialog --msgbox "you won't see the password characters as they are typed" 0 0
+				SetPassword
+			fi
+			dialog --msgbox "created username $username and password is set" 0 0
+			# arch-chroot /mnt useradd -m $username -G users -g power,wheel,storage &>/dev/null
+			# arch-chroot /mnt passwd $username &>/dev/null
+			# case $? in
+			# 	2)
+			# 		dialog --msgbox "user ${username} exists"
+			# 		add_users
+			# 		;;
+			# esac
+			;;
+	esac
+}
+
+BashPromptPreview(){
+	clear
+	bash_prompt="$1"
+	curdir="$PWD"
+	bash --rcfile "$curdir/shell rc/bash/$bash_prompt"
+}
+
+SetPrompt(){
+
+	bashrc_file="$1"
+
+	# local Users=($(grep [1-9][0-9][0-9][0-9] /mnt/etc/passwd | grep -iv nobody | sed 's/\:/ \: /g' | awk '{print $1}'))
+	local Users=($(grep [1-9][0-9][0-9][0-9] /mnt/etc/passwd | grep -iv nobody | sed 's/\:/ \: /g' | awk '{print $1}'))
+	if [[ ${#Users[@]} -eq 1 ]]
+	then
+		# cp -rfv bashrc/"$1" /mnt/home/$Users/.bashrc &>/dev/null
+		cp -rf bashrc/"$1" /home/$Users/.bashrc &>/dev/null
+		dialog --msgbox "set $1 as the bash prompt for user ${Users[0]}" 0 0
+	elif [[ ${#Users[@]} -gt 1 ]]
+	then
+		dialog --extra-button --extra-label "Few" --ok-label "One" --no-label "All" --yesno "set  for all users, one user or selected user?" 0 0
+		case $? in
+			0)
+				local UsersTemp=()
+				for i in ${Users[@]}
+				do
+					UsersTemp+=("$i" "")
+				done
+				local User="$(dialog --no-tags --menu "Select a user to set the $bashrc_file bashrc file" 0 0 0 "${UsersTemp[@]}" 3>&1 1>&2 2>&3)"
+
+				# cp -rfv bashrc/"$bashrc_file" /mnt/home/$User/.bashrc &>/dev/null
+				dialog --msgbox "Set $bashrc_file for user $User" 0 0
+				unset Users UsersTemp
+				;;
+			1)
+				for i in ${Users[@]}
+				do
+					# cp -rfv bashrc/"$bashrc_file" /mnt/home/$i/.bashrc &>/dev/null
+					echo "\"cp -rfv bashrc/\$bashrc_file\" \"/mnt/home/\$i/.bashrc &>/dev/null\""
+				done
+				dialog --msgbox "Set $bashrc_file for all users" 0 0
+				;;
+			3)
+				local UsersTemp=()
+				for i in ${Users[@]}
+				do
+					UsersTemp+=("$i" "" 0)
+				done
+
+				local SelectedUsers="$(dialog --no-tags --checklist "Select users that will use this $bashrc_file bashrc file" 0 0 0 "${UsersTemp[@]}" 3>&1 1>&2 2>&3)"
+
+				local userText=""
+				if [[ ${#SelectedUsers[@]} -eq 1 ]]
+				then
+					userText="user"
+				elif [[ ${#SelectedUsers[@]} -gt 1 ]] && [[ ${#SelectedUsers[@]} -lt ${#Users[@]} ]]
+				then
+					userText="users"
+				elif [[ ${#SelectedUsers[@]} -eq ${#Users[@]} ]]
+				then
+					userText="all"
+				fi
+
+				local SelectedUsersTemp=($(TempArrayWithAmpersand SelectedUsers))
+
+				for i in ${SelectedUsers[@]}
+				do
+					echo "\"cp -rf bashrc/\$bashrc_file\" \"/mnt/home/\$User/.bashrc &>/dev/null\""
+					# cp -rf bashrc/"$bashrc_file" /mnt/home/$User/.bashrc &>/dev/null
+				done
+				# done | GuageMeter "Setting $bashrc_file for $userText ${SelectedUsersTemp[@]}"
+
+				dialog --msgbox "Set $bashrc_file for $userText ${SelectedUsersTemp[@]}" 0 0
+				unset SelectedUsers SelectedUsersTemp UsersTemp userText
+				;;
+		esac
+	fi
+	unset Users
+}
+
+SetBashPrompt(){
+	# $1 - "menu option item"
+
+	bashrc_opts=("default" "it's the same as you see on the live iso")
+	bashrc_opts+=("modded parrot" "my personalized version of the parrot OS bash prompt")
+	bashrc_opts+=("parrot" "bash prompt taken from parrot OS")
+	bashrc_opts+=("pop OS" "pop OS bash prompt")
+	# bashrc_opts+=()
+	Users=($(grep [1-9][0-9][0-9][0-9] /etc/passwd | grep -iv nobody | sed 's/\:/ \: /g' | awk '{print $1}'))
+
+	$1="${bashrc_opts[0]}"
+
+	# exit code references
+	# 0 - set bashrc
+	# 3 - preview
+	# 1 - back
+	bashrc=$(dialog --ok-label "set bashrc" --default-item "$1" --extra-button --extra-label "preview" --cancel-label "back" --menu "bashrc selection menu\n\nselected menuitem will be saved as \".bashrc\" in the home directory" 0 0 0 "${bashrc_opts[@]}" 3>&1 1>&2 2>&3)
+
+	case $? in
+		0)
+			case $bashrc in
+				'default')
+					SetPrompt default_bashrc
+					SetBashPrompt "deafult"
+					;;
+
+				'modded parrot')
+					SetPrompt modded_parrot_bashrc
+					SetBashPrompt "modded parrot"
+					;;
+
+				'parrot')
+					SetPrompt parrot_bashrc
+					SetBashPrompt "parrot"
+					;;
+
+				'pop OS')
+					SetPrompt bashrc_pop
+					SetBashPrompt "pop OS"
+					;;
+			esac
+			;;
+		1) ConfHost "Set Bash Prompt" ;;
+		3)
+			dialog --msgbox "you will enter a subshell. execute \"exit\" to exit to the installer" 0 0
+			case $bashrc in
+				'default')
+					BashPromptPreview default_bashrc
+					SetBashPrompt "deafult"
+					;;
+
+				'modded parrot')
+					BashPromptPreview modded_parrot_bashrc
+					SetBashPrompt "modded parrot"
+					;;
+
+				'parrot')
+					BashPromptPreview parrot_bashrc
+					SetBashPrompt "parrot"
+					;;
+
+				'pop OS')
+					BashPromptPreview bashrc_pop
+					SetBashPrompt "pop OS"
+					;;
+			esac
+			;;
+	esac
+}
+
+SetRootPassword(){
+	RootPassword=$(dialog --no-cancel --passwordbox "Enter root password. If no root password is provided then root password will be set to 'try again'. if default password is set please change the default root password post installation as it can be cracked through rainbow tables, dictionary or brute force attacks" 0 0 3>&1 1>&2 2>&3)
+	if [[ -z $RootPassword ]]
+	then
+		RootPassword="try again"
+		# arch-chroot "echo $RootPassword;echo $RootPassword" | passwd &>/dev/null
+		dialog --msgbox "default root password 'try again' is set " 0 0
+	elif [[ -n $RootPassword ]]
+	then
+		ConirmRootPassword=$(dialog --passwordbox "confirm root password" 0 0 3>&1 1>&2 2>&3)
+		if [[ "$RootPassword" != "$ConfirmPassword" ]]
+		then
+			dialog --msgbox "root password does not match" 0 0
+			SetRootPassword
+		elif [[ "$RootPassword" == "$ConfirmPassword" ]]
+		then
+			dialog --msgbox "root password is set" 0 0
+			# arch-chroot "echo $RootPassword;echo $RootPassword" | passwd &>/dev/null
+		fi
+	fi
+}
+
+ConfHost(){
+	# $1 - menu option item
+
+	mountpoint /mnt &>/dev/null
+	case $? in
+		0)
+			HostOpt=("set hostname *" "set your computer name")
+			HostOpt+=("set Locale *" "set your computer language")
+			HostOpt+=("set timezone" "configure which timezone you are in")
+			HostOpt+=("add users **" "add users")
+			HostOpt+=("root password *" "set root password")
+			HostOpt+=("Install UI" "Install Desktop Environment or Window Manager")
+			HostOpt+=("Set Bash Prompt" "File that's used to tell how the terminal prompt should look like")
+			$1="${HostOpt[0]}"
+			opt=$(dialog --cancel-label "BACK" --default-item "${1}" --menu "Host Configuration Menu" 0 0 0 "${HostOpt[@]}" 3>&1 1>&2 2>&3)
+			case $? in
+				0)
+					case $opt in
+						"set hostname *")
+							SetHostName
+							ConfHost "set hostname *"
+							;;
+						"set Locale *")
+							SetLocale
+							ConfHost "set Locale *"
+							;;
+						"set timezone")
+							SetTz
+							ConfHost "set timezone"
+							;;
+						"add users **")
+							add_users
+							ConfHost "add users **"
+							;;
+						# "set root password")
+						"root password *")
+							dialog --msgbox "you won't see the characters as you type" 0 0
+							SetRootPassword && ConfHost "set root password"
+							;;
+						"Install UI")
+							Install_UI "Window Manager"
+							ConfHost "Install UI"
+							;;
+						"Set Bash Prompt")
+							SetBashPrompt
+							ConfHost "Set Bash Prompt"
+							;;
+						*)
+							dialog --msgbox "sike" 0 0
+							ConfHost "root password *"
+							;;
+					esac
+					;;
+				1) MainMenu "Configure Host +" ;;
+			esac
+			;;
+		1) 
+			dialog --msgbox "cannot configure host without a linux root partition" 0 0
+			MainMenu "Configure Host +"
+			;;
+	esac
+}
+############################################## end of host configuration ###################################################
 
 
 InstallArch(){
@@ -1785,29 +1827,16 @@ InstallArch(){
 	fi
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 Repo_Enable(){
-	dialog --backtitle "Written by c2700" --yesno "enable \"multilib\" repo for packages with support for multiple architectures?" 5 80
+	dialog --yesno "enable \"multilib\" repo for packages with support for multiple architectures?" 5 80
 	case $? in
 		0)
 			# sed '94s/\#\[/"["' /etc/pacman.conf
 			# sed '95s/\#\[/""' /etc/pacman.conf
-			dialog --backtitle "Written by c2700" --msgbox "\"multilib\" repo has been enabled. you can add, remove, disable or enable repos by editing the \"/etc/pacman.conf\" file" 0 0
+			dialog --msgbox "\"multilib\" repo has been enabled. you can add, remove, disable or enable repos by editing the \"/etc/pacman.conf\" file" 0 0
 			;;
 		1)
-			dialog --backtitle "Written by c2700" --no-label "exit" --yes-label "continue installation" --yesno "multilib repo not enabled. To enable it restart the script or uncomment lines 94 and 95 in file \"/etc/pacman.conf\"" 6 63
+			dialog --no-label "exit" --yes-label "continue installation" --yesno "multilib repo not enabled. To enable it restart the script or uncomment lines 94 and 95 in file \"/etc/pacman.conf\"" 6 63
 			case $? in
 				0) exit ;;
 				1) echo "" ;;
@@ -1815,16 +1844,13 @@ Repo_Enable(){
 	esac
 }
 
-
-
-
-
 MainMenu(){
-	# set -xETt
+
 	# $1 - menu option item
 
 	clear
     # check if dialog is installed
+	# pacman -Qs dialog &>/dev/null
 	ls /usr/bin/dialog &>/dev/null
 	case $? in
 		# 0)
@@ -1855,69 +1881,69 @@ MainMenu(){
 	menuopt+=("Configure Host +" "Personalize the machine by setting Hostname, adding users etc.")
 	menuopt+=("Reboot" "Reboot the computer")
 
-	menuitem=$(dialog --default-item "${1}" --backtitle "Written by c2700" --cancel-label "Exit" --title "Install Menu" --menu "To install arch all options followed by\n  i) '**' are priority 1\n ii) '*'are priority 2\niii) '+'are priority 3\n\nThe rest are optional" 0 0 0 "${menuopt[@]}" 3>&1 1>&2 2>&3)
+	menuitem=$(dialog --no-mouse --default-item "${1}" --cancel-label "Exit" --title "Install Menu" --menu "To install arch all options followed by\n  i) '**' are priority 1\n ii) '*'are priority 2\niii) '+'are priority 3\n\nThe rest are optional" 0 0 0 "${menuopt[@]}" 3>&1 1>&2 2>&3)
+
+	case $? in
+		0)
+			case $menuitem in
+				"Partition Disk **")
+					PartitionDisk
+					# MainMenu "Partition Disk **"
+					;;
+				"Configure Network **")
+					# dialog --msgbox "Configure Network" 0 0
+					ConfNet
+					if [[ $? -eq 1 ]]
+					then
+						MainMenu "Configure Network **"
+					fi
+					;;
+
+				"Install Arch *")
+						InstallArch
+					;;
 
 
-	if [[ $? -eq 1 ]]
-	then
-		clear;reset;exit
-	fi
+				"Configure Host +")
+					arch-chroot /mnt
+					mountpoint /mnt
+					case $? in
+						1)
+							dialog --msgbox "no root partition set" 0 0
+							;;
+						*)
+							ConfHost "set hostname *"
+							;;
+					esac
 
-	case $menuitem in
-		"Partition Disk **")
-			PartitionDisk
-			# MainMenu "Partition Disk **"
+					MainMenu "Configure Host +"
+					;;
+
+				"Reboot")
+					dialog --yesno "Reboot the machine" 0 0
+					case $? in
+						0)
+							dialog --yesno "save basic customization instructions in the arch partition? It will be stored in the /home/customize.txt file of your arch install location. use less, more, cat or a text editor like vim, vi, emacs or nano to view the file" 0 0
+							case $? in
+								1)
+									dialog --msgbox "saved basic customization instructions" 0 0
+									# echo -e "change hostname - vim /etc/hostname\ncreate users - useradd -m\n<username> -G power,storage,wheel -g users\nset or change user password - passwd <username>\nset or change user password - passwd\nset locale - vim /etc/locale.gen, comment '#' to ignore and uncomment to generate or use the locale\n\n(DE - Desktop Environment, WM - Window Manager) to install a DE - install a minimal DE package or the group using the '-g' argument in pacman and a lockscreen manager. enable the lockscreen manager using the systemctl tool and write the DE session name in the /home/<user name>/.xinitrc file\n to install a WM - install a WM and the lockscreen manager will pick it up (if enabled)\nset timezone - soft link (ln -sf) /usr/share/zoneinfo/<continent>/<region> /etc/localtime execute hwclock -w -v (-v is optional if you prefer verbosity (basically more details of what's going on ))" > /mnt/home/customize.txt
+									;;
+							esac
+							;;
+						1) MainMenu "Reboot" ;;
+					esac
+
+					# reboot now -f
+					clear;reset
+					;;
+				*)
+					dialog --msgbox "sike" 0 0
+					MainMenu "Reboot"
+					;;
+			esac
 			;;
-		"Configure Network **")
-			# dialog --msgbox "Configure Network" 0 0
-			ConfNet
-			if [[ $? -eq 1 ]]
-			then
-				MainMenu "Configure Network **"
-			fi
-			;;
-
-		"Install Arch *")
-				InstallArch
-			;;
-
-
-		"Configure Host +")
-			: '
-			arch-chroot /mnt
-			mountpoint /mnt
-			if [[ $? -eq 1 ]]
-			then
-				# dialog --msgbox "could not chroot int /mnt" 0 0
-				dialog --msgbox "no root partition set" 0 0
-			else
-			'
-				ConfHost "set hostname *"
-			# fi
-			MainMenu "Configure Host +"
-			;;
-
-		"Reboot")
-			dialog --extra-button --extra-label "cancel" --msgbox "Reboot the machine" 0 0
-			if [[ $? -eq 3 ]]
-			then
-				MainMenu "Reboot"
-			else
-				dialog --yesno "save basic customization instructions in the arch partition? It will be stored in the /home/customize.txt file of your arch install location. use less, more, cat or a text editor like vim, vi, emacs or nano to view the file" 0 0
-				if [[ $? -eq 1 ]]
-				then
-					dialog --msgbox "saved basic customization instructions" 0 0
-					# echo -e "change hostname - vim /etc/hostname\ncreate users - useradd -m\n<username> -G power,storage,wheel -g users\nset or change user password - passwd <username>\nset or change user password - passwd\nset locale - vim /etc/locale.gen, comment '#' to ignore and uncomment to generate or use the locale\n\n(DE - Desktop Environment, WM - Window Manager) to install a DE - install a minimal DE package or the group using the '-g' argument in pacman and a lockscreen manager. enable the lockscreen manager using the systemctl tool and write the DE session name in the /home/<user name>/.xinitrc file\n to install a WM - install a WM and the lockscreen manager will pick it up (if enabled)\nset timezone - soft link (ln -sf) /usr/share/zoneinfo/<continent>/<region> /etc/localtime execute hwclock -w -v (-v is optional if you prefer verbosity (basically more details of what's going on ))" > /mnt/home/customize.txt
-				fi
-			fi
-			# reboot now -f
-			clear;reset
-			;;
-		*)
-			dialog --msgbox "sike" 0 0
-
-			MainMenu "Reboot"
-			;;
+		1) clear;reset;exit ;;
 	esac
 
 }
