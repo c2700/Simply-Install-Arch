@@ -205,11 +205,9 @@ iwd_mngr(){
 
 
 nm_mngr(){
-	systemctl enable NetworkManager
-	systemctl start NetworkManager
+	systemctl enable --now NetworkManager
 	nmcli networking on
 	nmcli radio wifi on
-
 
 	case $? in
 		0)
@@ -273,11 +271,12 @@ ConfNet(){
 
 	if [[ ${#NMList[@]} -eq 0 ]]
 	then
-		dialog --msgbox "no networkmanagers available" 0 0
-		dialog --msgbox "networkmanager will be installed" 0 0
-		MainMenu "Configure Network"
+		dialog --msgbox "no networkmanagers available. networkmanager will be installed" 0 0
 		# pacman -Syvd --noconfirm --needed networkmanager
-		nm_mngr
+		dialog --msgbox "enabling NetworkManager" 0 0
+		# nmtui
+		# # nm_mngr
+		MainMenu "Configure Network"
 	fi
 
 	NM=$(dialog --cancel-label "BACK" --menu "Availble Network Managers" 0 0 0  "${NMList[@]}" 3>&1 1>&2 2>&3)
@@ -290,7 +289,8 @@ ConfNet(){
 					wifi-menu
 					;;
 				"networkmanager")
-					# nm_mngr
+					# # nm_mngr
+					# nmtui
 					dialog --msgbox "networkmanager used" 0 0
 					MainMenu "Configure Network **"
 					;;
@@ -303,8 +303,6 @@ ConfNet(){
 			;;
 		1) MainMenu "Configure Network **" ;;
 		255) ConfNet ;;
-		# 1|255) ConfNet ;;
-		# 1) ConfNet ;;
 	esac
 }
 
@@ -325,35 +323,157 @@ ConfirmMounts(){
 	local m_MountPartitionsTextsTemp=("${!m_MountPartitionsTextsArgs}")
 	unset m_MountPartitionsTextsArgs
 
-	local MountParts=()
-	local MountTexts=()
+	local linuxfs=""
 
-	for i in ${m_MountPartitionsTextsTemp[@]}
+	dialog --yes-label "Change filesystem" --no-label "Use Default" --yesno "Use default ext4 for linux filesystem or use a different filesystem?" 0 0
+	case $? in
+		0)
+			local linuxfs_list=()
+			linuxfs_list+=("ext4" "")
+			linuxfs_list+=("ext3" "")
+			linuxfs_list+=("ext2" "")
+			linuxfs_list+=("btrfs" "")
+			linuxfs_list+=("xfs" "")
+			linuxfs_list+=("zfs" "")
+			linuxfschange="$(dialog --menu "Select filesystem to use as linux filesystem" 0 0 0 "${linuxfs_list[@]}" 3>&1 1>&2 2>&3)"
+			case $? in
+				0)
+					if [[ "$linuxfs" == "$linuxfschange" ]]
+					then
+						dialog --msgbox "default linux filesystem ext4 has not been changed. Using ext4 filesystem" 0 0
+					elif [[ "$linuxfs" != "$linuxfschange" ]]
+					then
+						linuxfs="$linuxfschange"
+						dialog --msgbox "Using $linuxfs filesystem" 0 0
+					fi
+					;;
+				1)
+					linuxfs="$linuxfschange"
+					dialog --msgbox "Using default ext4 linux filesystem" 0 0
+					;;
+			esac
+			;;
+
+		1)
+			linuxfs="ext4"
+			dialog --msgbox "Using default ext4 linux filesystem" 0 0
+			;;
+	esac
+
+	declare -A MountParts
+	local MountPartsTexts=()
+
+	# echo "${m_MountDisksTemp[@]}"
+	# echo -e "${m_MountPartitionsTextsTemp[@]}\n\n\n"
+
+	clear
+	for k in ${m_MountDisksTemp[@]}
 	do
-		MountParts+=("$/dev/i")
+		for l in ${m_MountPartitionsTextsTemp[@]}
+		do
+
+			local MountPartsString=""
+			local partsize="$(lsblk "/dev/$l" -dlno size | awk '{ sub("[mM]"," MB");sub("[gG]"," GB");print 0; }')"
+			local partfsformat="$(lsblk "/dev/$l" -dlno fstype,fsver | awk '{ print $1" "$2 }' | sed 's/vfat FAT32/FAT32/g;s/ext4 1.0/ext4/g;s/swap 1/swap/g')"
+			local m_parttypename="$(lsblk "/dev/$l" -dlno parttypename)"
+			local partlabel="$(lsblk "/dev/$l" -dlno partlabel)"
+			local m_Tempdisk="$(echo "$l" | grep -i "$k")"
+
+			if [[ ${#m_MountDisksTemp[@]} -eq 1 ]]
+			then
+				if [[ "$m_Tempdisk" == "$k" ]]
+				then
+					MountPartsString="  \`-/dev/$l --> $partsize --> $m_parttypename"
+					if [[ -n $partfsformat ]]
+					then
+						MountPartsString+=" --> *$partfsformat"
+						if [[ $m_parttypename == "EFI System" ]]
+						then
+							MountPartsString+=" --> /boot"
+						elif [[ $m_parttypename == "Linux filesystem" ]]
+						then
+							MountPartsString+=" --> /"
+						elif [[ $m_parttypename == "Linux swap" ]]
+						then
+							MountPartsString+=" --> (mounted as swap)"
+						elif [[ $m_parttypename == "Linux home" ]]
+						then
+							MountPartsString+=" --> /home"
+						fi
+					elif [[ -z $partfsformat ]]
+					then
+						if [[ $m_parttypename == "EFI System" ]]
+						then
+							MountPartsString+=" --> /boot"
+						elif [[ $m_parttypename == "Linux filesystem" ]]
+						then
+							MountPartsString+=" --> /"
+						elif [[ $m_parttypename == "Linux swap" ]]
+						then
+							MountPartsString+=" --> +swap --> (mounted as swap)"
+						elif [[ $m_parttypename == "Linux home" ]]
+						then
+							MountPartsString+=" --> +$linuxfs --> /home"
+						fi
+					fi
+					MountParts["$k"]="$MountPartsString\n"
+				fi
+			elif [[ ${#m_MountDisksTemp[@]} -gt 1 ]]
+			then
+				if [[ "$m_Tempdisk" == "$k" ]]
+				then
+					if [[ "$i" == ${m_MountPartitionsTextsTemp[0]} ]] || [[ "$i" != ${m_MountPartitionsTextsTemp[-1]} ]]
+					then
+						MountPartsString="  \|-/dev/$l --> $partsize --> $m_parttypename"
+					elif [[ "$i" == ${m_MountPartitionsTextsTemp[-1]} ]]
+					then
+						MountPartsString="  \`-/dev/$l --> $partsize --> $m_parttypename"
+					fi
+
+					if [[ -n $partfsformat ]]
+					then
+						MountPartsString+=" --> *$partfsformat"
+						if [[ $m_parttypename == "EFI System" ]]
+						then
+							MountPartsString+=" --> /boot"
+						elif [[ $m_parttypename == "Linux filesystem" ]]
+						then
+							MountPartsString+=" --> /"
+						elif [[ $m_parttypename == "Linux swap" ]]
+						then
+							MountPartsString+=" --> (mounted as swap)"
+						elif [[ $m_parttypename == "Linux home" ]]
+						then
+							MountPartsString+=" --> /home"
+						fi
+					elif [[ -z $partfsformat ]]
+					then
+						if [[ $m_parttypename == "EFI System" ]]
+						then
+							MountPartsString+=" --> +fat32 --> /boot"
+						elif [[ $m_parttypename == "Linux filesystem" ]]
+						then
+							MountPartsString+=" --> +$linuxfs --> /"
+						elif [[ $m_parttypename == "Linux swap" ]]
+						then
+							MountPartsString+=" --> +swap --> (mounted as swap)"
+						elif [[ $m_parttypename == "Linux home" ]]
+						then
+							MountPartsString+=" --> +$linuxfs --> /home"
+						fi
+					fi
+					MountParts["$k"]="$MountPartsString\n"
+				fi
+			fi
+		done
 	done
 
+	# mount, format, reformat and wipe for EFI
+	# mount, format, reformat and wipe for linux fs
+	# mount, format, reformat and wipe for swap
+	# mount, format, reformat and wipe for home
 
-	for i in ${m_MountPartitionsTextsTemp[@]}
-	do
-		if [[ "$i" == ${m_MountPartitionsTextsTemp[0]} ]]
-		then
-			MountTexts+=("  |-/dev/$i\n")
-		elif [[ "$i" == ${m_MountPartitionsTextsTemp[-1]} ]]
-		then
-			MountTexts+=(" \`-/dev/$i\n")
-		else
-			MountTexts+=(" |-/dev/$i\n")
-		fi
-
-	done
-
-	# mount for EFI
-	# mount for linux fs
-	# mount for swap
-	# mount for home
-
-	dialog --yes-label "OK" --no-label "Back" --title "partition mount confirmation" --yesno "\nPartition-----Size-----------Filesystem----------Format----MountPoint\n\n${MountTexts[*]}" 20 75
+	dialog --yes-label "OK" --no-label "Back" --title "partition mount confirmation\n\n1) \"*\" preceding a filesystem format indicates that when the \"Reformat\" button is pressed only partitions containing that filesystem will be reformatted wiping the underlying data\n2) \"+\" preceding a filesystem format indicates that the partition will be formatted with that filesystem. Reformatting will not affect it." --yesno "\nPartition --> Size --> Partition Label --> Filesystem --> (+|*)Format --> MountPoint\n\n${MountTexts[*]}" 20 75
 	case $? in
 		0)
 			# make fs and mount the partitions
@@ -1100,7 +1220,6 @@ MountViewPartitions(){
 				MountViewPartitions Disks
 				;;
 			1)
-				echo "nice"
 				ConfirmMounts Disks SelectedPartitions
 				;;
 		esac
