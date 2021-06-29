@@ -165,13 +165,15 @@ iw_reconnect(){
 
 iwd_mngr(){
 
+	local wireless_dev=""
+
 	systemctl enable --now iwd
 
 	# systemctl enable iwd
 	# systemctl start iwd
 
 	#select wireless card
-	wireless_devs=($(iwctl station list | grep -iv 'name\|devices\|\-' | awk '{print $1}'))
+	local wireless_devs=($(iwctl station list | grep -iv 'name\|devices\|\-' | awk '{print $1}'))
 	if [[ ${#wireless_devs[@]} -eq 1 ]]
 	then
 		wireless_card="${wireless_devs[@]}"
@@ -182,7 +184,7 @@ iwd_mngr(){
 			wireless_cards+=("$i")
 			wireless_cards+=("")
 		done
-		wireless_dev=$(dialog --menu "Wireless Card Selection Menu" 0 0 0 "${wireless_cards[@]}" 3>&1 1>&2 2>&3)
+		wireless_dev="$(dialog --menu "Wireless Card Selection Menu" 0 0 0 "${wireless_cards[@]}" 3>&1 1>&2 2>&3)"
 	fi
 
 	clear
@@ -229,7 +231,7 @@ nm_mngr(){
 				esac
 			;;
 		1)
-			con_name=$(dialog --inputbox "set a name for this wired connection" 0 0 3>&1 1>&2 2>&3)
+			local con_name=$(dialog --inputbox "set a name for this wired connection" 0 0 3>&1 1>&2 2>&3)
 			nmcli connection add con-name "$con_name" type ethernet autoconnect yes
 			;;
 	esac
@@ -279,7 +281,7 @@ ConfNet(){
 		MainMenu "Configure Network"
 	fi
 
-	NM=$(dialog --cancel-label "BACK" --menu "Availble Network Managers" 0 0 0  "${NMList[@]}" 3>&1 1>&2 2>&3)
+	local NM=$(dialog --cancel-label "BACK" --menu "Availble Network Managers" 0 0 0  "${NMList[@]}" 3>&1 1>&2 2>&3)
 
 	case $? in
 		0)
@@ -335,7 +337,7 @@ ConfirmMounts(){
 			linuxfs_list+=("btrfs" "")
 			linuxfs_list+=("xfs" "")
 			linuxfs_list+=("zfs" "")
-			linuxfschange="$(dialog --menu "Select filesystem to use as linux filesystem" 0 0 0 "${linuxfs_list[@]}" 3>&1 1>&2 2>&3)"
+			local linuxfschange="$(dialog --no-tags --menu "Select filesystem to use as linux filesystem" 0 0 0 "${linuxfs_list[@]}" 3>&1 1>&2 2>&3)"
 			case $? in
 				0)
 					if [[ "$linuxfs" == "$linuxfschange" ]]
@@ -848,9 +850,8 @@ EditDisk(){
 
 	local disksTemp=("${m_Disks[@]}")
 	disksTemp=($(TempArrayWithAmpersand disksTemp))
-	# local DiskEditor=""
-	# DiskEditor="$(dialog --no-tags --cancel-label "Back" --menu "Disk Editor Menu\n\nSelect a Disk Editor to Edit the $disk ${disksTemp[*]}" 0 0 0 "${diskeditors[@]}" 3>&1 1>&2 2>&3)"
-	DiskEditor="$(dialog --no-tags --cancel-label "Back" --menu "Disk Editor Menu\n\nSelect a Disk Editor to Edit the $disk ${disksTemp[*]}" 0 0 0 "${diskeditors[@]}" 3>&1 1>&2 2>&3)"
+	#local  DiskEditor="$(dialog --no-tags --cancel-label "Back" --menu "Disk Editor Menu\n\nSelect a Disk Editor to Edit the $disk ${disksTemp[*]}" 0 0 0 "${diskeditors[@]}" 3>&1 1>&2 2>&3)"
+	local DiskEditor="$(dialog --no-tags --cancel-label "Back" --menu "Disk Editor Menu\n\nSelect a Disk Editor to Edit the $disk ${disksTemp[*]}" 0 0 0 "${diskeditors[@]}" 3>&1 1>&2 2>&3)"
 	case $? in
 		0)
 			local m_NonePartDisks=()
@@ -892,8 +893,7 @@ WritePartitionTable(){
 	local PartTableTemp=()
 	PartTableTemp+=("GPT" "supports 128 primary partitions, mutiple bootloaders, storage more than 2TB")
 	PartTableTemp+=("MBR" "supports 4 primary partitions, max storage of 2TB")
-	local PartTable=""
-	PartTable="$(dialog --cancel-label "Back" --menu "Partition Table Menu\n\nSelect the partition Table to be written on $disk ${m_NoneDisksTemp[*]}" 0 0 0 "${PartTableTemp[@]}" 3>&1 1>&2 2>&3)"
+	local PartTable="$(dialog --cancel-label "Back" --menu "Partition Table Menu\n\nSelect the partition Table to be written on $disk ${m_NoneDisksTemp[*]}" 0 0 0 "${PartTableTemp[@]}" 3>&1 1>&2 2>&3)"
 	case $? in
 		0)
 			local m_DisksArgs=$1[@]
@@ -955,7 +955,7 @@ PartitionDisk(){
 		fi
 	done
 
-	Disks=($(dialog --scrollbar --cancel-label "Back" --column-separator "|" --checklist "Disk Selection Menu" 0 0 0 "${DiskListInfo[@]}" 3>&1 1>&2 2>&3))
+	local Disks=($(dialog --scrollbar --cancel-label "Back" --column-separator "|" --checklist "Disk Selection Menu" 0 0 0 "${DiskListInfo[@]}" 3>&1 1>&2 2>&3))
 	DISKS_EXIT_CODE=$?
 
 	if [[ ${#Disks[@]} -eq 1 ]]
@@ -1084,7 +1084,7 @@ MountViewPartitions(){
 	unset DisksArgs
 
 
-	local Disks=($(IFS="";sort <<<${Disks[@]}))
+	# local Disks=($(IFS="";sort <<<${Disks[@]}))
 
 	local DisksTemp=("${Disks[@]}")
 	local DisksTemp=($(TempArrayWithAmpersand DisksTemp))
@@ -1197,7 +1197,7 @@ MountViewPartitions(){
 			unset m_DiskVendor m_DiskModel
 
 			local DisksSize=$((${#Disks[@]}-1))
-			partition=($(dialog --cancel-label "Back" --column-separator "|" --title "Partition Mount Menu" --extra-button --extra-label "Mount" --checklist "Partitions in /dev/${Disks[$a]} ($m_DiskNameString - $m_DiskSize) \n\ncheckbox items format:\nPartition--size--(filesystem type)--(partition label)" 0 0 0 "${DiskPartListInfo[@]}" 3>&1 1>&2 2>&3))
+			local partition=($(dialog --cancel-label "Back" --column-separator "|" --title "Partition Mount Menu" --extra-button --extra-label "Mount" --checklist "Partitions in /dev/${Disks[$a]} ($m_DiskNameString - $m_DiskSize) \n\ncheckbox items format:\nPartition--size--(filesystem type)--(partition label)" 0 0 0 "${DiskPartListInfo[@]}" 3>&1 1>&2 2>&3))
 			PARTITION_EXIT_CODE=$?
 			unset m_DiskSize m_DiskNameString
 			for g in ${partition[@]}
@@ -1424,7 +1424,7 @@ Install_UI(){
 	ui_opts+=("Desktop Environment")
 	ui_opts+=("Gnome, KDE, cinnamon and stuff like that")
 
-	UI=$(dialog --cancel-label "BACK" --default-item "${1}" --menu "UI Menu" 0 0 0 "${ui_opts[@]}" 3>&1 1>&2 2>&3)
+	local UI=$(dialog --cancel-label "BACK" --default-item "${1}" --menu "UI Menu" 0 0 0 "${ui_opts[@]}" 3>&1 1>&2 2>&3)
 	case $? in
 		1) ConfHost "Install UI" ;;
 		0)
@@ -1444,7 +1444,7 @@ Install_UI(){
 
 			case $UI in
 				"Desktop Environment")
-					DE=$(dialog --cancel-label "BACK" --menu "Desktop Environment Menu" 0 0 0 "${deopts[@]}" 3>&1 1>&2 2>&3)
+					local DE=$(dialog --cancel-label "BACK" --menu "Desktop Environment Menu" 0 0 0 "${deopts[@]}" 3>&1 1>&2 2>&3)
 					case $? in
 						1) Install_UI "Desktop Environment" ;;
 						0) 
@@ -1479,7 +1479,7 @@ Install_UI(){
 					esac
 					;;
 				"Window Manager")
-					WM=$(dialog --cancel-label "BACK" --menu "Window Manager Menu" 0 0 0 "${wmopts[@]}"  3>&1 1>&2 2>&3)
+					local WM=$(dialog --cancel-label "BACK" --menu "Window Manager Menu" 0 0 0 "${wmopts[@]}"  3>&1 1>&2 2>&3)
 
 					case $? in
 						1) Install_UI "Window Manager" ;;
@@ -1514,9 +1514,9 @@ Install_UI(){
 
 SetTz(){
 	# $1 - default option
-	regions=()
-	regions_dir_temp=($(ls -d /usr/share/zoneinfo/* | grep -iv 'right\|posix\|\.[a-zA-Z0-9]*'))
-	regions_temp=($(ls /usr/share/zoneinfo/ | grep -iv 'right\|posix\|\.[a-zA-Z0-9]*'))
+	local regions=()
+	local regions_dir_temp=($(ls -d /usr/share/zoneinfo/* | grep -iv 'right\|posix\|\.[a-zA-Z0-9]*'))
+	local regions_temp=($(ls /usr/share/zoneinfo/ | grep -iv 'right\|posix\|\.[a-zA-Z0-9]*'))
 
 	a=0
 	for b in "${regions_dir_temp[@]}"
@@ -1528,19 +1528,20 @@ SetTz(){
 		fi
 		((a+=1))
 	done
+	unset a
 
 	# unset regions_temp regions_dir_temp
-	region=$(dialog --cancel-label "Back" --no-tags --menu "select the continent you are in" 0 0 0 "${regions[@]}" 3>&1 1>&2 2>&3)
+	local region=$(dialog --cancel-label "Back" --no-tags --menu "select the continent you are in" 0 0 0 "${regions[@]}" 3>&1 1>&2 2>&3)
 	case $? in
 		1) ConfHost "set timezone" ;;
 		0)
-			a=0
-			zones=()
-			zones_temp=($(ls "/usr/share/zoneinfo/$region"))
-			zones_temp_dir=($(ls -d "/usr/share/zoneinfo/$region/*"))
+			local zones=()
+			local zones_temp=($(ls "/usr/share/zoneinfo/$region"))
+			local zones_temp_dir=($(ls -d "/usr/share/zoneinfo/$region/*"))
 			# zones_temp=($(ls $region))
 			# zones_temp_dir=($(ls -d $region/*))
 
+			local a=0
 			for b in "${zones_temp_dir[@]}"
 			do
 				if [[ -f "$b" ]] && [[ -r "$b" ]]
@@ -1550,7 +1551,9 @@ SetTz(){
 				fi
 				((a+=1))
 			done
-			zone=$(dialog --cancel-label "back" --no-tags --menu "select the region you are in" 0 0 0 "${zones[@]}" 3>&1 1>&2 2>&3)
+			unset a
+
+			local zone=$(dialog --cancel-label "back" --no-tags --menu "select the region you are in" 0 0 0 "${zones[@]}" 3>&1 1>&2 2>&3)
 			case $? in
 				1) SetTz ;;
 				0)
@@ -1620,7 +1623,7 @@ SetLocale(){
 }
 
 SetHostName(){
-	hostname=$(dialog --inputbox "Set host name" 0 0 3>&1 1>&2 2>&3)
+	local hostname="$(dialog --inputbox "Set host name" 0 0 3>&1 1>&2 2>&3)"
 	if [[ -z $hostname ]]
 	then
 		dialog --yesno "Default name 'arch' will be assigned as hostname. continue?" 0 0
@@ -1635,7 +1638,9 @@ SetHostName(){
 }
 
 SetPassword(){
-	NewPassword=$(dialog --passwordbox "set password for username $username" 0 0 3>&1 1>&2 2>&3)
+	local username=$1
+	local password=$2
+	local NewPassword="$(dialog --passwordbox "set password for username $username" 0 0 3>&1 1>&2 2>&3)"
 	case $? in
 		1)
 			# ConfHost "add users"
@@ -1647,24 +1652,25 @@ SetPassword(){
 			then
 				dialog --yesno "Accounts without passwords is as good as an inaccessible account (i.e. if the passwordless account is the only non-root account you have created). linux will prompt you for a password regardless of password state on an account/username.\nYou can login into the passwordless account by doing one, select few or all of the following\n1) logging in with an account that contains a password (if you have created one i.e.) and then logging in with the 'passwordless account' from the currently active account\n2) logging in as root and then loggin in with the 'passwordless account'.\n3) going to line 79 of /etc/sudoers and adding '<passwordless account name> ALL=(ALL) NOPASSWD: ALL'\n\nAll the above is as per my experience.\nProceed setting the passwordless account regardless?" 0 0
 				case $? in
-					1) SetPassword ;;
+					1) SetPassword $username $password ;;
 					0) password="$NewPassword" ;;
+					# 0) password="$NewPassword" ;;
 				esac
 			else
 				if [[ ${#NewPassword} -lt 8 ]] && [[ ${#NewPassword} -gt 0 ]]
 				then
 					dialog --msgbox "password need to be atleast 8 characters long" 0 0
-					SetPassword
+					SetPassword $username $password
 				elif [[ ${#NewPassword} -ge 8 ]]
 				then
-					ConfirmPassword=$(dialog --passwordbox "Confirm password for username $username" 0 0 3>&1 1>&2 2>&3)
+					local ConfirmPassword="$(dialog --passwordbox "Confirm password for username $username" 0 0 3>&1 1>&2 2>&3)"
 					if [[ $ConfirmPassword == $NewPassword ]]
 					then
 						password=$NewPassword
 					elif [[ "$ConfirmPassword" != "$NewPassword" ]]
 					then
 						dialog --msgbox "passwords do not match" 0 0
-						SetPassword
+						SetPassword $username $password
 					fi
 				fi
 			fi
@@ -1673,8 +1679,8 @@ SetPassword(){
 }
 
 add_users(){
-	password=""
-	username=$(dialog --inputbox "Username" 0 0 3>&1 1>&2 2>&3)
+	local password=""
+	local username="$(dialog --inputbox "Username" 0 0 3>&1 1>&2 2>&3)"
 	case $? in
 		1) ConfHost "add users **" ;;
 		0)
@@ -1685,17 +1691,13 @@ add_users(){
 			elif [[ -n $username ]]
 			then
 				dialog --msgbox "you won't see the password characters as they are typed" 0 0
-				SetPassword
+				SetPassword $username $password
+				# SetPassword
 			fi
 			dialog --msgbox "created username $username and password is set" 0 0
 			# arch-chroot /mnt useradd -m $username -G users -g power,wheel,storage &>/dev/null
+			# case for stmnt for "user exists"
 			# arch-chroot /mnt passwd $username &>/dev/null
-			# case $? in
-			# 	2)
-			# 		dialog --msgbox "user ${username} exists"
-			# 		add_users
-			# 		;;
-			# esac
 			;;
 	esac
 }
@@ -1783,12 +1785,12 @@ SetPrompt(){
 SetBashPrompt(){
 	# $1 - "menu option item"
 
-	bashrc_opts=("default" "it's the same as you see on the live iso")
+	local bashrc_opts=("default" "it's the same as you see on the live iso")
 	bashrc_opts+=("modded parrot" "my personalized version of the parrot OS bash prompt")
 	bashrc_opts+=("parrot" "bash prompt taken from parrot OS")
 	bashrc_opts+=("pop OS" "pop OS bash prompt")
 	# bashrc_opts+=()
-	Users=($(grep [1-9][0-9][0-9][0-9] /etc/passwd | grep -iv nobody | sed 's/\:/ \: /g' | awk '{print $1}'))
+	local Users=($(grep [1-9][0-9][0-9][0-9] /etc/passwd | grep -iv nobody | sed 's/\:/ \: /g' | awk '{print $1}'))
 
 	$1="${bashrc_opts[0]}"
 
@@ -1796,7 +1798,7 @@ SetBashPrompt(){
 	# 0 - set bashrc
 	# 3 - preview
 	# 1 - back
-	bashrc=$(dialog --ok-label "set bashrc" --default-item "$1" --extra-button --extra-label "preview" --cancel-label "back" --menu "bashrc selection menu\n\nselected menuitem will be saved as \".bashrc\" in the home directory" 0 0 0 "${bashrc_opts[@]}" 3>&1 1>&2 2>&3)
+	local bashrc=$(dialog --ok-label "set bashrc" --default-item "$1" --extra-button --extra-label "preview" --cancel-label "back" --menu "bashrc selection menu\n\nselected menuitem will be saved as \".bashrc\" in the home directory" 0 0 0 "${bashrc_opts[@]}" 3>&1 1>&2 2>&3)
 
 	case $? in
 		0)
@@ -1851,7 +1853,7 @@ SetBashPrompt(){
 }
 
 SetRootPassword(){
-	RootPassword=$(dialog --no-cancel --passwordbox "Enter root password. If no root password is provided then root password will be set to 'try again'. if default password is set please change the default root password post installation as it can be cracked through rainbow tables, dictionary or brute force attacks" 0 0 3>&1 1>&2 2>&3)
+	local RootPassword=$(dialog --no-cancel --passwordbox "Enter root password. If no root password is provided then root password will be set to 'try again'. if default password is set please change the default root password post installation as it can be cracked through rainbow tables, dictionary or brute force attacks" 0 0 3>&1 1>&2 2>&3)
 	if [[ -z $RootPassword ]]
 	then
 		RootPassword="try again"
@@ -1859,7 +1861,7 @@ SetRootPassword(){
 		dialog --msgbox "default root password 'try again' is set " 0 0
 	elif [[ -n $RootPassword ]]
 	then
-		ConirmRootPassword=$(dialog --passwordbox "confirm root password" 0 0 3>&1 1>&2 2>&3)
+		local ConirmRootPassword=$(dialog --passwordbox "confirm root password" 0 0 3>&1 1>&2 2>&3)
 		if [[ "$RootPassword" != "$ConfirmPassword" ]]
 		then
 			dialog --msgbox "root password does not match" 0 0
@@ -1878,15 +1880,16 @@ ConfHost(){
 	mountpoint /mnt &>/dev/null
 	case $? in
 		0)
-			HostOpt=("set hostname *" "set your computer name")
+			local HostOpt=("set hostname *" "set your computer name")
 			HostOpt+=("set Locale *" "set your computer language")
 			HostOpt+=("set timezone" "configure which timezone you are in")
 			HostOpt+=("add users **" "add users")
 			HostOpt+=("root password *" "set root password")
 			HostOpt+=("Install UI" "Install Desktop Environment or Window Manager")
 			HostOpt+=("Set Bash Prompt" "File that's used to tell how the terminal prompt should look like")
+			# local "${HostOpt[0]}"=$1
 			$1="${HostOpt[0]}"
-			opt=$(dialog --cancel-label "BACK" --default-item "${1}" --menu "Host Configuration Menu" 0 0 0 "${HostOpt[@]}" 3>&1 1>&2 2>&3)
+			local opt=$(dialog --cancel-label "BACK" --default-item "${1}" --menu "Host Configuration Menu" 0 0 0 "${HostOpt[@]}" 3>&1 1>&2 2>&3)
 			case $? in
 				0)
 					case $opt in
@@ -1959,7 +1962,7 @@ InstallArch(){
 		# case $? in
 		# case ${PIPESTATUS[0]} in
 		# 	0)
-		# 		bootloaderid="$(dialog --inputbox "Bootloader ID - Input Any Text" 0 0 3>&1 1>&2 2>&3)"
+		# 		local bootloaderid="$(dialog --inputbox "Bootloader ID - Input Any Text" 0 0 3>&1 1>&2 2>&3)"
 		# 		grub-install -v --boot-directory="/mnt/boot" --bootloader-id "$bootloaderid" --efi-directory="/mnt/boot" --recheck --removable --target x86_efi-efi
 		# 		echo "grub-install -v --boot-directory=\"/mnt/boot\" --bootloader-id \"$bootloaderid\" --efi-directory=\"/mnt/boot\" --recheck --removable --target x86_efi-efi"
 		# 		case $? in
@@ -2025,7 +2028,7 @@ InstallArch(){
 		terminaleditorslist+=("zile" "zile" off)
 		terminaleditorslist+=("mg" "mg micro emacs" off)
 
-		editors=($(dialog --extra-button --extra-label "Cancel" --cancel-label "Back" --no-tags --title "text editor selection Menu" --checklist "nano and vi will be installed by default" 0 0 0 "${terminaleditorslist[@]}" 3>&1 1>&2 2>&3))
+		local editors=($(dialog --extra-button --extra-label "Cancel" --cancel-label "Back" --no-tags --title "text editor selection Menu" --checklist "nano and vi will be installed by default" 0 0 0 "${terminaleditorslist[@]}" 3>&1 1>&2 2>&3))
 		case $? in
 			0)
 				unset terminaleditorslist
@@ -2113,13 +2116,13 @@ MainMenu(){
 	esac
 
 
-	menuopt=("Partition Disk **" "format/Partition/select Hard Disks and mount partitions")
+	local menuopt=("Partition Disk **" "format/Partition/select Hard Disks and mount partitions")
 	menuopt+=("Configure Network **" "Check connectivity and connect to a network")
 	menuopt+=("Install Arch *" "Install the base system")
 	menuopt+=("Configure Host +" "Personalize the machine by setting Hostname, adding users etc.")
 	menuopt+=("Reboot" "Reboot the computer")
 
-	menuitem=$(dialog --no-mouse --default-item "${1}" --cancel-label "Exit" --title "Install Menu" --menu "To install arch all options followed by\n  i) '**' are priority 1\n ii) '*'are priority 2\niii) '+'are priority 3\n\nThe rest are optional" 0 0 0 "${menuopt[@]}" 3>&1 1>&2 2>&3)
+	local menuitem=$(dialog --no-mouse --default-item "${1}" --cancel-label "Exit" --title "Install Menu" --menu "To install arch all options followed by\n  i) '**' are priority 1\n ii) '*'are priority 2\niii) '+'are priority 3\n\nThe rest are optional" 0 0 0 "${menuopt[@]}" 3>&1 1>&2 2>&3)
 
 	case $? in
 		0)
