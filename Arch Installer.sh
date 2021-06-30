@@ -626,7 +626,7 @@ DiskListTemp(){
 DiskPartInfoTemp(){
 	if [[ -z $1 ]]
 	then
-		lsblk -nlo name,size,partlabel,parttypename | grep -ie '[has]d[a-z][0-9]\|linux filesystem\|efi\|swap\|linux.*home' | sed -E 's/\s{13}/  /g' | grep -iv 'microsoft\|Windows'
+		lsblk -nlo name,size,partlabel,parttypename | grep -ie '[has]d[a-z][0-9]\|linux filesystem\|efi\|swap\|linux.*home\|^Linux$' | sed -E 's/\s{13}/  /g' | grep -iv 'microsoft\|Windows'
 	else
 		lsblk /dev/"$1" -nlo name,size,partlabel,parttypename | grep -ie '[has]d[a-z][0-9]\|linux filesystem\|efi\|swap\|linux.*home\|Windows recovery environment' | grep -i 'Microsoft Basic data\|Microsoft reserved\|' | sed -E 's/\s{13}/  /g' | grep -iv 'microsoft\|Windows'
 	fi
@@ -1203,10 +1203,10 @@ MountViewPartitions(){
 			for g in ${partition[@]}
 			do
 				local fstype="$(lsblk "/dev/$g" -nlo parttypename)"
-				if [[ "$fstype" ==  "EFI System" ]]
+				if [[ "$fstype" ==  "EFI System" || "$fstype" == "EFI (FAT-12/16/32)" ]]
 				then
 					efi_parts+=("$g")
-				elif [[ "$fstype" ==  "Linux filesystem" ]]
+				elif [[ "$fstype" ==  "Linux filesystem" || "$fstype" == "Linux" ]]
 				then
 					linux_fs_parts+=("$g")
 				elif [[ "$fstype" ==  "Linux swap" ]]
