@@ -169,9 +169,6 @@ iwd_mngr(){
 
 	systemctl enable --now iwd
 
-	# systemctl enable iwd
-	# systemctl start iwd
-
 	#select wireless card
 	local wireless_devs=($(iwctl station list | grep -iv 'name\|devices\|\-' | awk '{print $1}'))
 	if [[ ${#wireless_devs[@]} -eq 1 ]]
@@ -231,7 +228,8 @@ nm_mngr(){
 				esac
 			;;
 		1)
-			local con_name=$(dialog --inputbox "set a name for this wired connection" 0 0 3>&1 1>&2 2>&3)
+			local con_name
+			con_name=$(dialog --inputbox "set a name for this wired connection" 0 0 3>&1 1>&2 2>&3)
 			nmcli connection add con-name "$con_name" type ethernet autoconnect yes
 			;;
 	esac
@@ -273,15 +271,16 @@ ConfNet(){
 
 	if [[ ${#NMList[@]} -eq 0 ]]
 	then
-		dialog --msgbox "no networkmanagers available. networkmanager will be installed" 0 0
-		# pacman -Syvd --noconfirm --needed networkmanager
+		dialog --msgbox "no networkmanagers available. Local networkmanager package will be installed" 0 0
+		pacman -Uvd --noconfirm --needed "$(ls networkmanager*)"
 		dialog --msgbox "enabling NetworkManager" 0 0
-		# nmtui
+		nmtui
 		# # nm_mngr
 		MainMenu "Configure Network"
 	fi
 
-	local NM=$(dialog --cancel-label "BACK" --menu "Availble Network Managers" 0 0 0  "${NMList[@]}" 3>&1 1>&2 2>&3)
+	local NM
+	NM=$(dialog --cancel-label "BACK" --menu "Availble Network Managers" 0 0 0  "${NMList[@]}" 3>&1 1>&2 2>&3)
 
 	case $? in
 		0)
@@ -388,7 +387,7 @@ ConfirmMounts(){
 					if [[ -n $partfsformat ]]
 					then
 						MountPartsString+=" --> *$partfsformat"
-						if [[ $m_parttypename == "EFI System" ]]
+						if [[ "$m_parttypename" == "EFI System" ]] || [[ "$m_parttypename" == "EFI (FAT-12/16/32)" ]]
 						then
 							MountPartsString+=" --> /boot"
 						elif [[ $m_parttypename == "Linux filesystem" ]]
@@ -403,7 +402,7 @@ ConfirmMounts(){
 						fi
 					elif [[ -z $partfsformat ]]
 					then
-						if [[ $m_parttypename == "EFI System" ]]
+						if [[ "$m_parttypename" == "EFI System" ]] || [[ "$m_parttypename" == "EFI (FAT-12/16/32)" ]]
 						then
 							MountPartsString+=" --> /boot\n"
 						elif [[ $m_parttypename == "Linux filesystem" ]]
@@ -438,7 +437,7 @@ ConfirmMounts(){
 					if [[ -n $partfsformat ]]
 					then
 						MountPartsString+=" --> *$partfsformat"
-						if [[ $m_parttypename == "EFI System" ]]
+						if [[ "$m_parttypename" == "EFI System" ]] || [[ "$m_parttypename" == "EFI (FAT-12/16/32)" ]]
 						then
 							MountPartsString+=" --> /boot\n"
 						elif [[ $m_parttypename == "Linux filesystem" ]]
@@ -453,7 +452,7 @@ ConfirmMounts(){
 						fi
 					elif [[ -z $partfsformat ]]
 					then
-						if [[ $m_parttypename == "EFI System" ]]
+						if [[ "$m_parttypename" == "EFI System" ]] || [[ "$m_parttypename" == "EFI (FAT-12/16/32)" ]]
 						then
 							MountPartsString+=" --> +fat32 --> /boot\n"
 						elif [[ $m_parttypename == "Linux filesystem" ]]
@@ -563,22 +562,22 @@ FormatPartition(){
 
 	if [[ "$m_parttypename" == "Linux filesystem" ]] || [[ "$m_parttypename" == "Linux home" ]]
 	then
-		echo -e "mkfs.\$fsformat \"/dev/\$Partition\" | GuageMeter \"Formatting partition /dev/\$Partition with \$fsformat\" 1"
-		read -p "mkfs.fsformat /dev/partition" -n1
+		printf "y\n" | mkfs.$fsformat "/dev/$Partition" &>/dev/null | GuageMeter "Formatting partition /dev/$Partition with $fsformat" 1
+		# echo -e "mkfs.\$fsformat \"/dev/\$Partition\" | GuageMeter \"Formatting partition /dev/\$Partition with \$fsformat\" 1"
+		# read -p "mkfs.fsformat /dev/partition" -n1
 		# printf "y\n" | mkfs.$fsformat "/dev/$Partition" | GuageMeter "Formatting partition /dev/$Partition with $fsformat" 1
-		# printf "y\n" | mkfs.$fsformat "/dev/$Partition" &>/dev/null | GuageMeter "Formatting partition /dev/$Partition with $fsformat" 1
-	elif [[ "$m_parttypename" == "EFI System" ]]
+	elif [[ "$m_parttypename" == "EFI System" ]] || [[ "$m_parttypename" == "EFI (FAT-12/16/32)" ]]
 	then
-		echo "mkfs.fat -F32 \"/dev/\$Partition\" | GuageMeter \"Formatting partition /dev/\$Partition with \$fsformat\" 1"
-		read -p "mkfs.fat -F32 /dev/partition" -n1
+		printf "y\n" | mkfs.fat -F32 "/dev/$P &>/dev/nullartition" | GuageMeter "Formatting partition /dev/$Partition with $fsformat" 1
+		# echo "mkfs.fat -F32 \"/dev/\$Partition\" | GuageMeter \"Formatting partition /dev/\$Partition with \$fsformat\" 1"
+		# read -p "mkfs.fat -F32 /dev/partition" -n1
 		# printf "y\n" | mkfs.fat -F32 "/dev/$Partition" | GuageMeter "Formatting partition /dev/$Partition with $fsformat" 1
-		# printf "y\n" | mkfs.fat -F32 "/dev/$P &>/dev/nullartition" | GuageMeter "Formatting partition /dev/$Partition with $fsformat" 1
 	elif [[ "$m_parttypename" == "Linux swap" ]]
 	then
-		echo -e "mkswap \"/dev/\$Partition\" | GuageMeter \"creating swap filesystem on p\artition /dev/\$Partition\" 1"
-		read -p "mkswap /dev/partition" -n1
+		printf "y\n" | mkswap "/dev/$Partition" &>/dev/null | GuageMeter "creating swap filesystem on partition /dev/$Partition" 1
+		# echo -e "mkswap \"/dev/\$Partition\" | GuageMeter \"creating swap filesystem on p\artition /dev/\$Partition\" 1"
+		# read -p "mkswap /dev/partition" -n1
 		# printf "y\n" | mkswap "/dev/$Partition" | GuageMeter "creating swap filesystem on partition /dev/$Partition" 1
-		# printf "y\n" | mkswap "/dev/$Partition" | GuageMeter " &>/dev/nullcreating swap filesystem on partition /dev/$Partition" 1
 	fi
 
 	unset Partition fsformat m_parttypename
@@ -592,20 +591,20 @@ MountPartition(){
 	if [[ "$m_parttypename" == "Linux filesystem" ]]
 	then
 		case $partfsformat in
-			"ext2"|"ext3"|"ext4"|"btrffs"|"xfs"|"zfs") echo "mount \"/dev/\$Partition\" /mnt/" ;;
-			# "ext2"|"ext3"|"ext4"|"btrffs"|"xfs"|"zfs") mount "/dev/$Partition" /mnt/ ;;
+			# "ext2"|"ext3"|"ext4"|"btrffs"|"xfs"|"zfs") echo "mount \"/dev/\$Partition\" /mnt/" ;;
+			"ext2"|"ext3"|"ext4"|"btrffs"|"xfs"|"zfs") mount "/dev/$Partition" /mnt/ ;;
 		esac
 	elif [[ "$m_parttypename" == "Linux home" ]]
 	then
-		echo "mount \"/dev/\$Partition\" /mnt/home/"
-		# mount "/dev/$Partition" /mnt/home/
-	elif [[ "$m_parttypename" == "EFI System" ]] && [[ "$partfsformat" == "FAT32" ]] && [[ "$partfsformat2" == "vfat FAT32" ]]
+		# echo "mount \"/dev/\$Partition\" /mnt/home/"
+		mount "/dev/$Partition" /mnt/home/
+	elif ([[ "$m_parttypename" == "EFI System" ]] || [[ "$m_parttypename" == "EFI (FAT-12/16/32)" ]]) && [[ "$partfsformat" == "FAT32" ]] && [[ "$partfsformat2" == "vfat FAT32" ]]
 	then
 		mount "/dev/$Partition" /mnt/boot/
 	elif [[ "$m_parttypename" == "Linux swap" ]] || [[ "$partfsformat" == "swap" ]]
 	then
-		echo "swapon \"/dev/\$Partition\""
-		# swapon "/dev/$Partition"
+		# echo "swapon \"/dev/\$Partition\""
+		swapon "/dev/$Partition"
 	fi
 	unset Partition fsformat m_parttypename
 }
@@ -781,7 +780,6 @@ DisksWithoutPartitionsPresent(){
 
 	if [[ -n "$m_NoPartsDisks" ]]
 	then
-		# echo "30 $m_NoPartsDisks" 3>&1 1>&2 2>&3
 		unset m_NoPartsDisks
 		return 1
 	elif [[ -z "$m_NoPartsDisks" ]]
@@ -850,12 +848,11 @@ EditDisk(){
 
 	local disksTemp=("${m_Disks[@]}")
 	disksTemp=($(TempArrayWithAmpersand disksTemp))
-	#local  DiskEditor="$(dialog --no-tags --cancel-label "Back" --menu "Disk Editor Menu\n\nSelect a Disk Editor to Edit the $disk ${disksTemp[*]}" 0 0 0 "${diskeditors[@]}" 3>&1 1>&2 2>&3)"
+	# local DiskEditor="$(dialog --no-tags --cancel-label "Back" --menu "Disk Editor Menu\n\nSelect a Disk Editor to Edit the $disk ${disksTemp[*]}" 0 0 0 "${diskeditors[@]}" 3>&1 1>&2 2>&3)"
 	local DiskEditor="$(dialog --no-tags --cancel-label "Back" --menu "Disk Editor Menu\n\nSelect a Disk Editor to Edit the $disk ${disksTemp[*]}" 0 0 0 "${diskeditors[@]}" 3>&1 1>&2 2>&3)"
 	case $? in
 		0)
 			local m_NonePartDisks=()
-			# dialog --no-label "Back" --yes-label "OK" --yesno "partition type -> partition filesystem\n\nPartitions to be created:\n\nMandatory:\n1) EFI system partition -> FAT32\n2) Linux filesystem -----> ext4 (This is the linux root partition)\n\nOptional but recommended:\n1) Linux swap -> swap (used when machine runs out of RAM/physical memory)\n\nOptional:\n1) Linux user's home -> same filesystem as the Linux Root Partition" 0 0
 			dialog --no-label "Back" --yes-label "OK" --yesno "					partition type ----------------> partition filesystem format\n\nPartitions to be created and formatted to:\n	Mandatory:\n		1) EFI system partition -> FAT32(This is where the bootloader and the kernel resides)\n		2) Linux filesystem -----> ext4 (This is the linux root partition)\n\n	Optional but recommended:\n		1) Linux swap -> swap (used when machine runs out of RAM/physical memory)" 0 0
 			case $? in
 				0)
@@ -903,9 +900,10 @@ WritePartitionTable(){
 			local diskhave=($(TempArrayWithAmpersandHasHaveTexts ${#m_Disks[@]}))
 			local m_DisksTemp=("${m_Disks[@]}")
 			m_DisksTemp=($(TempArrayWithAmpersand m_DisksTemp))
-			################################
-			# rewrite disk partition table #
-			################################
+			for b in ${m_Disks[@]}
+			do
+				parted "/dev/$b" mktable "$PartTable"
+			done
 			dialog --msgbox "$PartTable Partiton Table set on ${diskhave[0]} ${m_DisksTemp[*]}" 0 0 3>&1 1>&2 2>&3
 			unset diskhave
 			;;
@@ -916,7 +914,7 @@ WritePartitionTable(){
 }
 
 PartitionDisk(){
-	# 3>&1 1>&2 2>&3
+
 	local DiskList=($(DiskListTemp | awk '{print $1}'))
 	declare -A DiskSize
 	declare -A DiskPartTable
@@ -955,14 +953,14 @@ PartitionDisk(){
 		fi
 	done
 
-	local Disks=($(dialog --scrollbar --cancel-label "Back" --column-separator "|" --checklist "Disk Selection Menu" 0 0 0 "${DiskListInfo[@]}" 3>&1 1>&2 2>&3))
+	local Disks=()
+	Disks=($(dialog --scrollbar --cancel-label "Back" --column-separator "|" --checklist "Disk Selection Menu" 0 0 0 "${DiskListInfo[@]}" 3>&1 1>&2 2>&3))
 	DISKS_EXIT_CODE=$?
 
 	if [[ ${#Disks[@]} -eq 1 ]]
 	then
 	    # local DiskPartsCheck=("$(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $1 }')")
 	    local DiskPartsCheck=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $1 }'))
-	    # echo "${DiskPartsCheck[@]}"
 	    if [[ ${#DiskPartsCheck[@]} -eq 1 ]]
 	    then
 	    	local m_DisksTemp=("${Disks[@]}")
@@ -977,7 +975,7 @@ PartitionDisk(){
 	fi
 
 	case $DISKS_EXIT_CODE in
-		1) MainMenu ;;
+		1) MainMenu "Partition Disk **" ;;
 		0)
 			if [[ -z "${Disks[@]}" ]]
 			then
@@ -1188,8 +1186,6 @@ MountViewPartitions(){
 			done
 			unset DiskPartName DiskPartFsTypeTemp DiskPartSize DiskPartLabel DiskPartFsType
 
-			# link to keep associative arrays in order -> https://stackoverflow.com/questions/29161323/how-to-keep-associative-array-order#29161460
-
 			local m_DiskVendor="$(lsblk "/dev/${Disks[$a]}" -dnlo vendor | sed 's/\s*$//g')"
 			local m_DiskModel="$(lsblk "/dev/${Disks[$a]}" -dnlo model)"
 			local m_DiskSize="$(lsblk "/dev/${Disks[$a]}" -dnlo size | sed 's/G/ GB/g;s/M/ MB/g;s/T/ TB/')"
@@ -1197,7 +1193,8 @@ MountViewPartitions(){
 			unset m_DiskVendor m_DiskModel
 
 			local DisksSize=$((${#Disks[@]}-1))
-			local partition=($(dialog --cancel-label "Back" --column-separator "|" --title "Partition Mount Menu" --extra-button --extra-label "Mount" --checklist "Partitions in /dev/${Disks[$a]} ($m_DiskNameString - $m_DiskSize) \n\ncheckbox items format:\nPartition--size--(filesystem type)--(partition label)" 0 0 0 "${DiskPartListInfo[@]}" 3>&1 1>&2 2>&3))
+			local partition=()
+			partition=($(dialog --cancel-label "Back" --column-separator "|" --title "Partition Mount Menu" --extra-button --extra-label "Mount" --checklist "Partitions in /dev/${Disks[$a]} ($m_DiskNameString - $m_DiskSize) \n\ncheckbox items format:\nPartition--size--(filesystem type)--(partition label)" 0 0 0 "${DiskPartListInfo[@]}" 3>&1 1>&2 2>&3))
 			PARTITION_EXIT_CODE=$?
 			unset m_DiskSize m_DiskNameString
 			for g in ${partition[@]}
@@ -1400,7 +1397,6 @@ MountViewPartitions(){
 		unset SelectedPartitions
 		MountViewPartitions Disks
 	fi
-	# dialog --msgbox "Selected partitions ${SelectedPartitions[*]}" 0 0
 }
 
 ###################################################### end of disk editing #################################################
@@ -1424,7 +1420,8 @@ Install_UI(){
 	ui_opts+=("Desktop Environment")
 	ui_opts+=("Gnome, KDE, cinnamon and stuff like that")
 
-	local UI=$(dialog --cancel-label "BACK" --default-item "${1}" --menu "UI Menu" 0 0 0 "${ui_opts[@]}" 3>&1 1>&2 2>&3)
+	local UI
+	UI=$(dialog --cancel-label "BACK" --default-item "${1}" --menu "UI Menu" 0 0 0 "${ui_opts[@]}" 3>&1 1>&2 2>&3)
 	case $? in
 		1) ConfHost "Install UI" ;;
 		0)
@@ -1444,7 +1441,8 @@ Install_UI(){
 
 			case $UI in
 				"Desktop Environment")
-					local DE=$(dialog --cancel-label "BACK" --menu "Desktop Environment Menu" 0 0 0 "${deopts[@]}" 3>&1 1>&2 2>&3)
+					local DE
+					DE=$(dialog --cancel-label "BACK" --menu "Desktop Environment Menu" 0 0 0 "${deopts[@]}" 3>&1 1>&2 2>&3)
 					case $? in
 						1) Install_UI "Desktop Environment" ;;
 						0) 
@@ -1479,7 +1477,8 @@ Install_UI(){
 					esac
 					;;
 				"Window Manager")
-					local WM=$(dialog --cancel-label "BACK" --menu "Window Manager Menu" 0 0 0 "${wmopts[@]}"  3>&1 1>&2 2>&3)
+					local WM
+					WM=$(dialog --cancel-label "BACK" --menu "Window Manager Menu" 0 0 0 "${wmopts[@]}"  3>&1 1>&2 2>&3)
 
 					case $? in
 						1) Install_UI "Window Manager" ;;
@@ -1495,7 +1494,7 @@ Install_UI(){
 									pkgs="awesom{e,e-terminal-fonts} vicious powerline "
 									;;
 								*)
-									dialog --msgbox "no window managers available"
+									dialog --msgbox "no window managers available" 0 0
 							esac
 							;;
 					esac
@@ -1505,6 +1504,7 @@ Install_UI(){
 					;;
 			esac
 			dialog --msgbox "$pkgs" 0 0
+			pacstrap /mnt $pkgs | GuageMeter "Installing packages $pkgs" 1
 			# pacstrap /mnt $pkgs
 			ConfHost "Install UI"
 			;;
@@ -1531,13 +1531,16 @@ SetTz(){
 	unset a
 
 	# unset regions_temp regions_dir_temp
-	local region=$(dialog --cancel-label "Back" --no-tags --menu "select the continent you are in" 0 0 0 "${regions[@]}" 3>&1 1>&2 2>&3)
+	local region
+	region=$(dialog --cancel-label "Back" --no-tags --menu "select the continent you are in" 0 0 0 "${regions[@]}" 3>&1 1>&2 2>&3)
 	case $? in
 		1) ConfHost "set timezone" ;;
 		0)
 			local zones=()
-			local zones_temp=($(ls "/usr/share/zoneinfo/$region"))
-			local zones_temp_dir=($(ls -d "/usr/share/zoneinfo/$region/*"))
+			local zones_temp=()
+			local zones_temp_dir=()
+			zones_temp=($(ls "/usr/share/zoneinfo/$region"))
+			zones_temp_dir=($(ls -d "/usr/share/zoneinfo/$region/*"))
 			# zones_temp=($(ls $region))
 			# zones_temp_dir=($(ls -d $region/*))
 
@@ -1553,23 +1556,21 @@ SetTz(){
 			done
 			unset a
 
-			local zone=$(dialog --cancel-label "back" --no-tags --menu "select the region you are in" 0 0 0 "${zones[@]}" 3>&1 1>&2 2>&3)
+			local zone
+			zone=$(dialog --cancel-label "back" --no-tags --menu "select the region you are in" 0 0 0 "${zones[@]}" 3>&1 1>&2 2>&3)
 			case $? in
 				1) SetTz ;;
 				0)
-					: '
 					ln -sf $zone /mnt/etc/localtime &>/dev/null
-					arch-chroot /mnt/ hwclock -wrv | dialog --programbox 0 0
+					# arch-chroot /mnt/ hwclock -wrv | dialog --programbox "hardwareClock Set" 0 0
+					arch-chroot /mnt/ hwclock -wrv | GuageMeter "Setting Hardware Clock" 1
 					if [[ ${PIPESTATUS[0]} -eq 0 ]]
 					then
-					'
-						dialog --msgbox "timezone is set $zone" 0 0
-					: '
+						dialog --msgbox "Hardware Clock and timezone are set $zone" 0 0
 					elif [[ ${PIPESTATUS[0]} -eq 0 ]]
 					then
-						dialog --msgbox "timezone could not be set ${zone}" 0 0
+						dialog --msgbox "timezone or Hardware Clock could not be set" 0 0
 					fi
-					'
 					;;
 			esac
 			;;
@@ -1581,10 +1582,10 @@ SetLocale(){
 	# user set locale
 
 	LOCALE=()
-	# cat "/mnt/etc/locale.gen" | grep -i '#\w' | sed 's/#//' > locales.txt
-	cat "/etc/locale.gen" | grep -i '#\w' | sed 's/#//' > locales.txt
+	# cat "locale.gen" | grep -i '#[a-zA-Z0-9]' | sed 's/#//' > locales.txt
+	cat "/etc/locale.gen" | grep -i '#[a-zA-Z0-9]' | sed 's/#//' > locales.txt
 
-	dialog --msgbox "when you press a character and you don't see the character, just keep that charcter held until you see the cursor" 0 0
+	# dialog --msgbox "when you press a character and you don't see the character, just keep that charcter held until you see the cursor" 0 0
 
 	while read txt
 	do
@@ -1593,33 +1594,21 @@ SetLocale(){
 		LOCALE+=(OFF)
 	done < locales.txt
 
-	rm -rf locales.txt
 	# back - 1
 	# ok - 0
-	LocaleDialog=$(dialog --scrollbar --visit-items --cancel-label "BACK" --title "Locale Selection Menu" --buildlist "\nUse the space bar to move locale options between the panes and use the tab for moving in between spacess. If no locale is selected then the deafult UTF-8 and ISO-8859 versions of the US english locales will be set \n\n       disabled locales enabled locales" 0 0 0 "${LOCALE[@]}" 3>&1 1>&2 2>&3)
-
+	local LocaleDialog
+	LocaleDialog=$(dialog --scrollbar --visit-items --cancel-label "BACK" --title "Locale Selection Menu" --buildlist "\nUse the space bar to move locale options between the panes and use the tab for moving in between spacess. If no locale is selected then the deafult UTF-8 and ISO-8859 versions of the US english locales will be set \n\n           disabled locales                                          enabled locales" 0 0 0 "${LOCALE[@]}" 3>&1 1>&2 2>&3)
 	echo "${LocaleDialog[@]}" | sed 's/" "/"\n"/g;s/"//g' > locales.txt
 	while read txt
 	do
-		# arch-chroot /mnt sed -i s/"#$txt"/"$txt"/g /etc/locale.gen
-		# arch-chroot /mnt locale-gen
-		sed -i s/"#$txt"/"$txt"/g locale.gen
+		sed -i s/"#$txt"/"$txt"/g /mnt/etc/locale.gen
 		# awk '{print ARGV}'
 	done < locales.txt
-	# nicepl=("$(cat locales.txt)")
-	# echo -e "locales\n${nicepl[*]}" | sed 's/"\n"//g'
+	rm -rfv locales.txt &>/dev/null
+	local LocaleFormat
 	LocaleFormat=$(echo -e "\n\n${LocaleDialog[*]}\n" | sed 's/" "/"\n"/g')
-	# LocaleFormat=$(echo -e "\n\n${LocaleDialog[@]}\n" | sed 's/" "/"\n"/g')
+	# locale-gen | GuageMeter "Generating Locales" 1
 	dialog --msgbox "locales set:$LocaleFormat" 0 0
-	# locale-gen
-	# rm -rfv locales.txt &2>/dev/null
-
-
-	: '
-	$? - 2 - help
-	$? - 1 - cancel
-	$? - 0 - ok
-	'
 }
 
 SetHostName(){
@@ -1632,14 +1621,14 @@ SetHostName(){
 			1) SetHostName ;;
 		esac
 	fi
-	# echo "$hostname" > "/mnt/etc/hostname"
+	echo "$hostname" > "/mnt/etc/hostname"
 	dialog --msgbox "set $hostname as hostname. You can change the hostname in the /etc/hostname file (if you are not in live mode i.e.) or if you are in live mode then edit the /mnt/etc/hostname file" 0 0
-	# arch-chroot /mnt echo -e "127.0.0.1\tlocalhost\n      ::1\tlocalhost" > "/mnt/etc/hostname"
+	arch-chroot /mnt echo -e "127.0.0.1\tlocalhost\n      ::1\tlocalhost" > "/mnt/etc/hostname"
 }
 
 SetPassword(){
 	local username=$1
-	local password=$2
+	# local password=$2
 	local NewPassword="$(dialog --passwordbox "set password for username $username" 0 0 3>&1 1>&2 2>&3)"
 	case $? in
 		1)
@@ -1647,20 +1636,21 @@ SetPassword(){
 			add_users
 			;;
 		0)
-			if [[ ${#NewPassword} -eq 0 ]]
-			# if [[ -z ${NewPassword} ]]
+			# if [[ ${#NewPassword} -eq 0 ]]
+			if [[ -z $NewPassword ]]
 			then
 				dialog --yesno "Accounts without passwords is as good as an inaccessible account (i.e. if the passwordless account is the only non-root account you have created). linux will prompt you for a password regardless of password state on an account/username.\nYou can login into the passwordless account by doing one, select few or all of the following\n1) logging in with an account that contains a password (if you have created one i.e.) and then logging in with the 'passwordless account' from the currently active account\n2) logging in as root and then loggin in with the 'passwordless account'.\n3) going to line 79 of /etc/sudoers and adding '<passwordless account name> ALL=(ALL) NOPASSWD: ALL'\n\nAll the above is as per my experience.\nProceed setting the passwordless account regardless?" 0 0
 				case $? in
-					1) SetPassword $username $password ;;
 					0) password="$NewPassword" ;;
-					# 0) password="$NewPassword" ;;
+					1) SetPassword $username ;;
+					# 1) SetPassword $username $password ;;
 				esac
 			else
 				if [[ ${#NewPassword} -lt 8 ]] && [[ ${#NewPassword} -gt 0 ]]
 				then
 					dialog --msgbox "password need to be atleast 8 characters long" 0 0
-					SetPassword $username $password
+					SetPassword $username
+					# SetPassword $username $password
 				elif [[ ${#NewPassword} -ge 8 ]]
 				then
 					local ConfirmPassword="$(dialog --passwordbox "Confirm password for username $username" 0 0 3>&1 1>&2 2>&3)"
@@ -1670,7 +1660,8 @@ SetPassword(){
 					elif [[ "$ConfirmPassword" != "$NewPassword" ]]
 					then
 						dialog --msgbox "passwords do not match" 0 0
-						SetPassword $username $password
+						SetPassword $username
+						# SetPassword $username $password
 					fi
 				fi
 			fi
@@ -1679,7 +1670,7 @@ SetPassword(){
 }
 
 add_users(){
-	local password=""
+	# local password=""
 	local username="$(dialog --inputbox "Username" 0 0 3>&1 1>&2 2>&3)"
 	case $? in
 		1) ConfHost "add users **" ;;
@@ -1691,13 +1682,28 @@ add_users(){
 			elif [[ -n $username ]]
 			then
 				dialog --msgbox "you won't see the password characters as they are typed" 0 0
-				SetPassword $username $password
-				# SetPassword
+				SetPassword $username
+				# SetPassword $username $password
 			fi
 			dialog --msgbox "created username $username and password is set" 0 0
-			# arch-chroot /mnt useradd -m $username -G users -g power,wheel,storage &>/dev/null
-			# case for stmnt for "user exists"
-			# arch-chroot /mnt passwd $username &>/dev/null
+			arch-chroot /mnt useradd -m $username -G users -g power,wheel,storage &>/dev/null
+			case $? in
+				0) 
+					dialog --msgbox "Created user $username" 0 0
+					SetPassword $username
+					arch-chroot /mnt passwd $username &>/dev/null
+					;;
+				9)
+					dialog --yesno "User $username already exists. Reset password?" 0 0
+					case $? in
+						0)
+							SetPassword $username
+							arch-chroot /mnt passwd $username &>/dev/null
+							;;
+					esac
+					;;
+			esac
+			
 			;;
 	esac
 }
@@ -1713,12 +1719,11 @@ SetPrompt(){
 
 	bashrc_file="$1"
 
-	# local Users=($(grep [1-9][0-9][0-9][0-9] /mnt/etc/passwd | grep -iv nobody | sed 's/\:/ \: /g' | awk '{print $1}'))
 	local Users=($(grep [1-9][0-9][0-9][0-9] /mnt/etc/passwd | grep -iv nobody | sed 's/\:/ \: /g' | awk '{print $1}'))
 	if [[ ${#Users[@]} -eq 1 ]]
 	then
-		# cp -rfv bashrc/"$1" /mnt/home/$Users/.bashrc &>/dev/null
-		cp -rf bashrc/"$1" /home/$Users/.bashrc &>/dev/null
+		cp -rfv bashrc/"$1" /mnt/home/$Users/.bashrc &>/dev/null
+		# cp -rf bashrc/"$1" /home/$Users/.bashrc &>/dev/null
 		dialog --msgbox "set $1 as the bash prompt for user ${Users[0]}" 0 0
 	elif [[ ${#Users[@]} -gt 1 ]]
 	then
@@ -1732,7 +1737,7 @@ SetPrompt(){
 				done
 				local User="$(dialog --no-tags --menu "Select a user to set the $bashrc_file bashrc file" 0 0 0 "${UsersTemp[@]}" 3>&1 1>&2 2>&3)"
 
-				# cp -rfv bashrc/"$bashrc_file" /mnt/home/$User/.bashrc &>/dev/null
+				cp -rfv bashrc/"$bashrc_file" /mnt/home/$User/.bashrc &>/dev/null
 				dialog --msgbox "Set $bashrc_file for user $User" 0 0
 				unset Users UsersTemp
 				;;
@@ -1769,10 +1774,10 @@ SetPrompt(){
 
 				for i in ${SelectedUsers[@]}
 				do
-					echo "\"cp -rf bashrc/\$bashrc_file\" \"/mnt/home/\$User/.bashrc &>/dev/null\""
-					# cp -rf bashrc/"$bashrc_file" /mnt/home/$User/.bashrc &>/dev/null
-				done
-				# done | GuageMeter "Setting $bashrc_file for $userText ${SelectedUsersTemp[@]}"
+					cp -rf bashrc/"$bashrc_file" /mnt/home/$User/.bashrc &>/dev/null
+					# echo "\"cp -rf bashrc/\$bashrc_file\" \"/mnt/home/\$User/.bashrc &>/dev/null\""
+				done | GuageMeter "Setting $bashrc_file for $userText ${SelectedUsersTemp[@]}"
+				# done
 
 				dialog --msgbox "Set $bashrc_file for $userText ${SelectedUsersTemp[@]}" 0 0
 				unset SelectedUsers SelectedUsersTemp UsersTemp userText
@@ -1789,7 +1794,6 @@ SetBashPrompt(){
 	bashrc_opts+=("modded parrot" "my personalized version of the parrot OS bash prompt")
 	bashrc_opts+=("parrot" "bash prompt taken from parrot OS")
 	bashrc_opts+=("pop OS" "pop OS bash prompt")
-	# bashrc_opts+=()
 	local Users=($(grep [1-9][0-9][0-9][0-9] /etc/passwd | grep -iv nobody | sed 's/\:/ \: /g' | awk '{print $1}'))
 
 	$1="${bashrc_opts[0]}"
@@ -1798,7 +1802,8 @@ SetBashPrompt(){
 	# 0 - set bashrc
 	# 3 - preview
 	# 1 - back
-	local bashrc=$(dialog --ok-label "set bashrc" --default-item "$1" --extra-button --extra-label "preview" --cancel-label "back" --menu "bashrc selection menu\n\nselected menuitem will be saved as \".bashrc\" in the home directory" 0 0 0 "${bashrc_opts[@]}" 3>&1 1>&2 2>&3)
+	local bashrc
+	bashrc=$(dialog --ok-label "set bashrc" --default-item "$1" --extra-button --extra-label "preview" --cancel-label "back" --menu "bashrc selection menu\n\nselected menuitem will be saved as \".bashrc\" in the home directory" 0 0 0 "${bashrc_opts[@]}" 3>&1 1>&2 2>&3)
 
 	case $? in
 		0)
@@ -1853,23 +1858,25 @@ SetBashPrompt(){
 }
 
 SetRootPassword(){
-	local RootPassword=$(dialog --no-cancel --passwordbox "Enter root password. If no root password is provided then root password will be set to 'try again'. if default password is set please change the default root password post installation as it can be cracked through rainbow tables, dictionary or brute force attacks" 0 0 3>&1 1>&2 2>&3)
+	local RootPassword
+	RootPassword=$(dialog --no-cancel --passwordbox "Enter root password. If no root password is provided then root password will be set to 'try again'. if default password is set please change the default root password post installation as it can be cracked through rainbow tables, dictionary or brute force attacks" 0 0 3>&1 1>&2 2>&3)
 	if [[ -z $RootPassword ]]
 	then
 		RootPassword="try again"
-		# arch-chroot "echo $RootPassword;echo $RootPassword" | passwd &>/dev/null
+		arch-chroot "echo $RootPassword;echo $RootPassword" | passwd &>/dev/null
 		dialog --msgbox "default root password 'try again' is set " 0 0
 	elif [[ -n $RootPassword ]]
 	then
-		local ConirmRootPassword=$(dialog --passwordbox "confirm root password" 0 0 3>&1 1>&2 2>&3)
+		local ConirmRootPassword
+		ConirmRootPassword=$(dialog --passwordbox "confirm root password" 0 0 3>&1 1>&2 2>&3)
 		if [[ "$RootPassword" != "$ConfirmPassword" ]]
 		then
 			dialog --msgbox "root password does not match" 0 0
 			SetRootPassword
 		elif [[ "$RootPassword" == "$ConfirmPassword" ]]
 		then
+			arch-chroot "echo $RootPassword;echo $RootPassword" | passwd &>/dev/null
 			dialog --msgbox "root password is set" 0 0
-			# arch-chroot "echo $RootPassword;echo $RootPassword" | passwd &>/dev/null
 		fi
 	fi
 }
@@ -1889,7 +1896,8 @@ ConfHost(){
 			HostOpt+=("Set Bash Prompt" "File that's used to tell how the terminal prompt should look like")
 			# local "${HostOpt[0]}"=$1
 			$1="${HostOpt[0]}"
-			local opt=$(dialog --cancel-label "BACK" --default-item "${1}" --menu "Host Configuration Menu" 0 0 0 "${HostOpt[@]}" 3>&1 1>&2 2>&3)
+			local opt
+			opt=$(dialog --cancel-label "BACK" --default-item "${1}" --menu "Host Configuration Menu" 0 0 0 "${HostOpt[@]}" 3>&1 1>&2 2>&3)
 			case $? in
 				0)
 					case $opt in
@@ -1957,25 +1965,25 @@ InstallArch(){
 		done
 		unset packages_temp
 
-		# pacstrap /mnt "${packages[@]}" | GuageMeter "Installing Arch Base system packages" 1
-		# # pacstrap /mnt "${packages[@]}"
-		# case $? in
-		# case ${PIPESTATUS[0]} in
-		# 	0)
-		# 		local bootloaderid="$(dialog --inputbox "Bootloader ID - Input Any Text" 0 0 3>&1 1>&2 2>&3)"
-		# 		grub-install -v --boot-directory="/mnt/boot" --bootloader-id "$bootloaderid" --efi-directory="/mnt/boot" --recheck --removable --target x86_efi-efi
-		# 		echo "grub-install -v --boot-directory=\"/mnt/boot\" --bootloader-id \"$bootloaderid\" --efi-directory=\"/mnt/boot\" --recheck --removable --target x86_efi-efi"
-		# 		case $? in
-		# 			0) dialog --msgbox "Grub successfully installed" 0 0;MainMenu "Install Arch *" ;;
-		# 			1) dialog --msgbox "could not install grub-bootloader. you execute \'grub-install --help | less\' on one tty and run \'grub-install <options>\' on another tty. \n\nDO NOT USE THE \'--force\' option.You can open tty's by pressing ctrl+alt+<F1>-<F6> with each function key corresponding to their tty id\n\n Go back to the Main Menu or exit to the tty?" ;;
-		# 		esac
-		# 		dialog --msgbox "Installed Arch Base system" 0 0
-		# 		;;
-		# 	*)
-		# 		dialog --msgbox "Failed to install Arch Base system. Exiting the Installer" 0 0
-		# 		exit
-		# 		;;
-		# esac
+		pacstrap /mnt "${packages[@]}" | GuageMeter "Installing Arch Base system packages" 1
+		# pacstrap /mnt "${packages[@]}"
+		case $? in
+		case ${PIPESTATUS[0]} in
+			0)
+				local bootloaderid="$(dialog --inputbox "Bootloader ID - Input Any Text" 0 0 3>&1 1>&2 2>&3)"
+				grub-install -v --boot-directory="/mnt/boot" --bootloader-id "$bootloaderid" --efi-directory="/mnt/boot" --recheck --removable --target x86_efi-efi
+				echo "grub-install -v --boot-directory=\"/mnt/boot\" --bootloader-id \"$bootloaderid\" --efi-directory=\"/mnt/boot\" --recheck --removable --target x86_efi-efi"
+				case $? in
+					0) dialog --msgbox "Grub successfully installed" 0 0;MainMenu "Install Arch *" ;;
+					1) dialog --msgbox "could not install grub-bootloader. you execute \'grub-install --help | less\' on one tty and run \'grub-install <options>\' on another tty. \n\nDO NOT USE THE \'--force\' option.You can open tty's by pressing ctrl+alt+<F1>-<F6> with each function key corresponding to their tty id\n\n Go back to the Main Menu or exit to the tty?" ;;
+				esac
+				dialog --msgbox "Installed Arch Base system" 0 0
+				;;
+			*)
+				dialog --msgbox "Failed to install Arch Base system. Exiting the Installer" 0 0
+				exit
+				;;
+		esac
 		packages=()
 
 		cpu_vendor=$(cat /proc/cpuinfo | grep vendor | uniq | awk '{print $3}')
@@ -1999,7 +2007,6 @@ InstallArch(){
 
 
 
-		# dialog --checklist "terminal text editors"
 		if [[ $cpu_vendor == "AuthenticAMD" ]]
 		then
 			packages=("amd-ucode")
@@ -2028,7 +2035,8 @@ InstallArch(){
 		terminaleditorslist+=("zile" "zile" off)
 		terminaleditorslist+=("mg" "mg micro emacs" off)
 
-		local editors=($(dialog --extra-button --extra-label "Cancel" --cancel-label "Back" --no-tags --title "text editor selection Menu" --checklist "nano and vi will be installed by default" 0 0 0 "${terminaleditorslist[@]}" 3>&1 1>&2 2>&3))
+		local editors=()
+		editors=($(dialog --extra-button --extra-label "Cancel" --cancel-label "Back" --no-tags --title "text editor selection Menu" --checklist "nano and vi will be installed by default" 0 0 0 "${terminaleditorslist[@]}" 3>&1 1>&2 2>&3))
 		case $? in
 			0)
 				unset terminaleditorslist
@@ -2055,7 +2063,6 @@ InstallArch(){
 
 		dialog --msgbox "Extra packages that will be installed:\n${packages[*]}" 0 0
 
-		: '
 		pacstrap /mnt "$packages" | GuageMeter "Installing extra linux packages" 1
 		# pacstrap /mnt "$packages"
 
@@ -2064,7 +2071,6 @@ InstallArch(){
 			0) dialog --msgbox "Extra Linux packages have been installed packages" ;;
 			*) dialog --msgbox "failed to install Extra Linux packages" ;;
 		esac
-		'
 	fi
 }
 
@@ -2072,8 +2078,8 @@ Repo_Enable(){
 	dialog --yesno "enable \"multilib\" repo for packages with support for multiple architectures?" 5 80
 	case $? in
 		0)
-			# sed '94s/\#\[/"["' /etc/pacman.conf
-			# sed '95s/\#\[/""' /etc/pacman.conf
+			sed '94s/\#\[/"["' /etc/pacman.conf
+			sed '95s/\#\[/""' /etc/pacman.conf
 			dialog --msgbox "\"multilib\" repo has been enabled. you can add, remove, disable or enable repos by editing the \"/etc/pacman.conf\" file" 0 0
 			;;
 		1)
@@ -2107,8 +2113,8 @@ MainMenu(){
 					;;
 				1)
 					clear
-					echo -e "\n\ndialog could not be installed"
-					# echo -e "\n\ndialog could not be installed.\n\nPlease install provided dialog packages by typing \"pacman -Uvd <package name>\" with or without the \"--noconfirm\" argument.\n\ncurrent directory:\n$(pwd)\n\npackages in this directory:\n$(ls *.pkg*).\n\n\nexiting...\n\n"
+					# echo -e "\n\ndialog could not be installed"
+					echo -e "\n\ndialog could not be installed.\n\nPlease install provided dialog packages by typing \"pacman -Uvd <package name>\" with or without the \"--noconfirm\" argument.\n\ncurrent directory:\n$(pwd)\n\npackages in this directory:\n$(ls *.pkg*).\n\n\nexiting...\n\n"
 					exit
 					;;
 			esac
@@ -2122,7 +2128,8 @@ MainMenu(){
 	menuopt+=("Configure Host +" "Personalize the machine by setting Hostname, adding users etc.")
 	menuopt+=("Reboot" "Reboot the computer")
 
-	local menuitem=$(dialog --no-mouse --default-item "${1}" --cancel-label "Exit" --title "Install Menu" --menu "To install arch all options followed by\n  i) '**' are priority 1\n ii) '*'are priority 2\niii) '+'are priority 3\n\nThe rest are optional" 0 0 0 "${menuopt[@]}" 3>&1 1>&2 2>&3)
+	local menuitem
+	menuitem=$(dialog --no-mouse --default-item "${1}" --cancel-label "Exit" --title "Install Menu" --menu "To install arch all options followed by\n  i) '**' are priority 1\n ii) '*'are priority 2\niii) '+'are priority 3\n\nThe rest are optional" 0 0 0 "${menuopt[@]}" 3>&1 1>&2 2>&3)
 
 	case $? in
 		0)
@@ -2146,7 +2153,7 @@ MainMenu(){
 
 
 				"Configure Host +")
-					arch-chroot /mnt
+					# arch-chroot /mnt
 					mountpoint /mnt
 					case $? in
 						1)
@@ -2175,8 +2182,8 @@ MainMenu(){
 						1) MainMenu "Reboot" ;;
 					esac
 
-					# reboot now -f
-					clear;reset
+					reboot now -f
+					# clear;reset
 					;;
 				*)
 					dialog --msgbox "sike" 0 0
