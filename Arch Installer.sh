@@ -764,10 +764,12 @@ DisksWithoutPartitionTable(){
 # check if disk has partitions
 DisksWithoutPartitionsPresent(){
 	local DisksArgs=$1[@]
+	# local Disks=(${!DisksArgs})
 	local Disks=("${!DisksArgs}")
 	unset DisksArgs
 
 	local m_NoPartsDisks=""
+
 	for i in ${Disks[@]}
 	do
 		local m_check=($(DiskPartInfoTemp "$i" | awk '{ print $1 }'))
@@ -1027,7 +1029,7 @@ PartitionDisk(){
 								unset m_NoPartTableDisks m_NoPartTableDisksTemp m_DisksTemp diskhave1111 diskhave0000 diskhave1100 m_DisksWithPartTable m_DisksWithPartTableTemp
 								;;
 							3)
-								Disks=($(DiscardFromArray Disks m_NoPartTableDisks))
+								Disks=("$(DiscardFromArray Disks m_NoPartTableDisks)")
 								dialog --msgbox "Discarded ${diskhave0000[0]} ${m_NoPartTableDisksTemp[*]}. Using ${diskhave1100[0]} ${m_DisksWithPartTableTemp[*]}" 0 0
 								unset m_NoPartTableDisks m_NoPartTableDisksTemp m_DisksTemp diskhave1111 diskhave0000 diskhave1100 m_DisksWithPartTable m_DisksWithPartTableTemp
 								;;
@@ -1078,7 +1080,8 @@ MountViewPartitions(){
 	# $1 - Disks
 
 	local DisksArgs=$1[@]
-	local Disks=("${!DisksArgs}")
+	# local Disks=("${!DisksArgs}")
+	local Disks=(${!DisksArgs})
 	unset DisksArgs
 
 
@@ -2067,8 +2070,8 @@ InstallArch(){
 		# case $? in
 		pacstrap /mnt "$packages" | GuageMeter "Installing extra linux packages" 1
 		case ${PIPESTATUS[0]} in
-			0) dialog --msgbox "Extra Linux packages have been installed packages" ;;
-			*) dialog --msgbox "failed to install Extra Linux packages" ;;
+			0) dialog --msgbox "Extra Linux packages have been installed packages" 0 0;;
+			*) dialog --msgbox "failed to install Extra Linux packages" 0 0;;
 		esac
 	fi
 }
