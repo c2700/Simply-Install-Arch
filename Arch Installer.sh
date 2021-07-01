@@ -1965,9 +1965,9 @@ InstallArch(){
 		done
 		unset packages_temp
 
-		pacstrap /mnt "${packages[@]}" | GuageMeter "Installing Arch Base system packages" 1
 		# pacstrap /mnt "${packages[@]}"
-		case $? in
+		# case $? in
+		pacstrap /mnt "${packages[@]}" | GuageMeter "Installing Arch Base system packages" 1
 		case ${PIPESTATUS[0]} in
 			0)
 				local bootloaderid="$(dialog --inputbox "Bootloader ID - Input Any Text" 0 0 3>&1 1>&2 2>&3)"
@@ -2063,10 +2063,9 @@ InstallArch(){
 
 		dialog --msgbox "Extra packages that will be installed:\n${packages[*]}" 0 0
 
-		pacstrap /mnt "$packages" | GuageMeter "Installing extra linux packages" 1
 		# pacstrap /mnt "$packages"
-
-		case $? in
+		# case $? in
+		pacstrap /mnt "$packages" | GuageMeter "Installing extra linux packages" 1
 		case ${PIPESTATUS[0]} in
 			0) dialog --msgbox "Extra Linux packages have been installed packages" ;;
 			*) dialog --msgbox "failed to install Extra Linux packages" ;;
