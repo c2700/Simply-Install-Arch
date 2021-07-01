@@ -518,7 +518,7 @@ ConfirmMounts(){
 				unset partfsformat2
 			done
 			dialog --msgbox "formatted partitions with appropriate fs formats and mounted them" 0 0
-			# genfstab "/mnt/" > "/mnt/etc/fstab" ;;
+			genfstab "/mnt/" > "/mnt/etc/fstab" ;;
 			dialog --msgbox "Created fstab entry. you can generate the fstab of your disk by executing \"genfstab -U /mnt > /mnt/etc/fstab\" (if anything went wrong with the fstab entry i.e.)" 0 0
 			unset m_MountPartitionsTextsTemp linuxfs
 			;;
