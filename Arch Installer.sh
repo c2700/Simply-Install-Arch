@@ -324,24 +324,25 @@ ConfirmMounts(){
 	local m_MountPartitionsTextsTemp=("${!m_MountPartitionsTextsArgs}")
 	unset m_MountPartitionsTextsArgs
 
-	local linuxfs=""
+	local linuxfs="ext4"
 
 	dialog --yes-label "Change filesystem" --no-label "Use Default" --yesno "Use default ext4 for linux filesystem or use a different filesystem?" 0 0
 	case $? in
 		0)
 			local linuxfs_list=()
-			linuxfs_list+=("ext4" "")
-			linuxfs_list+=("ext3" "")
-			linuxfs_list+=("ext2" "")
-			linuxfs_list+=("btrfs" "")
-			linuxfs_list+=("xfs" "")
-			linuxfs_list+=("zfs" "")
-			local linuxfschange="$(dialog --no-tags --menu "Select filesystem to use as linux filesystem" 0 0 0 "${linuxfs_list[@]}" 3>&1 1>&2 2>&3)"
+			linuxfs_list+=("ext4" "ext4")
+			linuxfs_list+=("ext3" "ext3")
+			linuxfs_list+=("ext2" "ext2")
+			linuxfs_list+=("btrfs" "btrfs")
+			linuxfs_list+=("xfs" "xfs")
+			linuxfs_list+=("zfs" "zfs")
+			local linuxfschange=""
+			linuxfschange=$(dialog --no-tags --menu "Select filesystem to use as linux filesystem" 0 0 0 "${linuxfs_list[@]}" 3>&1 1>&2 2>&3)
 			case $? in
 				0)
 					if [[ "$linuxfs" == "$linuxfschange" ]]
 					then
-						dialog --msgbox "default linux filesystem ext4 has not been changed. Using ext4 filesystem" 0 0
+						dialog --msgbox "default linux filesystem ext4 has not been changed" 0 0
 					elif [[ "$linuxfs" != "$linuxfschange" ]]
 					then
 						linuxfs="$linuxfschange"
@@ -349,140 +350,183 @@ ConfirmMounts(){
 					fi
 					;;
 				1)
-					linuxfs="$linuxfschange"
 					dialog --msgbox "Using default ext4 linux filesystem" 0 0
 					;;
 			esac
 			;;
 		1)
-			linuxfs="ext4"
 			dialog --msgbox "Using default ext4 linux filesystem" 0 0
 			;;
 	esac
 	unset linuxfs_list
 
-	# declare -A MountParts
-	local MountParts=()
-	local MountPartsTexts=()
 
+	# m_MountDisksTemp m_MountPartitionsTextsTemp
 	for k in ${m_MountDisksTemp[@]}
 	do
-		local MountPartsString="/dev/$k\n"
-		for l in ${m_MountPartitionsTextsTemp[@]}
+		local m_partitions=()
+		local MountPartsString="\n/dev/$k\n"
+
+		for m in ${m_MountPartitionsTextsTemp[@]}
 		do
-			local partsize="$(lsblk "/dev/$l" -dlno size | awk '{ sub("[mM]"," MB");sub("[gG]"," GB");print 0; }')"
-			local partfsformat="$(lsblk "/dev/$l" -dlno fstype,fsver | awk '{ print $1" "$2 }' | sed 's/vfat FAT32/FAT32/g;s/ext4 1.0/ext4/g;s/swap 1/swap/g')"
-			local m_parttypename="$(lsblk "/dev/$l" -dlno parttypename)"
-			local partlabel="$(lsblk "/dev/$l" -dlno partlabel)"
-
-			local m_Tempdisk="$(echo "$l" | grep -i "$k")"
-
-			if [[ ${#m_MountDisksTemp[@]} -eq 1 ]]
+			if [[ "$m" =~ "$k" ]]
 			then
-				if [[ "$m_Tempdisk" == "$k" ]]
+				m_partitions+=("$m")
+			fi
+		done
+
+		if [[ ${#m_partitions[@]} -eq 1 ]]
+		then
+			local partfsformat=$(lsblk /dev/${m_partitions[0]} -nlo fsver,fstype | sed 's/FAT32 vfat/FAT32/g;s/1.0   ext4/ext4/g;s/1     swap/swap/g')
+			local partsize=$(lsblk /dev/${m_partitions[0]} -nlo size | sed 's/^\s*//g;s/[mM]/ MB/g;s/[gG]/ GB/g;s/[tT]/ TB/g')
+			local m_partlabel=$(lsblk /dev/${m_partitions[0]} -nlo partlabel)
+			local m_parttypename=$(lsblk /dev/${m_partitions[0]} -nlo parttypename)
+
+			if [[ -n $m_partlabel ]]
+			then
+				MountPartsString+="  \`-/dev/${m_partitions[0]} --> $partsize --> $m_partlabel --> $m_parttypename"
+			elif [[ -z $m_partlabel ]]
+			then
+				MountPartsString+="  \`-/dev/${m_partitions[0]} --> $partsize --> (No Label) --> $m_parttypename"
+			fi
+
+			if [[ -n $partfsformat ]]
+			then
+				if [[ "$m_parttypename" == "EFI System" ]] || [[ "$m_parttypename" == "EFI (FAT-12/16/32)" ]]
 				then
-					MountPartsString="  \`-/dev/$l --> $partsize --> $partlabel --> $m_parttypename"
-					# MountPartsString="/dev/$k\n  \`-/dev/$l --> $partsize --> $partlabel --> $m_parttypename"
-					# MountPartsString="/dev/$k  \`-/dev/$l --> $partsize --> $partlabel --> $m_parttypename"
-					if [[ -n $partfsformat ]]
+					MountPartsString+=" --> *$partfsformat --> /boot\n"
+				elif [[ "$m_parttypename" == "Linux swap" ]]
+				then
+					MountPartsString+=" --> *$partfsformat --> (mount as swap)\n"
+				elif [[ "$m_parttypename" == "Linux filesystem" ]] || [[ "$m_parttypename" == "Linux" ]]
+				then
+					if [[ "$partfsformat" == "$linuxfs" ]]
 					then
 						MountPartsString+=" --> *$partfsformat"
-						if [[ "$m_parttypename" == "EFI System" ]] || [[ "$m_parttypename" == "EFI (FAT-12/16/32)" ]]
-						then
-							MountPartsString+=" --> /boot"
-						elif [[ $m_parttypename == "Linux filesystem" ]]
-						then
-							MountPartsString+=" --> /\n"
-						elif [[ $m_parttypename == "Linux swap" ]]
-						then
-							MountPartsString+=" --> (mounted as swap)\n"
-						elif [[ $m_parttypename == "Linux home" ]]
-						then
-							MountPartsString+=" --> /home\n"
-						fi
-					elif [[ -z $partfsformat ]]
+					elif [[ "$partfsformat" != "$linuxfs" ]]
 					then
-						if [[ "$m_parttypename" == "EFI System" ]] || [[ "$m_parttypename" == "EFI (FAT-12/16/32)" ]]
-						then
-							MountPartsString+=" --> /boot\n"
-						elif [[ $m_parttypename == "Linux filesystem" ]]
-						then
-							MountPartsString+=" --> /\n"
-						elif [[ $m_parttypename == "Linux swap" ]]
-						then
-							MountPartsString+=" --> +swap --> (mounted as swap)\n"
-						elif [[ $m_parttypename == "Linux home" ]]
-						then
-							MountPartsString+=" --> +$linuxfs --> /home\n"
-						fi
+						MountPartsString+=" --> *($partfsformat -> $linuxfs)"
 					fi
-					# MountParts["$k"]="$MountPartsString\n"
-					MountParts+=("$MountPartsString\n")
+					MountPartsString+=" --> /\n"
+				elif [[ "$m_parttypename" == "Linux home" ]]
+				then
+					if [[ "$partfsformat" == "$linuxfs" ]]
+					then
+						MountPartsString+=" --> *$partfsformat"
+					elif [[ "$partfsformat" != "$linuxfs" ]]
+					then
+						MountPartsString+=" --> *($partfsformat -> $linuxfs)"
+					fi
+					MountPartsString+=" --> /home\n"
 				fi
-			elif [[ ${#m_MountDisksTemp[@]} -gt 1 ]]
+			elif [[ -z $partfsformat ]]
 			then
-				if [[ "$m_Tempdisk" == "$k" ]]
+				if [[ "$m_parttypename" == "EFI System" ]] || [[ "$m_parttypename" == "EFI (FAT-12/16/32)" ]]
 				then
-					if [[ "$i" == ${m_MountPartitionsTextsTemp[0]} ]] || [[ "$i" != ${m_MountPartitionsTextsTemp[-1]} ]]
-					then
-						MountPartsString="  \|-/dev/$l --> $partsize --> $partlabel --> $m_parttypename\n"
-						# MountPartsString="/dev/$k\n  \|-/dev/$l --> $partsize --> $partlabel --> $m_parttypename\n"
-						# MountPartsString="  \|-/dev/$l --> $partsize --> $partlabel --> $m_parttypename\n"
-					elif [[ "$i" == ${m_MountPartitionsTextsTemp[-1]} ]]
-					then
-						MountPartsString="/dev/$k\n  \`-/dev/$l --> $partsize --> $partlabel --> $m_parttypename\n"
-						# MountPartsString="  \`-/dev/$l --> $partsize --> $partlabel --> $m_parttypename\n"
-					fi
-
-					if [[ -n $partfsformat ]]
-					then
-						MountPartsString+=" --> *$partfsformat"
-						if [[ "$m_parttypename" == "EFI System" ]] || [[ "$m_parttypename" == "EFI (FAT-12/16/32)" ]]
-						then
-							MountPartsString+=" --> /boot\n"
-						elif [[ $m_parttypename == "Linux filesystem" ]]
-						then
-							MountPartsString+=" --> /\n"
-						elif [[ $m_parttypename == "Linux swap" ]]
-						then
-							MountPartsString+=" --> (mounted as swap)\n"
-						elif [[ $m_parttypename == "Linux home" ]]
-						then
-							MountPartsString+=" --> /home\n"
-						fi
-					elif [[ -z $partfsformat ]]
-					then
-						if [[ "$m_parttypename" == "EFI System" ]] || [[ "$m_parttypename" == "EFI (FAT-12/16/32)" ]]
-						then
-							MountPartsString+=" --> +fat32 --> /boot\n"
-						elif [[ $m_parttypename == "Linux filesystem" ]]
-						then
-							MountPartsString+=" --> +$linuxfs --> /\n"
-						elif [[ $m_parttypename == "Linux swap" ]]
-						then
-							MountPartsString+=" --> +swap --> (mounted as swap)\n"
-						elif [[ $m_parttypename == "Linux home" ]]
-						then
-							MountPartsString+=" --> +$linuxfs --> /home\n"
-						fi
-					fi
-					# MountParts["$k"]="$MountPartsString\n"
-					MountParts+=("$MountPartsString\n")
+					MountPartsString+=" --> +FAT32 --> /boot\n"
+				elif [[ "$m_parttypename" == "Linux swap" ]]
+				then
+					MountPartsString+=" --> +swap --> (mount as swap)\n"
+				elif [[ "$m_parttypename" == "Linux filesystem" ]] || [[ "$m_parttypename" == "Linux" ]]
+				then
+					MountPartsString+=" --> +$linuxfs --> /\n"
+				elif [[ "$m_parttypename" == "Linux home" ]]
+				then
+					MountPartsString+=" --> +$linuxfs --> /home\n"
 				fi
 			fi
-			unset m_Tempdisk
-		done
-		unset MountPartsString
-	done
-	unset m_MountDisksTemp
+			MountPartsString+="\n"
+			MountParts+=("$MountPartsString")
+			unset MountPartsString
 
-	dialog --ok-label "Back" --cancel-label "Format" --extra-button --extra-label "Re-Format" --title "partition mount confirmation" --yesno "1) +Format - Will format the partition with specified filesystem format. Reformatting will\n   not apply here.\n2) *Format - Will reformat the partition with selected or changed filesystem format wiping\n   the partition.\n\nFormat:\n   Partition --> Size --> Partition Label --> Filesystem --> (+|*)Format --> MountPoint\n\n${MountParts[*]}" 20 95
+
+
+		elif [[ ${#m_partitions[@]} -gt 1 ]]
+		then
+			for l in ${m_partitions[@]}
+			do
+				local partfsformat=$(lsblk /dev/$l -nlo fsver,fstype | sed 's/FAT32 vfat/FAT32/g;s/1.0   ext4/ext4/g;s/1     swap/swap/g')
+				local partsize=$(lsblk /dev/$l -nlo size | sed 's/^\s*//g;s/[mM]/ MB/g;s/[gG]/ GB/g;s/[tT]/ TB/g')
+				local m_partlabel=$(lsblk /dev/$l -nlo partlabel)
+				local m_parttypename=$(lsblk /dev/$l -nlo parttypename)
+
+				# local partfsformat=$(lsblk /dev/ -dnlo fstype)
+				# local partsize=$(lsblk /dev/$l -dnlo size | sed 's/^\s*//g;s/[mM]/ MB/g;s/[gG]/ GB/g;s/[tT]/ TB/g')
+				# local m_partlabel=$(lsblk /dev/$l -dnlo partlabel)
+				# local m_parttypename=$(lsblk /dev/$l -dnlo parttypename)
+
+				if [[ "$l" != "${m_partitions[-1]}" ]]
+				then
+					MountPartsString+="  |-/dev/$l --> "
+				elif [[ "$l" == "${m_partitions[-1]}" ]]
+				then
+					MountPartsString+="  \`-/dev/$l --> "
+				fi
+				MountPartsString+="$partsize --> $m_partlabel --> $m_parttypename"
+
+				if [[ -z $partfsformat ]]
+				then
+					if [[ "$m_parttypename" == "EFI System" ]] || [[ "$m_parttypename" == "EFI (FAT-12/16/32)" ]]
+					then
+						MountPartsString+=" --> +FAT32 --> /boot\n"
+					elif [[ "$m_parttypename" == "Linux swap" ]]
+					then
+						MountPartsString+=" --> +swap --> (mount as swap)\n"
+					elif [[ "$m_parttypename" == "Linux filesystem" ]] || [[ "$m_parttypename" == "Linux" ]]
+					then
+						MountPartsString+=" --> +$linuxfs --> /\n"
+					elif [[ "$m_parttypename" == "Linux home" ]]
+					then
+						MountPartsString+=" --> +$linuxfs --> /home\n"
+					fi
+				elif [[ -n $partfsformat ]]
+				then
+					if [[ "$m_parttypename" == "EFI System" ]] || [[ "$m_parttypename" == "EFI (FAT-12/16/32)" ]]
+					then
+						MountPartsString+=" --> *FAT32 --> /boot\n"
+					elif [[ "$m_parttypename" == "Linux swap" ]]
+					then
+						MountPartsString+=" --> *swap --> (mount as swap)\n"
+					elif [[ "$m_parttypename" == "Linux filesystem" ]] || [[ "$m_parttypename" == "Linux" ]]
+					then
+						if [[ "$partfsformat" == "$linuxfs" ]]
+						then
+							MountPartsString+=" --> *$partfsformat"
+						elif [[ "$partfsformat" != "$linuxfs" ]]
+						then
+							MountPartsString+=" --> *($partfsformat -> $linuxfs)"
+						fi
+						MountPartsString+=" --> /\n"
+					elif [[ "$m_parttypename" == "Linux home" ]]
+					then
+						if [[ "$partfsformat" == "$linuxfs" ]]
+						then
+							MountPartsString+=" --> *$partfsformat"
+						elif [[ "$partfsformat" != "$linuxfs" ]]
+						then
+							MountPartsString+=" --> *($partfsformat -> $linuxfs)"
+						fi
+						MountPartsString+=" --> /home\n"
+					fi
+				fi
+			done
+			# MountPartsString+="\n"
+			MountParts+=("$MountPartsString")
+			unset MountPartsString
+		fi
+		unset m_partitions # MountPartsString
+	done
+	# set +xEeTtB
+
+	local MountPartsString="${MountParts[*]}"
+	dialog --scrollbar --ok-label "Back" --cancel-label "Format" --extra-button --extra-label "Re-Format" --title "partition mount confirmation" --yesno "1) +Format - Will format the partition with specified filesystem format. Reformatting will\n             not apply here.\n2) *Format - If the \"Re-Format\" is selected it will reformat the partition using existing filesystem\n             format wiping the partition.\n3) *(Format_1 -> Format_2) - Will reformat the existing \"Format_1\" filesystem with \"Format_2\" filesystem\n                             partition with different filesystem format.\n\nFormat:\n  Disk\n  \`-  Partition --> Size --> Partition Label --> Filesystem --> (+|*)Format --> MountPoint\n${MountPartsString[*]}\n\n" 20 110
+	exit
 	case $? in
 		0)
-			unset MountParts
+			unset MountParts MountPartsTemp MountPartsDialogString
 			PartitionDisk ;;
 		1)
-			unset MountParts
+			unset MountParts MountPartsDialogString
 			dialog --yesno "Wipe partitions that will be formatted with selected filesystem?" 0 0
 			if [[ $? -eq 0 ]]
 			then
@@ -518,7 +562,7 @@ ConfirmMounts(){
 				unset partfsformat2
 			done
 			dialog --msgbox "formatted partitions with appropriate fs formats and mounted them" 0 0
-			genfstab "/mnt/" > "/mnt/etc/fstab" ;;
+			genfstab "/mnt/" > "/mnt/etc/fstab"
 			dialog --msgbox "Created fstab entry. you can generate the fstab of your disk by executing \"genfstab -U /mnt > /mnt/etc/fstab\" (if anything went wrong with the fstab entry i.e.)" 0 0
 			unset m_MountPartitionsTextsTemp linuxfs
 			;;
@@ -548,7 +592,7 @@ ConfirmMounts(){
 				unset partfsformat2
 			done
 			dialog --msgbox "formatted partitions with appropriate fs formats and mounted them" 0 0
-			genfstab "/mnt/" > "/mnt/etc/fstab" ;;
+			genfstab "/mnt/" > "/mnt/etc/fstab"
 			dialog --msgbox "Created fstab entry. you can generate the fstab of your disk by executing \"genfstab -U /mnt > /mnt/etc/fstab\" (if anything went wrong with the fstab entry i.e.)" 0 0
 			unset m_MountPartitionsTextsTemp linuxfs
 			;;
@@ -560,25 +604,46 @@ FormatPartition(){
 	local fsformat=$2
 	local m_parttypename="$(lsblk "/dev/$l" -dlno parttypename)"
 
-	if [[ "$m_parttypename" == "Linux filesystem" ]] || [[ "$m_parttypename" == "Linux home" ]]
-	then
-		printf "y\n" | mkfs.$fsformat "/dev/$Partition" &>/dev/null | GuageMeter "Formatting partition /dev/$Partition with $fsformat" 1
-		# echo -e "mkfs.\$fsformat \"/dev/\$Partition\" | GuageMeter \"Formatting partition /dev/\$Partition with \$fsformat\" 1"
-		# read -p "mkfs.fsformat /dev/partition" -n1
-		# printf "y\n" | mkfs.$fsformat "/dev/$Partition" | GuageMeter "Formatting partition /dev/$Partition with $fsformat" 1
-	elif [[ "$m_parttypename" == "EFI System" ]] || [[ "$m_parttypename" == "EFI (FAT-12/16/32)" ]]
-	then
-		printf "y\n" | mkfs.fat -F32 "/dev/$P &>/dev/nullartition" | GuageMeter "Formatting partition /dev/$Partition with $fsformat" 1
-		# echo "mkfs.fat -F32 \"/dev/\$Partition\" | GuageMeter \"Formatting partition /dev/\$Partition with \$fsformat\" 1"
-		# read -p "mkfs.fat -F32 /dev/partition" -n1
-		# printf "y\n" | mkfs.fat -F32 "/dev/$Partition" | GuageMeter "Formatting partition /dev/$Partition with $fsformat" 1
-	elif [[ "$m_parttypename" == "Linux swap" ]]
-	then
-		printf "y\n" | mkswap "/dev/$Partition" &>/dev/null | GuageMeter "creating swap filesystem on partition /dev/$Partition" 1
-		# echo -e "mkswap \"/dev/\$Partition\" | GuageMeter \"creating swap filesystem on p\artition /dev/\$Partition\" 1"
-		# read -p "mkswap /dev/partition" -n1
-		# printf "y\n" | mkswap "/dev/$Partition" | GuageMeter "creating swap filesystem on partition /dev/$Partition" 1
-	fi
+	case $m_parttypename in
+		"Linux filesystem"|"Linux home"|"Linux")
+			printf "y\n" | mkfs.$fsformat "/dev/$Partition" &>/dev/null | GuageMeter "Formatting partition /dev/$Partition with $fsformat" 1
+			# echo -e "mkfs.\$fsformat \"/dev/\$Partition\" | GuageMeter \"Formatting partition /dev/\$Partition with \$fsformat\" 1"
+			# read -p "mkfs.fsformat /dev/partition" -n1
+			# printf "y\n" | mkfs.$fsformat "/dev/$Partition" | GuageMeter "Formatting partition /dev/$Partition with $fsformat" 1
+			;;
+		"EFI System"|"EFI (FAT-12/16/32)")
+			printf "y\n" | mkfs.fat -F32 "/dev/$P &>/dev/nullartition" | GuageMeter "Formatting partition /dev/$Partition with $fsformat" 1
+			# echo "mkfs.fat -F32 \"/dev/\$Partition\" | GuageMeter \"Formatting partition /dev/\$Partition with \$fsformat\" 1"
+			# read -p "mkfs.fat -F32 /dev/partition" -n1
+			# printf "y\n" | mkfs.fat -F32 "/dev/$Partition" | GuageMeter "Formatting partition /dev/$Partition with $fsformat" 1
+			;;
+		"Linux swap")
+			printf "y\n" | mkswap "/dev/$Partition" &>/dev/null | GuageMeter "creating swap filesystem on partition /dev/$Partition" 1
+			# echo -e "mkswap \"/dev/\$Partition\" | GuageMeter \"creating swap filesystem on p\artition /dev/\$Partition\" 1"
+			# read -p "mkswap /dev/partition" -n1
+			# printf "y\n" | mkswap "/dev/$Partition" | GuageMeter "creating swap filesystem on partition /dev/$Partition" 1
+			;;
+	esac
+
+	# if [[ "$m_parttypename" == "Linux filesystem" ]] || [[ "$m_parttypename" == "Linux home" ]] || [[ "$m_parttypename" == "Linux" ]]
+	# then
+	# 	printf "y\n" | mkfs.$fsformat "/dev/$Partition" &>/dev/null | GuageMeter "Formatting partition /dev/$Partition with $fsformat" 1
+	# 	# echo -e "mkfs.\$fsformat \"/dev/\$Partition\" | GuageMeter \"Formatting partition /dev/\$Partition with \$fsformat\" 1"
+	# 	# read -p "mkfs.fsformat /dev/partition" -n1
+	# 	# printf "y\n" | mkfs.$fsformat "/dev/$Partition" | GuageMeter "Formatting partition /dev/$Partition with $fsformat" 1
+	# elif [[ "$m_parttypename" == "EFI System" ]] || [[ "$m_parttypename" == "EFI (FAT-12/16/32)" ]]
+	# then
+	# 	printf "y\n" | mkfs.fat -F32 "/dev/$P &>/dev/nullartition" | GuageMeter "Formatting partition /dev/$Partition with $fsformat" 1
+	# 	# echo "mkfs.fat -F32 \"/dev/\$Partition\" | GuageMeter \"Formatting partition /dev/\$Partition with \$fsformat\" 1"
+	# 	# read -p "mkfs.fat -F32 /dev/partition" -n1
+	# 	# printf "y\n" | mkfs.fat -F32 "/dev/$Partition" | GuageMeter "Formatting partition /dev/$Partition with $fsformat" 1
+	# elif [[ "$m_parttypename" == "Linux swap" ]]
+	# then
+	# 	printf "y\n" | mkswap "/dev/$Partition" &>/dev/null | GuageMeter "creating swap filesystem on partition /dev/$Partition" 1
+	# 	# echo -e "mkswap \"/dev/\$Partition\" | GuageMeter \"creating swap filesystem on p\artition /dev/\$Partition\" 1"
+	# 	# read -p "mkswap /dev/partition" -n1
+	# 	# printf "y\n" | mkswap "/dev/$Partition" | GuageMeter "creating swap filesystem on partition /dev/$Partition" 1
+	# fi
 
 	unset Partition fsformat m_parttypename
 }
