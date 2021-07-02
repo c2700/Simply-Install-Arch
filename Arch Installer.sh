@@ -516,11 +516,9 @@ ConfirmMounts(){
 		fi
 		unset m_partitions # MountPartsString
 	done
-	# set +xEeTtB
 
 	local MountPartsString="${MountParts[*]}"
 	dialog --scrollbar --ok-label "Back" --cancel-label "Format" --extra-button --extra-label "Re-Format" --title "partition mount confirmation" --yesno "1) +Format - Will format the partition with specified filesystem format. Reformatting will\n             not apply here.\n2) *Format - If the \"Re-Format\" is selected it will reformat the partition using existing filesystem\n             format wiping the partition.\n3) *(Format_1 -> Format_2) - Will reformat the existing \"Format_1\" filesystem with \"Format_2\" filesystem\n                             partition with different filesystem format.\n\nFormat:\n  Disk\n  \`-  Partition --> Size --> Partition Label --> Filesystem --> (+|*)Format --> MountPoint\n${MountPartsString[*]}\n\n" 20 110
-	exit
 	case $? in
 		0)
 			unset MountParts MountPartsTemp MountPartsDialogString
