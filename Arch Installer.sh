@@ -2049,14 +2049,14 @@ ConfHost(){
 							then
 								userText="user"
 								DeleteUsersTempText=($(TempArrayWithAmpersand DeleteUsersTempText))
-								userdel -rf ${DeleteUsers[0]} &>/dev/null
+								arch-chroot userdel -rf ${DeleteUsers[0]} &>/dev/null
 							elif [[ ${DeleteUsers[@]} -gt 1 ]]
 							then
 								userText="users"
 								DeleteUsersTempText=($(TempArrayWithAmpersand DeleteUsersTempText))
 								for n in ${DeleteUsers[@]}
 								do
-									userdel -rf $n &>/dev/null
+									arch-chroot userdel -rf $n &>/dev/null
 								done
 							fi
 							dialog --msgbox "Deleted $userText ${DeleteUsersTempText[*]}" 0 0
