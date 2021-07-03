@@ -243,7 +243,7 @@ ConfNet(){
 		dialog --title "Installed Network Manager" --msgbox "network available" 0 0
 		MainMenu "Configure Network **"
 	else
-		dialog --title "Network Status" --msgbox "network not available. will search for availble network managers" 0 0
+		dialog --title "Network Status" --msgbox "network not available. will search for available network managers" 0 0
 	fi
 
 
@@ -1985,6 +1985,7 @@ ConfHost(){
 	mountpoint /mnt &>/dev/null
 	case $? in
 		0)
+			local usersTemp=($(cat /etc/passwd | sed 's/:/ : /g' | grep -iG '[1-9][0-9][0-9][0-9]\d*' | grep -iv nobody | awk '{ print $1 }'))
 			local HostOpt=("set hostname *" "set your computer name")
 			HostOpt+=("set Locale *" "set your computer language")
 			HostOpt+=("set timezone" "configure which timezone you are in")
@@ -1993,6 +1994,10 @@ ConfHost(){
 			HostOpt+=("Install UI" "Install Desktop Environment or Window Manager")
 			HostOpt+=("Set Bash Prompt" "File that's used to tell how the terminal prompt should look like")
 			# local "${HostOpt[0]}"=$1
+			if [[ ${#usersTemp[@]} -ge 1 ]]
+			then
+				HostOpt+=("Remove Users", "Delete an existing user")
+			fi
 			$1="${HostOpt[0]}"
 			local opt
 			opt=$(dialog --cancel-label "BACK" --default-item "${1}" --menu "Host Configuration Menu" 0 0 0 "${HostOpt[@]}" 3>&1 1>&2 2>&3)
@@ -2027,6 +2032,34 @@ ConfHost(){
 						"Set Bash Prompt")
 							SetBashPrompt
 							ConfHost "Set Bash Prompt"
+							;;
+						"Remove Users")
+							local DeleteUsers=()
+							local DeleteUsersTemp=()
+							local DeleteUsersTempText=("${usersTemp[@]}")
+							local userText=""
+
+							for u in ${usersTemp[@]}
+							do
+								DeleteUsersTemp+=("u" "" 0)
+							done
+							unset DeleteUsersTemp
+							DeleteUsers=($(dialog --no-tags --checklist "" 0 0 0 ${DeleteUsers[@]}))
+							if [[ ${DeleteUsers[@]} -eq 1 ]]
+							then
+								userText="user"
+								DeleteUsersTempText=($(TempArrayWithAmpersand DeleteUsersTempText))
+								userdel -rf ${DeleteUsers[0]} &>/dev/null
+							elif [[ ${DeleteUsers[@]} -gt 1 ]]
+							then
+								userText="users"
+								DeleteUsersTempText=($(TempArrayWithAmpersand DeleteUsersTempText))
+								for n in ${DeleteUsers[@]}
+								do
+									userdel -rf $n &>/dev/null
+								done
+							fi
+							dialog --msgbox "Deleted $userText ${DeleteUsersTempText[*]}" 0 0
 							;;
 						*)
 							dialog --msgbox "sike" 0 0
