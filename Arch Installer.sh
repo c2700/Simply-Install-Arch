@@ -604,19 +604,22 @@ FormatPartition(){
 
 	case $m_parttypename in
 		"Linux filesystem"|"Linux home"|"Linux")
-			printf "y\n" | mkfs.$fsformat "/dev/$Partition" # &>/dev/null | GuageMeter "Formatting partition /dev/$Partition with $fsformat" 1
+			mkfs.$fsformat "/dev/$Partition" # &>/dev/null | GuageMeter "Formatting partition /dev/$Partition with $fsformat" 1
+			# printf "y\n" | mkfs.$fsformat "/dev/$Partition" # &>/dev/null | GuageMeter "Formatting partition /dev/$Partition with $fsformat" 1
 			# echo -e "mkfs.\$fsformat \"/dev/\$Partition\" | GuageMeter \"Formatting partition /dev/\$Partition with \$fsformat\" 1"
 			# read -p "mkfs.fsformat /dev/partition" -n1
 			# printf "y\n" | mkfs.$fsformat "/dev/$Partition" | GuageMeter "Formatting partition /dev/$Partition with $fsformat" 1
 			;;
 		"EFI System"|"EFI (FAT-12/16/32)")
-			printf "y\n" | mkfs.fat -F32 "/dev/$Partition" # &>/dev/null | GuageMeter "Formatting partition /dev/$Partition with $fsformat" 1
+			mkfs.fat -F32 "/dev/$Partition" # &>/dev/null | GuageMeter "Formatting partition /dev/$Partition with $fsformat" 1
+			# printf "y\n" | mkfs.fat -F32 "/dev/$Partition" # &>/dev/null | GuageMeter "Formatting partition /dev/$Partition with $fsformat" 1
 			# echo "mkfs.fat -F32 \"/dev/\$Partition\" | GuageMeter \"Formatting partition /dev/\$Partition with \$fsformat\" 1"
 			# read -p "mkfs.fat -F32 /dev/partition" -n1
 			# printf "y\n" | mkfs.fat -F32 "/dev/$Partition" | GuageMeter "Formatting partition /dev/$Partition with $fsformat" 1
 			;;
 		"Linux swap")
-			printf "y\n" | mkswap "/dev/$Partition" # &>/dev/null | GuageMeter "creating swap filesystem on partition /dev/$Partition" 1
+			mkswap "/dev/$Partition" # &>/dev/null | GuageMeter "creating swap filesystem on partition /dev/$Partition" 1
+			# printf "y\n" | mkswap "/dev/$Partition" # &>/dev/null | GuageMeter "creating swap filesystem on partition /dev/$Partition" 1
 			# echo -e "mkswap \"/dev/\$Partition\" | GuageMeter \"creating swap filesystem on p\artition /dev/\$Partition\" 1"
 			# read -p "mkswap /dev/partition" -n1
 			# printf "y\n" | mkswap "/dev/$Partition" | GuageMeter "creating swap filesystem on partition /dev/$Partition" 1
@@ -2089,7 +2092,7 @@ InstallArch(){
 	then
 		# nvidia linux nvlink/capabilities/fabric-mgmt 0
 		local packages=()
-		packages_temp=(base base-devel devel linu{x,x-{docs,headers}} grub efi{var,bootmgr} dkms broadcom-dkms-wl-dkms xf86-input-{libinput,synaptics} xf86-video-fbdev)
+		packages_temp=(base base-devel devel linu{x,x-{docs,headers}} grub efi{var,bootmgr} dkms broadcom-dkms-dkms xf86-input-{libinput,synaptics} xf86-video-fbdev)
 		for i in "${packages_temp[@]}"
 		do
 			packages+=("$i")
@@ -2103,7 +2106,6 @@ InstallArch(){
 			0)
 				local bootloaderid="$(dialog --inputbox "Bootloader ID - Input Any Text" 0 0 3>&1 1>&2 2>&3)"
 				grub-install -v --boot-directory="/mnt/boot" --bootloader-id "$bootloaderid" --efi-directory="/mnt/boot" --recheck --removable --target x86_efi-efi
-				echo "grub-install -v --boot-directory=\"/mnt/boot\" --bootloader-id \"$bootloaderid\" --efi-directory=\"/mnt/boot\" --recheck --removable --target x86_efi-efi"
 				case $? in
 					0) dialog --msgbox "Grub successfully installed" 0 0;MainMenu "Install Arch *" ;;
 					1) dialog --msgbox "could not install grub-bootloader. you execute \'grub-install --help | less\' on one tty and run \'grub-install <options>\' on another tty. \n\nDO NOT USE THE \'--force\' option.You can open tty's by pressing ctrl+alt+<F1>-<F6> with each function key corresponding to their tty id\n\n Go back to the Main Menu or exit to the tty?" ;;
