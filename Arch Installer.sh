@@ -550,12 +550,13 @@ ConfirmMounts(){
 				if [[ -z $partfsformat2 ]]
 				then
 					FormatPartition "$g" "$linuxfs" # | GuageMeter \"Formatting partition /dev/\$Partition with \$fsformat\" 1"
-					MountPartition "$g"
+					# MountPartition "$g"
 				elif [[ -n $partfsformat2 ]]
 				then
 					unset partfsformat2
 					continue
 				fi
+				MountPartitions m_MountPartitionsTextsTemp
 				
 				unset partfsformat2
 			done
@@ -581,13 +582,14 @@ ConfirmMounts(){
 				if [[ -z $partfsformat2 ]]
 				then
 					FormatPartition "$g" "$linuxfs" # | GuageMeter \"Formatting partition /dev/\$Partition with \$fsformat\" 1"
-					MountPartition "$g"
+					# MountPartition "$g"
 				elif [[ -n $partfsformat2 ]]
 				then
 					FormatPartition "$g" "$linuxfs" # | GuageMeter \"Re-Formatting partition /dev/\$Partition with \$fsformat\" 1"
-					MountPartition "$g"
+					# MountPartition "$g"
 				fi
 				unset partfsformat2
+				MountPartitions m_MountPartitionsTextsTemp
 			done
 			dialog --msgbox "formatted partitions with appropriate fs formats and mounted them" 0 0
 			genfstab "/mnt/" > "/mnt/etc/fstab"
@@ -649,30 +651,59 @@ FormatPartition(){
 	unset Partition fsformat m_parttypename
 }
 
-MountPartition(){
-	local Partition=$1
-	local m_parttypename="$(lsblk "/dev/$l" -dlno parttypename)"
-	local partfsformat="$(lsblk "/dev/$l" -dlno fstype,fsver | awk '{ print $1" "$2 }' | sed 's/vfat FAT32/FAT32/g;s/ext4 1.0/ext4/g;s/swap 1/swap/g')"
-	local partfsformat2="$(lsblk "/dev/$l" -dlno fstype,fsver | awk '{ print $1" "$2 }')"
-	if [[ "$m_parttypename" == "Linux filesystem" ]] || [[ "$m_parttypename" == "Linux" ]]
+MountPartitions(){
+	local PartitionsArgs=$1[@]
+	local Partitions=${!PartitionsArgs}
+	unset PartitionsArgs
+
+	if ! mountpoint /mnt
 	then
-		case $partfsformat in
-			# "ext2"|"ext3"|"ext4"|"btrffs"|"xfs"|"zfs") echo "mount \"/dev/\$Partition\" /mnt/" ;;
-			"ext2"|"ext3"|"ext4"|"btrffs"|"xfs"|"zfs") mount "/dev/$Partition" /mnt/ ;;
-		esac
-	elif [[ "$m_parttypename" == "Linux home" ]]
+		for k in ${Partitions[@]}
+		do
+			local m_parttypename="$(lsblk "/dev/$k" -dlno parttypename)"
+			local partfsformat="$(lsblk "/dev/$k" -dlno fstype,fsver | awk '{ print $1" "$2 }' | sed 's/vfat FAT32/FAT32/g;s/ext4 1.0/ext4/g;s/swap 1/swap/g')"
+			local partfsformat2="$(lsblk "/dev/$k" -dlno fstype,fsver | awk '{ print $1" "$2 }')"
+			if [[ "$m_parttypename" == "Linux filesystem" ]] || [[ "$m_parttypename" == "Linux" ]]
+			then
+				case $partfsformat in
+					"ext2"|"ext3"|"ext4"|"btrffs"|"xfs"|"zfs") mount "/dev/$k" /mnt/ ;;
+				esac
+			fi
+		done
+	elif mountpoint /mnt
 	then
-		# echo "mount \"/dev/\$Partition\" /mnt/home/"
-		mount "/dev/$Partition" /mnt/home/
-	elif ([[ "$m_parttypename" == "EFI System" ]] || [[ "$m_parttypename" == "EFI (FAT-12/16/32)" ]]) && [[ "$partfsformat" == "FAT32" ]] && [[ "$partfsformat2" == "vfat FAT32" ]]
-	then
-		mount "/dev/$Partition" /mnt/boot/
-	elif [[ "$m_parttypename" == "Linux swap" ]] || [[ "$partfsformat" == "swap" ]]
-	then
-		# echo "swapon \"/dev/\$Partition\""
-		swapon "/dev/$Partition"
+		if ! mountpoint /mnt/boot
+		then
+		for k in ${Partitions[@]}
+		do
+			local m_parttypename="$(lsblk "/dev/$k" -dlno parttypename)"
+			local partfsformat="$(lsblk "/dev/$k" -dlno fstype,fsver | awk '{ print $1" "$2 }' | sed 's/vfat FAT32/FAT32/g;s/ext4 1.0/ext4/g;s/swap 1/swap/g')"
+			local partfsformat2="$(lsblk "/dev/$k" -dlno fstype,fsver | awk '{ print $1" "$2 }')"
+			if ([[ "$m_parttypename" == "EFI System" ]] || [[ "$m_parttypename" == "EFI (FAT-12/16/32)" ]]) && [[ "$partfsformat" == "FAT32" ]] && [[ "$partfsformat2" == "vfat FAT32" ]]
+			then
+				mount "/dev/$Partition" /mnt/boot/
+			fi
+		done
+		elif mountpoint /mnt/boot
+		then
+			for k in ${Partitions[@]}
+			do
+				local m_parttypename="$(lsblk "/dev/$k" -dlno parttypename)"
+				local partfsformat="$(lsblk "/dev/$k" -dlno fstype,fsver | awk '{ print $1" "$2 }' | sed 's/vfat FAT32/FAT32/g;s/ext4 1.0/ext4/g;s/swap 1/swap/g')"
+				local partfsformat2="$(lsblk "/dev/$k" -dlno fstype,fsver | awk '{ print $1" "$2 }')"
+
+				if [[ "$m_parttypename" == "Linux swap" ]] || [[ "$partfsformat" == "swap" ]]
+				then
+					# echo "swapon \"/dev/\$Partition\""
+					swapon "/dev/$Partition"
+				elif [[ "$m_parttypename" == "Linux home" ]]
+				then
+					# echo "mount \"/dev/\$Partition\" /mnt/home/"
+					mount "/dev/$Partition" /mnt/home/
+				fi
+			done
+		fi
 	fi
-	unset Partition fsformat m_parttypename
 }
 
 # Disk Info
@@ -2092,20 +2123,22 @@ InstallArch(){
 	then
 		# nvidia linux nvlink/capabilities/fabric-mgmt 0
 		local packages=()
-		packages_temp=(base base-devel devel linu{x,x-{docs,headers}} grub efi{var,bootmgr} dkms broadcom-dkms-dkms xf86-input-{libinput,synaptics} xf86-video-fbdev)
+		packages_temp=(base base-devel linu{x,x-{docs,headers}} grub efi{var,bootmgr} dkms broadcom-wl-dkms xf86-input-{libinput,synaptics} xf86-video-fbdev)
 		for i in "${packages_temp[@]}"
 		do
 			packages+=("$i")
 		done
 		unset packages_temp
 
-		# pacstrap /mnt "${packages[@]}"
-		# case $? in
-		pacstrap /mnt "${packages[@]}" | GuageMeter "Installing Arch Base system packages" 1
-		case ${PIPESTATUS[0]} in
+		# pacstrap /mnt "${packages[*]}" | GuageMeter "Installing Arch Base system packages" 1
+		# case ${PIPESTATUS[0]} in
+		pacstrap /mnt "${packages[@]}"
+		case $? in
 			0)
-				local bootloaderid="$(dialog --inputbox "Bootloader ID - Input Any Text" 0 0 3>&1 1>&2 2>&3)"
+				local bootloaderid
+				bootloaderid="$(dialog --inputbox "Bootloader ID - Input Any Text" 0 0 3>&1 1>&2 2>&3)"
 				grub-install -v --boot-directory="/mnt/boot" --bootloader-id "$bootloaderid" --efi-directory="/mnt/boot" --recheck --removable --target x86_efi-efi
+				echo "grub-install -v --boot-directory=\"/mnt/boot\" --bootloader-id \"$bootloaderid\" --efi-directory=\"/mnt/boot\" --recheck --removable --target x86_efi-efi"
 				case $? in
 					0) dialog --msgbox "Grub successfully installed" 0 0;MainMenu "Install Arch *" ;;
 					1) dialog --msgbox "could not install grub-bootloader. you execute \'grub-install --help | less\' on one tty and run \'grub-install <options>\' on another tty. \n\nDO NOT USE THE \'--force\' option.You can open tty's by pressing ctrl+alt+<F1>-<F6> with each function key corresponding to their tty id\n\n Go back to the Main Menu or exit to the tty?" ;;
@@ -2117,13 +2150,12 @@ InstallArch(){
 				exit
 				;;
 		esac
-		packages=()
 
 		cpu_vendor=$(cat /proc/cpuinfo | grep vendor | uniq | awk '{print $3}')
 
 		local intel_gpu=()
 		local intel_gpu_temp=(libva-intel-driver lib32-{libva-intel-driver,vulkan-intel} vulkan-intel intel-graphics-compiler)
-		for i in ${packages_temp[@]}
+		for i in ${intel_gpu_temp[@]}
 		do
 			intel_gpu+=("$i")
 		done
@@ -2132,14 +2164,14 @@ InstallArch(){
 
 		local nvidia_gpu=()
 		local nvidia_gpu_temp=(ffnvcodec-headers libvdpau opencl-nvidia xf86-video-nouveau lib32-{libvdpau,nvidia-utils,opencl-nvidia} nvidia-{dkms,lts,prime,settings,utils})
-		for i in ${packages_temp[@]}
+		for i in ${nvidia_gpu_temp[@]}
 		do
 			nvidia_gpu+=("$i")
 		done
 		unset nvidia_gpu_temp
 
 
-
+		packages=()
 		if [[ $cpu_vendor == "AuthenticAMD" ]]
 		then
 			packages=("amd-ucode")
@@ -2175,11 +2207,12 @@ InstallArch(){
 				unset terminaleditorslist
 				if [[ -n "${editors[@]}" ]]
 				then
-					packages="${packages[@]} ${editors[@]}"
-				elif [[ -z "${editors[@]}" ]]
-				then
-					# packages="${packages[@]}"
-					:
+					packages=("${packages[@]}")
+					packages=("${editors[@]}")
+				# elif [[ -z "${editors[@]}" ]]
+				# then
+				# 	# packages="${packages[@]}"
+				# 	:
 				fi
 				;;
 			1)
@@ -2198,7 +2231,7 @@ InstallArch(){
 
 		# pacstrap /mnt "$packages"
 		# case $? in
-		pacstrap /mnt "$packages" | GuageMeter "Installing extra linux packages" 1
+		pacstrap /mnt "${packages[*]}" | GuageMeter "Installing extra linux packages" 1
 		case ${PIPESTATUS[0]} in
 			0) dialog --msgbox "Extra Linux packages have been installed packages" 0 0;;
 			*) dialog --msgbox "failed to install Extra Linux packages" 0 0;;
@@ -2210,8 +2243,14 @@ Repo_Enable(){
 	dialog --yesno "enable \"multilib\" repo for packages with support for multiple architectures?" 5 80
 	case $? in
 		0)
-			sed '94s/\#\[/"["' /etc/pacman.conf
-			sed '95s/\#\[/""' /etc/pacman.conf
+			linenumber=$(grep -ni "\[multilib\]" /etc/pacman.conf | sed 's/:/ /g' | awk '{ print $1 }')
+			sed -i '${linenumber}s/\#\[multilib/"[multilib"/g' /etc/pacman.conf
+			linenumber=$((linenumber+1))
+			sed -i '${linenumber}s/\#\Include/"Include"/g' /etc/pacman.conf
+			# sed '93s/ \#\[ /"["' /etc/pacman.conf
+			# sed '94s/ \#\[ /""' /etc/pacman.conf
+			# sed '94s/\#\[/"["' /etc/pacman.conf
+			# sed '95s/\#\[/""' /etc/pacman.conf
 			dialog --msgbox "\"multilib\" repo has been enabled. you can add, remove, disable or enable repos by editing the \"/etc/pacman.conf\" file" 0 0
 			;;
 		1)
