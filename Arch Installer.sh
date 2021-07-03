@@ -604,19 +604,19 @@ FormatPartition(){
 
 	case $m_parttypename in
 		"Linux filesystem"|"Linux home"|"Linux")
-			printf "y\n" | mkfs.$fsformat "/dev/$Partition" &>/dev/null | GuageMeter "Formatting partition /dev/$Partition with $fsformat" 1
+			printf "y\n" | mkfs.$fsformat "/dev/$Partition" # &>/dev/null | GuageMeter "Formatting partition /dev/$Partition with $fsformat" 1
 			# echo -e "mkfs.\$fsformat \"/dev/\$Partition\" | GuageMeter \"Formatting partition /dev/\$Partition with \$fsformat\" 1"
 			# read -p "mkfs.fsformat /dev/partition" -n1
 			# printf "y\n" | mkfs.$fsformat "/dev/$Partition" | GuageMeter "Formatting partition /dev/$Partition with $fsformat" 1
 			;;
 		"EFI System"|"EFI (FAT-12/16/32)")
-			printf "y\n" | mkfs.fat -F32 "/dev/$P &>/dev/nullartition" | GuageMeter "Formatting partition /dev/$Partition with $fsformat" 1
+			printf "y\n" | mkfs.fat -F32 "/dev/$Partition" # &>/dev/null | GuageMeter "Formatting partition /dev/$Partition with $fsformat" 1
 			# echo "mkfs.fat -F32 \"/dev/\$Partition\" | GuageMeter \"Formatting partition /dev/\$Partition with \$fsformat\" 1"
 			# read -p "mkfs.fat -F32 /dev/partition" -n1
 			# printf "y\n" | mkfs.fat -F32 "/dev/$Partition" | GuageMeter "Formatting partition /dev/$Partition with $fsformat" 1
 			;;
 		"Linux swap")
-			printf "y\n" | mkswap "/dev/$Partition" &>/dev/null | GuageMeter "creating swap filesystem on partition /dev/$Partition" 1
+			printf "y\n" | mkswap "/dev/$Partition" # &>/dev/null | GuageMeter "creating swap filesystem on partition /dev/$Partition" 1
 			# echo -e "mkswap \"/dev/\$Partition\" | GuageMeter \"creating swap filesystem on p\artition /dev/\$Partition\" 1"
 			# read -p "mkswap /dev/partition" -n1
 			# printf "y\n" | mkswap "/dev/$Partition" | GuageMeter "creating swap filesystem on partition /dev/$Partition" 1
