@@ -464,7 +464,7 @@ ConfirmMounts(){
 				fi
 				MountPartsString+="$partsize --> $m_partlabel --> $m_parttypename"
 
-				if [[ -z $partfsformat ]]
+				if [[ -z $partfsformat ]] || [[ "$partfsformat" == "" ]]
 				then
 					if [[ "$m_parttypename" == "EFI System" ]] || [[ "$m_parttypename" == "EFI (FAT-12/16/32)" ]]
 					then
@@ -477,9 +477,9 @@ ConfirmMounts(){
 						MountPartsString+=" --> +$linuxfs --> /\n"
 					elif [[ "$m_parttypename" == "Linux home" ]]
 					then
-						MountPartsString+=" --> +$linuxfs --> /home\n"
+						MountPartsString+=" +$linuxfs --> /home\n"
 					fi
-				elif [[ -n $partfsformat ]]
+				elif [[ -n $partfsformat ]] || [[ "$partfsformat" != "" ]]
 				then
 					if [[ "$m_parttypename" == "EFI System" ]] || [[ "$m_parttypename" == "EFI (FAT-12/16/32)" ]]
 					then
@@ -1689,18 +1689,20 @@ SetHostName(){
 	fi
 	echo "$hostname" > "/mnt/etc/hostname"
 	dialog --msgbox "set $hostname as hostname. You can change the hostname in the /etc/hostname file (if you are not in live mode i.e.) or if you are in live mode then edit the /mnt/etc/hostname file" 0 0
-	arch-chroot /mnt echo -e "127.0.0.1\tlocalhost\n      ::1\tlocalhost" > "/mnt/etc/hostname"
+	echo -e "127.0.0.1\tlocalhost\n      ::1\tlocalhost" > "/mnt/etc/hostname"
+	# arch-chroot /mnt echo -e "127.0.0.1\tlocalhost\n      ::1\tlocalhost" > "/mnt/etc/hostname"
 }
 
 SetPassword(){
+
 	local username=$1
-	# local password=$2
-	local NewPassword="$(dialog --passwordbox "set password for username $username" 0 0 3>&1 1>&2 2>&3)"
+
+	local password
+	local NewPassword
+	NewPassword="$(dialog --passwordbox "set password for username $username" 0 0 3>&1 1>&2 2>&3)"
 	case $? in
-		1)
-			# ConfHost "add users"
-			add_users
-			;;
+		# 1) ConfHost "add users" ;;
+		1) add_users ;;
 		0)
 			# if [[ ${#NewPassword} -eq 0 ]]
 			if [[ -z $NewPassword ]]
@@ -1711,7 +1713,8 @@ SetPassword(){
 					1) SetPassword $username ;;
 					# 1) SetPassword $username $password ;;
 				esac
-			else
+			elif [[ -n $NewPassword ]]
+			then
 				if [[ ${#NewPassword} -lt 8 ]] && [[ ${#NewPassword} -gt 0 ]]
 				then
 					dialog --msgbox "password need to be atleast 8 characters long" 0 0
@@ -1723,10 +1726,33 @@ SetPassword(){
 					if [[ $ConfirmPassword == $NewPassword ]]
 					then
 						password=$NewPassword
+						printf "$NewPassword\n$NewPassword" | arch-chroot /mnt passwd $username &>/dev/null
+						case $? in
+							0) dialog --msgbox "password for $username is set" 0 0 ;;
+							1)
+								dialog --msgbox "password for $username is weak" 0 0
+								SetPassword $username
+								;;
+							10) 
+								dialog --msgbox "$username does not exist" 0 0
+								local usersTemp=($(cat /etc/passwd | sed 's/:/ : /g' | grep -iG '[1-9][0-9][0-9][0-9]\d*' | grep -iv nobody | awk '{ print $1 }'))
+								local users=()
+								for p in ${usersTemp[@]}
+								do
+									users+=("$p" "")
+								done
+								unset usersTemp
+								username=$(dialog --no-tags --menu "available users" 0 0 0 ${users[@]} 3>&1 1>&2 2>&3)
+								SetPassword $username
+								# user=$(dialog --no-tags --menu "available users" 0 0 0 ${users[@]} 3>&1 1>&2 2>&3)
+								# SetPassword $user
+								unset users
+								;;
+						esac
 					elif [[ "$ConfirmPassword" != "$NewPassword" ]]
 					then
-						dialog --msgbox "passwords do not match" 0 0
 						SetPassword $username
+						dialog --msgbox "passwords do not match" 0 0
 						# SetPassword $username $password
 					fi
 				fi
@@ -1757,14 +1783,13 @@ add_users(){
 				0) 
 					dialog --msgbox "Created user $username" 0 0
 					SetPassword $username
-					arch-chroot /mnt passwd $username &>/dev/null
 					;;
 				9)
 					dialog --yesno "User $username already exists. Reset password?" 0 0
 					case $? in
 						0)
 							SetPassword $username
-							arch-chroot /mnt passwd $username &>/dev/null
+							# arch-chroot /mnt passwd $username &>/dev/null
 							;;
 					esac
 					;;
@@ -1923,14 +1948,15 @@ SetBashPrompt(){
 	esac
 }
 
+
+
 SetRootPassword(){
 	local RootPassword
-	RootPassword=$(dialog --no-cancel --passwordbox "Enter root password. If no root password is provided then root password will be set to 'try again'. if default password is set please change the default root password post installation as it can be cracked through rainbow tables, dictionary or brute force attacks" 0 0 3>&1 1>&2 2>&3)
+	RootPassword=$(dialog --no-cancel --passwordbox "Enter root password. If no root password is provided then root password will be set to '0n3 Punch M@n'" 0 0 3>&1 1>&2 2>&3)
 	if [[ -z $RootPassword ]]
 	then
-		RootPassword="try again"
-		arch-chroot "echo $RootPassword;echo $RootPassword" | passwd &>/dev/null
-		dialog --msgbox "default root password 'try again' is set " 0 0
+		printf "0n3 Punch M@n\n0n3 Punch M@n" | arch-chroot /mnt passwd &>/dev/null
+		dialog --msgbox "default root password '0n3 Punch M@n' is set " 0 0
 	elif [[ -n $RootPassword ]]
 	then
 		local ConirmRootPassword
@@ -1941,8 +1967,14 @@ SetRootPassword(){
 			SetRootPassword
 		elif [[ "$RootPassword" == "$ConfirmPassword" ]]
 		then
-			arch-chroot "echo $RootPassword;echo $RootPassword" | passwd &>/dev/null
-			dialog --msgbox "root password is set" 0 0
+			printf "$RootPassword\n$RootPassword" | arch-chroot /mnt passwd &>/dev/null
+			case ${PIPESTATUS[1]} in
+			0) dialog --msgbox "root password is set" 0 0 ;;
+			10)
+				dialog --msgbox "root password entered is weak and is not set" 0 0
+				SetRootPassword
+				;;
+			esac
 		fi
 	fi
 }
