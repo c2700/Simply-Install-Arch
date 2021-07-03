@@ -651,7 +651,7 @@ MountPartition(){
 	local m_parttypename="$(lsblk "/dev/$l" -dlno parttypename)"
 	local partfsformat="$(lsblk "/dev/$l" -dlno fstype,fsver | awk '{ print $1" "$2 }' | sed 's/vfat FAT32/FAT32/g;s/ext4 1.0/ext4/g;s/swap 1/swap/g')"
 	local partfsformat2="$(lsblk "/dev/$l" -dlno fstype,fsver | awk '{ print $1" "$2 }')"
-	if [[ "$m_parttypename" == "Linux filesystem" ]]
+	if [[ "$m_parttypename" == "Linux filesystem" ]] || [[ "$m_parttypename" == "Linux" ]]
 	then
 		case $partfsformat in
 			# "ext2"|"ext3"|"ext4"|"btrffs"|"xfs"|"zfs") echo "mount \"/dev/\$Partition\" /mnt/" ;;
