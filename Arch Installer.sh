@@ -697,28 +697,28 @@ FormatPartition(){
 		"Linux filesystem"|"Linux home"|"Linux")
 			if [[ -z $m_existingfs ]] || [[ "$m_existingfs" == "" ]] || [[ "$m_existingfs" =~ " " ]]
 			then
-				mkfs.$fsformat "/dev/$Partition" # &>/dev/null | GuageMeter "Formatting partition /dev/$Partition with $fsformat" 1
+				mkfs.$fsformat "/dev/$Partition" &>/dev/null | GuageMeter "Formatting partition /dev/$Partition with $fsformat" 1
 			elif [[ -n $m_existingfs ]] || [[ "$m_existingfs" != "" ]] || [[ ! "$m_existingfs" =~ " " ]]
 			then
-				printf "y\n" | mkfs.$fsformat "/dev/$Partition" # &>/dev/null | GuageMeter "Formatting partition /dev/$Partition with $fsformat" 1
+				printf "y\n" | mkfs.$fsformat "/dev/$Partition" &>/dev/null | GuageMeter "Reformatting partition /dev/$Partition with $fsformat" 1
 			fi
 			;;
 		"EFI System"|"EFI (FAT-12/16/32)")
 			if [[ -z $m_existingfs ]] || [[ "$m_existingfs" == "" ]] || [[ "$m_existingfs" =~ " " ]]
 			then
-				mkfs.fat -F32 "/dev/$Partition" # &>/dev/null | GuageMeter "Formatting partition /dev/$Partition with $fsformat" 1
+				mkfs.fat -F32 "/dev/$Partition" &>/dev/null | GuageMeter "Formatting partition /dev/$Partition with $fsformat" 1
 			elif [[ -n $m_existingfs ]] || [[ "$m_existingfs" != "" ]] || [[ ! "$m_existingfs" =~ " " ]]
 			then
-				printf "y\n" | mkfs.fat -F32 "/dev/$Partition" # &>/dev/null | GuageMeter "Formatting partition /dev/$Partition with $fsformat" 1
+				printf "y\n" | mkfs.fat -F32 "/dev/$Partition" &>/dev/null | GuageMeter "Reformatting partition /dev/$Partition with $fsformat" 1
 			fi
 			;;
 		"Linux swap")
 			if [[ -z $m_existingfs ]] || [[ "$m_existingfs" == "" ]] || [[ "$m_existingfs" =~ " " ]]
 			then
-				mkswap "/dev/$Partition" # &>/dev/null | GuageMeter "creating swap filesystem on partition /dev/$Partition" 1
+				mkswap "/dev/$Partition" &>/dev/null | GuageMeter "creating swap filesystem on partition /dev/$Partition" 1
 			elif [[ -n $m_existingfs ]] || [[ "$m_existingfs" != "" ]] || [[ ! "$m_existingfs" =~ " " ]]
 			then
-				printf "y\n" | mkswap "/dev/$Partition" # &>/dev/null | GuageMeter "creating swap filesystem on partition /dev/$Partition" 1
+				printf "y\n" | mkswap "/dev/$Partition" &>/dev/null | GuageMeter "Rewriting swap filesystem on partition /dev/$Partition" 1
 			fi
 			;;
 	esac
@@ -779,7 +779,6 @@ MountPartitions(){
 				local partfsformat="$(lsblk "/dev/$k" -dlno fstype,fsver | awk '{ print $1" "$2 }' | sed 's/vfat FAT32/FAT32/g;s/ext4 1.0/ext4/g;s/swap 1/swap/g')"
 				if [[ "$m_parttypename" == "Linux filesystem" ]] || [[ "$m_parttypename" == "Linux" ]]
 				then
-					read -n1 -p "mounting /mnt"
 					case $partfsformat in
 						"ext2"|"ext3"|"ext4"|"btrffs"|"xfs"|"zfs") mount "/dev/$k" /mnt/ ;;
 					esac
@@ -817,7 +816,6 @@ MountPartitions(){
 					local partfsformat2="$(lsblk "/dev/$k" -dlno fstype,fsver | awk '{ print $1" "$2 }')"
 					if ([[ "$m_parttypename" == "EFI System" ]] || [[ "$m_parttypename" == "EFI (FAT-12/16/32)" ]]) && [[ "$partfsformat" == "FAT32" ]] || [[ "$partfsformat2" == "vfat FAT32" ]]
 					then
-						read -n1 -p "created, mounting /mnt/boot/"
 						mount "/dev/$k" "/mnt/boot/"
 					fi
 					unset m_parttypename partfsformat partfsformat2 
@@ -853,7 +851,6 @@ MountPartitions(){
 		fi
 	done
 	unset Partitions homepart
-	exit
 }
 
 
@@ -2607,5 +2604,5 @@ MainMenu(){
 	esac
 }
 
-# trap '' 2
+trap '' 2
 MainMenu "Partition Disk **" 3>&1 1>&2 2>&3
