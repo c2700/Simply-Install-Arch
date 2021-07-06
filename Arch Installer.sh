@@ -2561,6 +2561,7 @@ MainMenu(){
 				"Install Arch *")
 					Repo_Enable
 					InstallArch
+					MainMenu "Install Arch *"
 					;;
 
 				"Configure Host +")
