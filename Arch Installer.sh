@@ -31,10 +31,6 @@
 # DIALOG_HELP_ITEM_HELP=2
 # DIALOG_EXTRA=3
 
-# 3>&1 1>&2 2>&3
-# rqeuired global var
-# RecursiveCallCount=0 # wish I knew a pvt. variable way of keeping track of Recursive func calls
-
 # commonly used code blocks
 GuageMeter(){
 	# $1 - guagebox text
@@ -48,7 +44,6 @@ GuageMeter(){
 			((c+=$2))
 	        ((c+=1))
 	done | dialog --gauge "${1}" 0 0 0
-	# ) | dialog --gauge "${1}" 0 0 0
 }
 
 DiscardFromArray(){
@@ -191,7 +186,8 @@ iwd_mngr(){
 	dialog --yesno "view wireless passphrase in plaintext as you enter?" 0 0
 	case $? in
 		0)
-			# read -p "$SSID password: " pass
+			printf "$SSID password: "
+			read pass
 			iwctl --passphrase $pass station $wireless_dev connect $SSID
 			iw_reconnect $? $wireless_dev $SSID "$(read -p "$SSID password: ")"
 			;;
@@ -202,38 +198,6 @@ iwd_mngr(){
 	esac
 }
 
-
-nm_mngr(){
-	systemctl enable --now NetworkManager
-	nmcli networking on
-	nmcli radio wifi on
-
-	case $? in
-		0)
-			nmcli device wifi rescan
-				clear
-				dialog --msgbox "press 'q' to exit the upcoming wifi list" 0 0
-				nmcli device wifi list && read -p "Enter SSID to connect to: " wifi_name
-				nmcli device wifi connect "$wifi_name" -a
-				case $? in
-					1)
-						# for (( reconnect = "n"; reconnect != "n" ;))
-						for (( reconnect="n"; reconnect == "y" ;))
-						do
-							nmcli device wifi list && read -p "Enter SSID to connect to: " wifi_name
-							nmcli device wifi connect "$wifi_name" -a
-							read -p "rescan and connect to another ssid? [y/n]" reconnect
-						done
-						;;
-				esac
-			;;
-		1)
-			local con_name
-			con_name=$(dialog --inputbox "set a name for this wired connection" 0 0 3>&1 1>&2 2>&3)
-			nmcli connection add con-name "$con_name" type ethernet autoconnect yes
-			;;
-	esac
-}
 
 ConfNet(){
 	NMList=()
@@ -275,7 +239,6 @@ ConfNet(){
 		pacman -Uvd --noconfirm --needed "$(ls networkmanager*)"
 		dialog --msgbox "enabling NetworkManager" 0 0
 		nmtui
-		# # nm_mngr
 		MainMenu "Configure Network"
 	fi
 
@@ -286,18 +249,14 @@ ConfNet(){
 		0)
 			case $NM in
 				"wifi-menu")
-					# "${NM}"
 					wifi-menu
 					;;
 				"networkmanager")
-					# # nm_mngr
-					# nmtui
-					dialog --msgbox "networkmanager used" 0 0
+					nmtui
 					MainMenu "Configure Network **"
 					;;
 				"iwd")
-					# iwd_mngr
-					dialog --msgbox "iwd used" 0 0
+					iwd_mngr
 					MainMenu "Configure Network **"
 					;;
 			esac
@@ -365,7 +324,6 @@ ConfirmMounts(){
 	local Format_Disks=()
 	local MountParts=()
 	local m_MountedPartitions=()
-	# m_MountDisksTemp m_MountPartitionsTextsTemp
 	for k in ${m_MountDisksTemp[@]}
 	do
 		local m_DiskName=$(lsblk /dev/$k -dnlo vendor,model | awk '{ gsub("\\s+"," "); print $0 }')
@@ -399,7 +357,6 @@ ConfirmMounts(){
 			fi
 
 			if [[ -n $partfsformat ]] || [[ "$partfsformat" != "" ]] || [[ ! "$partfsformat" =~ " " ]]
-			# if [[ -n $partfsformat ]] || [[ "$partfsformat" != "" ]]
 			then
 				if [[ "$m_parttypename" == "EFI System" ]] || [[ "$m_parttypename" == "EFI (FAT-12/16/32)" ]]
 				then
@@ -462,7 +419,6 @@ ConfirmMounts(){
 					fi
 					Reformat_Disks+=("${m_partitions[0]}")
 				fi
-			# elif [[ -z $partfsformat ]] || [[ "$partfsformat" == "" ]]
 			elif [[ -z $partfsformat ]] || [[ "$partfsformat" == "" ]] || [[ "$partfsformat" =~ " " ]]
 			then
 				if [[ "$m_parttypename" == "EFI System" ]] || [[ "$m_parttypename" == "EFI (FAT-12/16/32)" ]]
@@ -495,11 +451,6 @@ ConfirmMounts(){
 				local m_partlabel=$(lsblk /dev/$l -nlo partlabel)
 				local m_parttypename=$(lsblk /dev/$l -nlo parttypename)
 				local m_MountPoint=$(lsblk /dev/$l -nlo mountpoint)
-
-				# local partfsformat=$(lsblk /dev/ -dnlo fstype)
-				# local partsize=$(lsblk /dev/$l -dnlo size | sed 's/^\s*//g;s/[mM]/ MB/g;s/[gG]/ GB/g;s/[tT]/ TB/g')
-				# local m_partlabel=$(lsblk /dev/$l -dnlo partlabel)
-				# local m_parttypename=$(lsblk /dev/$l -dnlo parttypename)
 
 				if [[ "$l" != "${m_partitions[-1]}" ]]
 				then
@@ -542,9 +493,7 @@ ConfirmMounts(){
 							MountPartsString+="$m_MountPoint (mounted)\n"
 							m_MountedPartitions+=("$l")
 						fi
-						# MountPartsString+=" --> *FAT32 --> /boot\n"
 						Reformat_Disks+=("$l")
-						# Reformat_Disks+=("${m_partitions[0]}")
 					elif [[ "$m_parttypename" == "Linux swap" ]]
 					then
 						MountPartsString+=" --> *swap --> "
@@ -556,9 +505,7 @@ ConfirmMounts(){
 							MountPartsString+="(use as swap) (swap enabled)\n"
 							m_MountedPartitions+=("$l")
 						fi
-						# MountPartsString+=" --> *swap --> (use as swap)\n"
 						Reformat_Disks+=("$l")
-						# Reformat_Disks+=("${m_partitions[0]}")
 					elif [[ "$m_parttypename" == "Linux filesystem" ]] || [[ "$m_parttypename" == "Linux" ]]
 					then
 						if [[ "$partfsformat" == "$linuxfs" ]]
@@ -577,9 +524,7 @@ ConfirmMounts(){
 							MountPartsString+="$m_MountPoint (mounted)\n"
 							m_MountedPartitions+=("$l")
 						fi						
-						# MountPartsString+=" --> /\n"
 						Reformat_Disks+=("$l")
-						# Reformat_Disks+=("${m_partitions[0]}")
 					elif [[ "$m_parttypename" == "Linux home" ]]
 					then
 						if [[ "$partfsformat" == "$linuxfs" ]]
@@ -598,26 +543,20 @@ ConfirmMounts(){
 							MountPartsString+="$m_MountPoint (mounted)\n"
 							m_MountedPartitions+=("$l")
 						fi
-						# MountPartsString+=" --> /home\n"
 						Reformat_Disks+=("$l")
-						# Reformat_Disks+=("${m_partitions[0]}")
 					fi
 				fi
 			done
-			# MountPartsString+="\n"
 			MountParts+=("$MountPartsString")
 			unset MountPartsString
 		fi
 		unset m_partitions # MountPartsString
 	done
 
-	# set -xeEtTBv
-	# echo -e "\nm_MountPartitionsTextsTemp - ${m_MountPartitionsTextsTemp[@]}\nm_MountDisksTemp - ${m_MountDisksTemp[@]}\nFormat_Disks - ${Format_Disks[@]}\nReformat_Disks - ${Reformat_Disks[@]}\n${m_partitions[@]}\n\n"
 	local MountPartsString="${MountParts[*]}"
 
 	if [[ -z ${Reformat_Disks[@]} ]] && ([[ "${Format_Disks[@]}" == "${m_MountPartitionsTextsTemp[@]}" ]] || [[ ${#Format_Disks[@]} -eq ${#m_MountPartitionsTextsTemp[@]} ]])
 	then
-		# read -p "none" -n1
 		dialog --scrollbar --yes-label "Back" --no-label "Format & Mount" --title "partition mount confirmation" --yesno "1) +Format - Will format the partition with specified filesystem format. Reformatting will\n             not apply here.\n2) *Format - If the \"Re-Format\" is selected it will reformat the partition using existing filesystem\n             format wiping the partition.\n\nFormat:\n  Disk\n  \`-  Partition --> Size --> Partition Label --> Filesystem --> (+|*)Format --> MountPoint\n${MountPartsString[*]}\n\n" 20 110
 		case $? in
 			0) PartitionDisk ;;
@@ -671,7 +610,6 @@ ConfirmMounts(){
 		dialog --scrollbar --ok-label "Back" --cancel-label "skip" --extra-button --extra-label "Re-Format All & Mount" --title "partition mount confirmation" --yesno "1) *Format - If the \"Re-Format\" is selected it will reformat the partition using existing filesystem\n             format wiping the partition.\n2) *(Format_1 -> Format_2) - Will reformat the existing \"Format_1\" filesystem with \"Format_2\" filesystem\n                             partition with different filesystem format.\n\nFormat:\n  Disk\n  \`-  Partition --> Size --> Partition Label --> Filesystem --> (+|*)Format --> MountPoint\n${MountPartsString[*]}\n\n" 20 110
 		case $? in
 			0) PartitionDisk ;;
-			# 1) MountPartitions m_MountPartitionsTextsTemp ;;
 			3)
 				UnMountPartitions
 				for u in ${m_MountPartitionsTextsTemp[@]}
@@ -782,7 +720,6 @@ MountPartitions(){
 					case $partfsformat in
 						"ext2"|"ext3"|"ext4"|"btrffs"|"xfs"|"zfs") mount "/dev/$k" /mnt/ ;;
 					esac
-					# read -n1 -p "mounted /mnt"
 				fi
 				unset m_parttypename partfsformat
 			done
@@ -794,7 +731,6 @@ MountPartitions(){
 				then
 					for k in ${Partitions[@]}
 					do
-						# read -n1 -p "mounting boot"
 						local m_parttypename="$(lsblk "/dev/$k" -dlno parttypename)"
 						local partfsformat="$(lsblk "/dev/$k" -dlno fstype,fsver | awk '{ print $1" "$2 }' | sed 's/vfat FAT32/FAT32/g;s/ext4 1.0/ext4/g;s/swap 1/swap/g')"
 						local partfsformat2="$(lsblk "/dev/$k" -dlno fstype,fsver | awk '{ print $1" "$2 }')"
@@ -810,7 +746,6 @@ MountPartitions(){
 				mkdir "/mnt/boot/"
 				for k in ${Partitions[@]}
 				do
-					# read -n1 -p "mounting boot"
 					local m_parttypename="$(lsblk "/dev/$k" -dlno parttypename)"
 					local partfsformat="$(lsblk "/dev/$k" -dlno fstype,fsver | awk '{ print $1" "$2 }' | sed 's/vfat FAT32/FAT32/g;s/ext4 1.0/ext4/g;s/swap 1/swap/g')"
 					local partfsformat2="$(lsblk "/dev/$k" -dlno fstype,fsver | awk '{ print $1" "$2 }')"
@@ -893,7 +828,6 @@ CheckEditMount(){
 	unset m_DisksArgs
 
 	local DISKS_WITHOUT_PARTITIONS_PRESENT_EXIT_CODE=$2
-	# local PREVIOUS_FUNC_EXIT_CODE=$2
 
 	local m_NoPartsDisks=(${m_Disks[@]})
 	m_NoPartsDisks=($(DisksWithoutPartitions m_NoPartsDisks))
@@ -959,9 +893,6 @@ CheckEditMount(){
 # check if disk has a partition table
 IsPartitionTablePresent(){
 	local m_disksArgs="$1"
-	# local m_disksArgs=$1[@]
-	# local m_Disks=("${!m_disksArgs}")
-	# unset m_disksArgs
 
 	local m_parttable="$(DiskListTemp "$m_disksArgs" | awk '{ print $3 }')"
 	if [[ "$m_parttable" == "none" ]]
@@ -1009,7 +940,6 @@ DisksWithoutPartitionTable(){
 # check if disk has partitions
 DisksWithoutPartitionsPresent(){
 	local DisksArgs=$1[@]
-	# local Disks=(${!DisksArgs})
 	local Disks=("${!DisksArgs}")
 	unset DisksArgs
 
@@ -1076,11 +1006,8 @@ DisksWithPartitions(){
 
 EditDisk(){
 	local disksArgs=$1[@]
-	# local m_Disks=("${!disksArgs}")
 	local m_Disks=(${!disksArgs})
 	unset disksArgs
-
-	# WritePartitionTable m_Disks
 
 	local diskeditors=()
 
@@ -1095,7 +1022,6 @@ EditDisk(){
 
 	local disksTemp=("${m_Disks[@]}")
 	disksTemp=($(TempArrayWithAmpersand disksTemp))
-	# local DiskEditor="$(dialog --no-tags --cancel-label "Back" --menu "Disk Editor Menu\n\nSelect a Disk Editor to Edit the $disk ${disksTemp[*]}" 0 0 0 "${diskeditors[@]}" 3>&1 1>&2 2>&3)"
 	local DiskEditor="$(dialog --no-tags --cancel-label "Back" --menu "Disk Editor Menu\n\nSelect a Disk Editor to Edit the $disk ${disksTemp[*]}" 0 0 0 "${diskeditors[@]}" 3>&1 1>&2 2>&3)"
 	case $? in
 		1) PartitionDisk ;;
@@ -1104,19 +1030,15 @@ EditDisk(){
 			dialog --no-label "Back" --yes-label "OK" --yesno "					partition type ----------------> partition filesystem format\n\nPartitions to be created and formatted to:\n	Mandatory:\n		1) EFI system partition -> FAT32(This is where the bootloader and the kernel resides)\n		2) Linux filesystem -----> ext4 (This is the linux root partition)\n\n	Optional but recommended:\n		1) Linux swap -> swap (used when machine runs out of RAM/physical memory)" 0 0
 			case $? in
 				0)
-					# for (( i = 0; i < ${#m_Disks[@]}; i++ ))
 					for i in "${m_Disks[@]}"
 					do
 						clear;reset
 						printf "\E[1m\t\t\t\t\t\t\t\tEditing Disk '/dev/$i' with $DiskEditor\n\n\n\E[m"
-						# "$DiskEditor" "/dev/${m_Disks[$i]}"
 						"$DiskEditor" "/dev/$i"
 						local m_DiskPartCheck=()
-						# m_DiskPartCheck=($(DiskPartInfoTemp "${m_Disks[$i]}" | awk '{ print $1 }'))
 						m_DiskPartCheck=($(DiskPartInfoTemp "$i" | awk '{ print $1 }'))
 						if [[ -n "${m_DiskPartCheck[@]}" ]]
 						then
-							# m_NonePartDisks+=("${m_Disks[$i]}")
 							m_NonePartDisks+=("$i")
 						elif [[ -z "${m_DiskPartCheck[@]}" ]]
 						then
@@ -1205,7 +1127,6 @@ PartitionDisk(){
 
 	if [[ ${#Disks[@]} -eq 1 ]]
 	then
-	    # local DiskPartsCheck=("$(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $1 }')")
 	    local DiskPartsCheck=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $1 }'))
 	    if [[ ${#DiskPartsCheck[@]} -eq 1 ]]
 	    then
@@ -1281,23 +1202,11 @@ PartitionDisk(){
 					fi
 				fi
 
-
-				# dialog --yesno "Change an already set partition table?" 0 0
-				# case $? in
-				# 	0) WritePartitionTable Disks ;;
-				# esac
-
 				dialog --extra-button --extra-label "Mount" --ok-label "Back" --cancel-label "Edit" --yesno "Select \"Edit\" for Editting and then mounting the partitions of this disk or select \"Mount\" to only select, format and mount existing Linux filesystem/EFI/swap partitions" 0 0
 				case $? in
-				# MOUNT_EXIT_CODE=$?
-				# case $MOUNT_EXIT_CODE in
 					0) PartitionDisk ;;
 					1)
 						EditDisk Disks
-						# DisksWithoutPartitionsPresent Disks
-						# local DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE=$?
-						# CheckEditMount Disks DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE
-						# case $DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE in
 						DisksWithoutPartitionsPresent Disks
 						DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE=$?
 						case $DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE in
@@ -1305,14 +1214,11 @@ PartitionDisk(){
 							1) MountViewPartitions Disks ;;
 						esac
 						unset DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE
-						# unset DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE Disks
 						;;
 					3)
 						DisksWithoutPartitionsPresent Disks
 						DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE=$?
 						CheckEditMount Disks $DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE
-						# CheckEditMount Disks $?
-						# MountViewPartitions Disks
 						;;
 				esac
 			fi
@@ -1326,19 +1232,8 @@ MountViewPartitions(){
 	# $1 - Disks
 
 	local DisksArgs=$1[@]
-	# local Disks=("${!DisksArgs}")
 	local Disks=(${!DisksArgs})
 	unset DisksArgs
-
-	# local DiskPartProbeArray=()
-	# for b in ${Disks[@]}
-	# do
-	# 	DiskPartProbeArray+=("/dev/$b")
-	# done
-	# partprobe "${DiskPartProbeArray[@]}"
-	# unset DiskPartProbeArray
-
-	# local Disks=($(IFS="";sort <<<${Disks[@]}))
 
 	local DisksTemp=("${Disks[@]}")
 	local DisksTemp=($(TempArrayWithAmpersand DisksTemp))
@@ -1352,20 +1247,8 @@ MountViewPartitions(){
 	local linux_home_parts
 	local linux_user_home_parts
 
-	# local DiskPartSizeTemp=()
-	# local DiskPartFsTypeTemp=()
-	# # local DiskPartFsFormatTemp=()
-	# declare -A SelectedPartitions
-
-	# local DiskPartName=()
-	# local DiskPartListInfo=()
 	local SelectedPartitions=()
 	local DiscardDisks=()
-
-	# declare -A DiskPartSize
-	# declare -A DiskPartLabel
-	# declare -A DiskPartFsType
-	# declare -A DiskPartFsFormat
 
 	if [[ -n "${NoPartDisks[@]}" ]]
 	then
@@ -1383,7 +1266,6 @@ MountViewPartitions(){
 		unset NoPartDisksTemp diskhave NoPartDisks
 	fi
 
-	# for a in "${Disks[@]}"
 	for (( a = 0; a < ${#Disks[@]}; a++))
 	do
 		local DiskPartName=($(DiskPartInfoTemp "${Disks[$i]}" | awk '{ print $1 }'))
@@ -1402,17 +1284,12 @@ MountViewPartitions(){
 	    elif [[ -n ${DiskPartSizeTemp[@]} ]] && [[ -n ${DiskPartFsTypeTemp[@]} ]] && [[ -n ${DiskPartName[@]} ]]
     	then
 			DiskPartName=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $1 }'))
-			# DiskPartSizeTemp=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $2 }'))
-			# DiskPartLabelTemp=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $1=$2=NULL;gsub("^\\s+","");print $0 }'))
 
-			#for partition size
 			for i in ${DiskPartName[@]}
 			do
 				DiskPartSize["$i"]="$(lsblk /dev/"$i" -nlo size | sed 's/^\s*//g;s/G/ GB/g;s/M/ MB/g;s/T/ TB/')"
-				# DiskPartSize["$i"]="$(lsblk /dev/"$i" -nlo size | sed 's/^\s*//g')"
 			done
 
-			#for partition label
 			for i in ${DiskPartName[@]}
 			do
 				local m_label="$(lsblk /dev/"$i" -nlo partlabel | sed 's/^\s*//g')"
@@ -1425,7 +1302,6 @@ MountViewPartitions(){
 				fi
 			done
 
-			# for partition fstype name
 			for i in ${DiskPartName[@]}
 			do
 				DiskPartFsType["$i"]="$(lsblk /dev/"$i" -nlo parttypename | sed 's/^\s*//g')"
@@ -1446,12 +1322,10 @@ MountViewPartitions(){
 			done
 
 
-			# to form an array of partition for the checkbox
 			local DiskPartListInfo=()
 			for i in ${DiskPartName[@]}
 			do
 				local partinfo="${DiskPartSize[$i]} | ${DiskPartFsType[$i]} | ${PartFs[$i]} | ${DiskPartLabel[$i]}"
-				# local partinfo="${DiskPartSize[$i]} | ${DiskPartFsType[$i]} | ${DiskPartLabel[$i]}"
 				DiskPartListInfo+=("$i")
 				DiskPartListInfo+=("$partinfo")
 				DiskPartListInfo+=(0)
@@ -1492,21 +1366,15 @@ MountViewPartitions(){
 				unset fstype
 			done
 
-			# case $? in
 			case $PARTITION_EXIT_CODE in
 				0)
-					# local SelectedPartitionsTemp+=("${partition[@]}")
-					# if [[ -z "${SelectedPartitionsTemp[@]}" ]] && [[ -z "${partition[@]}" ]]
 					if [[ -z "${partition[@]}" ]]
 					then
 						unset DisksSize
-						# DiscardDisks=("${Disks[@]}")
 						DiscardDisks=("${Disks[@]:$a}")
-					# elif [[ -z "${SelectedPartitionsTemp[@]}" ]] && [[ -n "${partition[@]}" ]]
 					elif [[ -n ${partition[@]} ]]
 					then
 						SelectedPartitions+=("${partition[@]}")
-						# if  [[ $a -lt $DisksSize ]]
 						if [[ "${Disks[-1]}" != "${Disks[$a]}" ]]
 						then
 							unset DisksSize
@@ -1554,10 +1422,8 @@ MountViewPartitions(){
 					then
 						unset DisksSize
 						DiscardDisks=("${Disks[$a]}")
-					# elif [[ -z "${SelectedPartitionsTemp[@]}" ]] && [[ -n "${partition[@]}" ]]
 					elif [[ -n ${partition[@]} ]]
 					then
-						# if  [[ $a -lt $DisksSize ]]
 						if [[ "${Disks[-1]}" != "${Disks[$a]}" ]]
 						then
 							SelectedPartitions+=("${partition[@]}")
@@ -1680,8 +1546,7 @@ MountViewPartitions(){
 ################################################## host configuration ######################################################
 
 Install_UI(){
-	# Install_UI
-	# ConfHost
+
 	# $1 - options in this function's menu
 
 	pkgs=""
@@ -1741,10 +1606,6 @@ Install_UI(){
 								"mate")
 									pkgs="mat{e,e-extra}"
 									;;
-								*)
-									dialog --msgbox "no DE installed"
-									Install_UI "Desktop Environment"
-									;;
 							esac
 							;;
 					esac
@@ -1766,19 +1627,13 @@ Install_UI(){
 								"awesome")
 									pkgs="awesom{e,e-terminal-fonts} vicious powerline "
 									;;
-								*)
-									dialog --msgbox "no window managers available" 0 0
 							esac
 							;;
 					esac
 					;;
-				*)
-					dialog --menu "SIKE" 0 0
-					;;
 			esac
 			dialog --msgbox "$pkgs" 0 0
-			pacstrap /mnt $pkgs | GuageMeter "Installing packages $pkgs" 1
-			# pacstrap /mnt $pkgs
+			pacstrap /mnt $pkgs
 			ConfHost "Install UI"
 			;;
 	esac
@@ -1791,19 +1646,17 @@ SetTz(){
 	local regions_dir_temp=($(ls -d /usr/share/zoneinfo/* | grep -iv 'right\|posix\|\.[a-zA-Z0-9]*'))
 	local regions_temp=($(ls /usr/share/zoneinfo/ | grep -iv 'right\|posix\|\.[a-zA-Z0-9]*'))
 
-	a=0
-	for b in "${regions_dir_temp[@]}"
+	for (( b = 0; b < ${#regions_dir_temp[@]}; b++ ))
 	do
-		if [[ -d "$b" ]]
+		if [[ -d "${regions_dir_temp[$b]}" ]]
 		then
-			regions+=("$b")
-			regions+=("${regions_temp[$a]}")
+			regions+=("${regions_dir_temp[$b]}")
+			regions+=("${regions_temp[$b]}")
 		fi
-		((a+=1))
 	done
-	unset a
 
-	# unset regions_temp regions_dir_temp
+
+	unset regions_temp regions_dir_temp
 	local region
 	region=$(dialog --cancel-label "Back" --no-tags --menu "select the continent you are in" 0 0 0 "${regions[@]}" 3>&1 1>&2 2>&3)
 	case $? in
@@ -1814,20 +1667,15 @@ SetTz(){
 			local zones_temp_dir=()
 			zones_temp=($(ls "/usr/share/zoneinfo/$region"))
 			zones_temp_dir=($(ls -d "/usr/share/zoneinfo/$region/*"))
-			# zones_temp=($(ls $region))
-			# zones_temp_dir=($(ls -d $region/*))
 
-			local a=0
-			for b in "${zones_temp_dir[@]}"
+			for (( b = 0; b < ${#zones_temp_dir[@]}; b++ ))
 			do
-				if [[ -f "$b" ]] && [[ -r "$b" ]]
+				if [[ -f "${zones_temp_dir[$b]}" ]] && [[ -r "${zones_temp_dir[$b]}" ]]
 				then
-					zones+=($b)
-					zones+=(${zones_temp[$a]})
+					zones+=(${zones_temp_dir[$b]})
+					zones+=(${zones_temp[$b]})
 				fi
-				((a+=1))
 			done
-			unset a
 
 			local zone
 			zone=$(dialog --cancel-label "back" --no-tags --menu "select the region you are in" 0 0 0 "${zones[@]}" 3>&1 1>&2 2>&3)
@@ -1835,7 +1683,6 @@ SetTz(){
 				1) SetTz ;;
 				0)
 					ln -sf $zone /mnt/etc/localtime &>/dev/null
-					# arch-chroot /mnt/ hwclock -wrv | dialog --programbox "hardwareClock Set" 0 0
 					arch-chroot /mnt/ hwclock -wrv | GuageMeter "Setting Hardware Clock" 1
 					if [[ ${PIPESTATUS[0]} -eq 0 ]]
 					then
@@ -1852,13 +1699,8 @@ SetTz(){
 
 SetLocale(){
 
-	# user set locale
-
 	LOCALE=()
-	# cat "locale.gen" | grep -i '#[a-zA-Z0-9]' | sed 's/#//' > locales.txt
 	cat "/etc/locale.gen" | grep -i '#[a-zA-Z0-9]' | sed 's/#//' > locales.txt
-
-	# dialog --msgbox "when you press a character and you don't see the character, just keep that charcter held until you see the cursor" 0 0
 
 	while read txt
 	do
@@ -1867,20 +1709,17 @@ SetLocale(){
 		LOCALE+=(OFF)
 	done < locales.txt
 
-	# back - 1
-	# ok - 0
 	local LocaleDialog
 	LocaleDialog=$(dialog --scrollbar --visit-items --cancel-label "BACK" --title "Locale Selection Menu" --buildlist "\nUse the space bar to move locale options between the panes and use the tab for moving in between spacess. If no locale is selected then the deafult UTF-8 and ISO-8859 versions of the US english locales will be set \n\n           disabled locales                                          enabled locales" 0 0 0 "${LOCALE[@]}" 3>&1 1>&2 2>&3)
 	echo "${LocaleDialog[@]}" | sed 's/" "/"\n"/g;s/"//g' > locales.txt
 	while read txt
 	do
 		sed -i s/"#$txt"/"$txt"/g /mnt/etc/locale.gen
-		# awk '{print ARGV}'
 	done < locales.txt
 	rm -rfv locales.txt &>/dev/null
 	local LocaleFormat
 	LocaleFormat=$(echo -e "\n\n${LocaleDialog[*]}\n" | sed 's/" "/"\n"/g')
-	# locale-gen | GuageMeter "Generating Locales" 1
+	arch-chroot /mnt locale-gen | GuageMeter "Generating Locales" 1
 	dialog --msgbox "locales set:$LocaleFormat" 0 0
 }
 
@@ -1897,7 +1736,6 @@ SetHostName(){
 	echo "$hostname" > "/mnt/etc/hostname"
 	dialog --msgbox "set $hostname as hostname. You can change the hostname in the /etc/hostname file (if you are not in live mode i.e.) or if you are in live mode then edit the /mnt/etc/hostname file" 0 0
 	echo -e "127.0.0.1\tlocalhost\n      ::1\tlocalhost" > "/mnt/etc/hostname"
-	# arch-chroot /mnt echo -e "127.0.0.1\tlocalhost\n      ::1\tlocalhost" > "/mnt/etc/hostname"
 }
 
 SetPassword(){
@@ -1908,17 +1746,14 @@ SetPassword(){
 	local NewPassword
 	NewPassword="$(dialog --passwordbox "set password for username $username" 0 0 3>&1 1>&2 2>&3)"
 	case $? in
-		# 1) ConfHost "add users" ;;
 		1) add_users ;;
 		0)
-			# if [[ ${#NewPassword} -eq 0 ]]
 			if [[ -z $NewPassword ]]
 			then
 				dialog --yesno "Accounts without passwords is as good as an inaccessible account (i.e. if the passwordless account is the only non-root account you have created). linux will prompt you for a password regardless of password state on an account/username.\nYou can login into the passwordless account by doing one, select few or all of the following\n1) logging in with an account that contains a password (if you have created one i.e.) and then logging in with the 'passwordless account' from the currently active account\n2) logging in as root and then loggin in with the 'passwordless account'.\n3) going to line 79 of /etc/sudoers and adding '<passwordless account name> ALL=(ALL) NOPASSWD: ALL'\n\nAll the above is as per my experience.\nProceed setting the passwordless account regardless?" 0 0
 				case $? in
 					0) password="$NewPassword" ;;
 					1) SetPassword $username ;;
-					# 1) SetPassword $username $password ;;
 				esac
 			elif [[ -n $NewPassword ]]
 			then
@@ -1926,7 +1761,6 @@ SetPassword(){
 				then
 					dialog --msgbox "password need to be atleast 8 characters long" 0 0
 					SetPassword $username
-					# SetPassword $username $password
 				elif [[ ${#NewPassword} -ge 8 ]]
 				then
 					local ConfirmPassword="$(dialog --passwordbox "Confirm password for username $username" 0 0 3>&1 1>&2 2>&3)"
@@ -1940,7 +1774,7 @@ SetPassword(){
 								dialog --msgbox "password for $username is weak" 0 0
 								SetPassword $username
 								;;
-							10) 
+							10)
 								dialog --msgbox "$username does not exist" 0 0
 								local usersTemp=($(cat /etc/passwd | sed 's/:/ : /g' | grep -iG '[1-9][0-9][0-9][0-9]\d*' | grep -iv nobody | awk '{ print $1 }'))
 								local users=()
@@ -1951,16 +1785,13 @@ SetPassword(){
 								unset usersTemp
 								username=$(dialog --no-tags --menu "available users" 0 0 0 ${users[@]} 3>&1 1>&2 2>&3)
 								SetPassword $username
-								# user=$(dialog --no-tags --menu "available users" 0 0 0 ${users[@]} 3>&1 1>&2 2>&3)
-								# SetPassword $user
-								unset users
+								unset username users
 								;;
 						esac
 					elif [[ "$ConfirmPassword" != "$NewPassword" ]]
 					then
 						SetPassword $username
 						dialog --msgbox "passwords do not match" 0 0
-						# SetPassword $username $password
 					fi
 				fi
 			fi
@@ -1969,7 +1800,6 @@ SetPassword(){
 }
 
 add_users(){
-	# local password=""
 	local username="$(dialog --inputbox "Username" 0 0 3>&1 1>&2 2>&3)"
 	case $? in
 		1) ConfHost "add users **" ;;
@@ -1982,7 +1812,6 @@ add_users(){
 			then
 				dialog --msgbox "you won't see the password characters as they are typed" 0 0
 				SetPassword $username
-				# SetPassword $username $password
 			fi
 			dialog --msgbox "created username $username and password is set" 0 0
 			arch-chroot /mnt useradd -m $username -G users -g power,wheel,storage &>/dev/null
@@ -1996,7 +1825,6 @@ add_users(){
 					case $? in
 						0)
 							SetPassword $username
-							# arch-chroot /mnt passwd $username &>/dev/null
 							;;
 					esac
 					;;
@@ -2020,8 +1848,7 @@ SetPrompt(){
 	local Users=($(grep [1-9][0-9][0-9][0-9] /mnt/etc/passwd | grep -iv nobody | sed 's/\:/ \: /g' | awk '{print $1}'))
 	if [[ ${#Users[@]} -eq 1 ]]
 	then
-		cp -rfv bashrc/"$1" /mnt/home/$Users/.bashrc &>/dev/null
-		# cp -rf bashrc/"$1" /home/$Users/.bashrc &>/dev/null
+		cp -rfv bashrc/"$1" /home/$Users/.bashrc &>/dev/null
 		dialog --msgbox "set $1 as the bash prompt for user ${Users[0]}" 0 0
 	elif [[ ${#Users[@]} -gt 1 ]]
 	then
@@ -2042,8 +1869,7 @@ SetPrompt(){
 			1)
 				for i in ${Users[@]}
 				do
-					# cp -rfv bashrc/"$bashrc_file" /mnt/home/$i/.bashrc &>/dev/null
-					echo "\"cp -rfv bashrc/\$bashrc_file\" \"/mnt/home/\$i/.bashrc &>/dev/null\""
+					cp -rfv bashrc/"$bashrc_file" /mnt/home/$i/.bashrc &>/dev/null
 				done
 				dialog --msgbox "Set $bashrc_file for all users" 0 0
 				;;
@@ -2073,9 +1899,7 @@ SetPrompt(){
 				for i in ${SelectedUsers[@]}
 				do
 					cp -rf bashrc/"$bashrc_file" /mnt/home/$User/.bashrc &>/dev/null
-					# echo "\"cp -rf bashrc/\$bashrc_file\" \"/mnt/home/\$User/.bashrc &>/dev/null\""
 				done | GuageMeter "Setting $bashrc_file for $userText ${SelectedUsersTemp[@]}"
-				# done
 
 				dialog --msgbox "Set $bashrc_file for $userText ${SelectedUsersTemp[@]}" 0 0
 				unset SelectedUsers SelectedUsersTemp UsersTemp userText
@@ -2096,12 +1920,8 @@ SetBashPrompt(){
 
 	$1="${bashrc_opts[0]}"
 
-	# exit code references
-	# 0 - set bashrc
-	# 3 - preview
-	# 1 - back
 	local bashrc
-	bashrc=$(dialog --ok-label "set bashrc" --default-item "$1" --extra-button --extra-label "preview" --cancel-label "back" --menu "bashrc selection menu\n\nselected menuitem will be saved as \".bashrc\" in the home directory" 0 0 0 "${bashrc_opts[@]}" 3>&1 1>&2 2>&3)
+	bashrc=$(dialog --ok-label "set bashrc" --default-item "$1" --extra-button --extra-label "preview" --cancel-label "back" --menu "bashrc selection menu\n\nselected menuitem will be saved as \".bashrc\" in the home directory. (Preveiew is best seen when a GUI terminal emulator is installed)" 0 0 0 "${bashrc_opts[@]}" 3>&1 1>&2 2>&3)
 
 	case $? in
 		0)
@@ -2155,7 +1975,51 @@ SetBashPrompt(){
 	esac
 }
 
+RemoveUsers(){
+	local usersTempArgs=$1[@]
+	local usersTemp=${!usersTempArgs[@]}
+	unset usersTempArgs
 
+	local DeleteUsers=()
+	local DeleteUsersTemp=()
+
+	local DeleteUsersTempText=("${usersTemp[@]}")
+	local userText=""
+
+	if [[ ${#usersTemp[@]} -eq 1 ]]
+	then
+		dialog --yesno "${usersTemp[0]} is the only available user. Delete regardless?" 0 0
+		case $? in
+			0)
+				arch-chroot userdel -rf ${DeleteUsers[0]} &>/dev/null
+				dialog --msgbox "Deleted user ${DeleteUsers[0]}" 0 0
+				;;
+		esac
+	elif [[ ${#usersTemp[@]} -gt 1 ]]
+	then
+		for u in ${usersTemp[@]}
+		do
+			DeleteUsersTemp+=("u" "" 0)
+		done
+		unset DeleteUsersTemp
+		DeleteUsers=($(dialog --no-tags --checklist "" 0 0 0 ${DeleteUsers[@]}))
+		if [[ ${DeleteUsers[@]} -eq 1 ]]
+		then
+			userText="user"
+			DeleteUsersTempText=($(TempArrayWithAmpersand DeleteUsersTempText))
+			arch-chroot userdel -rf ${DeleteUsers[0]} &>/dev/null
+		elif [[ ${DeleteUsers[@]} -gt 1 ]]
+		then
+			userText="users"
+			DeleteUsersTempText=($(TempArrayWithAmpersand DeleteUsersTempText))
+			for n in ${DeleteUsers[@]}
+			do
+				arch-chroot userdel -rf $n &>/dev/null
+			done
+		fi
+		dialog --msgbox "Deleted $userText ${DeleteUsersTempText[*]}" 0 0
+	fi
+}
 
 SetRootPassword(){
 	local RootPassword
@@ -2189,99 +2053,69 @@ SetRootPassword(){
 ConfHost(){
 	# $1 - menu option item
 
-	mountpoint /mnt &>/dev/null
-	case $? in
-		0)
-			local usersTemp=($(cat /etc/passwd | sed 's/:/ : /g' | grep -iG '[1-9][0-9][0-9][0-9]\d*' | grep -iv nobody | awk '{ print $1 }'))
-			local HostOpt=("set hostname *" "set your computer name")
-			HostOpt+=("set Locale *" "set your computer language")
-			HostOpt+=("set timezone" "configure which timezone you are in")
-			HostOpt+=("add users **" "add users")
-			HostOpt+=("root password *" "set root password")
-			HostOpt+=("Install UI" "Install Desktop Environment or Window Manager")
-			HostOpt+=("Set Bash Prompt" "File that's used to tell how the terminal prompt should look like")
-			# local "${HostOpt[0]}"=$1
-			if [[ ${#usersTemp[@]} -ge 1 ]]
-			then
-				HostOpt+=("Remove Users", "Delete an existing user")
-			fi
-			$1="${HostOpt[0]}"
-			local opt
-			opt=$(dialog --cancel-label "BACK" --default-item "${1}" --menu "Host Configuration Menu" 0 0 0 "${HostOpt[@]}" 3>&1 1>&2 2>&3)
-			case $? in
-				0)
-					case $opt in
-						"set hostname *")
-							SetHostName
-							ConfHost "set hostname *"
-							;;
-						"set Locale *")
-							SetLocale
-							ConfHost "set Locale *"
-							;;
-						"set timezone")
-							SetTz
-							ConfHost "set timezone"
-							;;
-						"add users **")
-							add_users
-							ConfHost "add users **"
-							;;
-						# "set root password")
-						"root password *")
-							dialog --msgbox "you won't see the characters as you type" 0 0
-							SetRootPassword && ConfHost "set root password"
-							;;
-						"Install UI")
-							Install_UI "Window Manager"
-							ConfHost "Install UI"
-							;;
-						"Set Bash Prompt")
-							SetBashPrompt
-							ConfHost "Set Bash Prompt"
-							;;
-						"Remove Users")
-							local DeleteUsers=()
-							local DeleteUsersTemp=()
-							local DeleteUsersTempText=("${usersTemp[@]}")
-							local userText=""
-
-							for u in ${usersTemp[@]}
-							do
-								DeleteUsersTemp+=("u" "" 0)
-							done
-							unset DeleteUsersTemp
-							DeleteUsers=($(dialog --no-tags --checklist "" 0 0 0 ${DeleteUsers[@]}))
-							if [[ ${DeleteUsers[@]} -eq 1 ]]
-							then
-								userText="user"
-								DeleteUsersTempText=($(TempArrayWithAmpersand DeleteUsersTempText))
-								arch-chroot userdel -rf ${DeleteUsers[0]} &>/dev/null
-							elif [[ ${DeleteUsers[@]} -gt 1 ]]
-							then
-								userText="users"
-								DeleteUsersTempText=($(TempArrayWithAmpersand DeleteUsersTempText))
-								for n in ${DeleteUsers[@]}
-								do
-									arch-chroot userdel -rf $n &>/dev/null
-								done
-							fi
-							dialog --msgbox "Deleted $userText ${DeleteUsersTempText[*]}" 0 0
-							;;
-						*)
-							dialog --msgbox "sike" 0 0
-							ConfHost "root password *"
-							;;
-					esac
-					;;
-				1) MainMenu "Configure Host +" ;;
-			esac
-			;;
-		1) 
-			dialog --msgbox "cannot configure host without a linux root partition" 0 0
-			MainMenu "Configure Host +"
-			;;
-	esac
+	if [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( ( mountpoint /run/archiso/airootfs) && ( mountpoint /run/archiso/airootfs ) ) 
+	then
+		local usersTemp=($(cat /etc/passwd | sed 's/:/ : /g' | grep -iG '[1-9][0-9][0-9][0-9]\d*' | grep -iv nobody | awk '{ print $1 }'))
+		local HostOpt=("set hostname *" "set your computer name")
+		HostOpt+=("set Locale *" "set your computer language")
+		HostOpt+=("set timezone" "configure which timezone you are in")
+		HostOpt+=("add users **" "add users")
+		HostOpt+=("root password *" "set root password")
+		HostOpt+=("Install UI" "Install Desktop Environment or Window Manager")
+		HostOpt+=("Set Bash Prompt" "File that's used to tell how the terminal prompt should look like")
+		# local "${HostOpt[0]}"=$1
+		if [[ -n ${usersTemp[@]} ]]
+		then
+			HostOpt+=("Remove Users" "Delete existing user(s)")
+		fi
+		$1="${HostOpt[0]}"
+		local opt
+		opt=$(dialog --cancel-label "BACK" --default-item "${1}" --menu "Host Configuration Menu" 0 0 0 "${HostOpt[@]}" 3>&1 1>&2 2>&3)
+		case $? in
+			0)
+				case $opt in
+					"set hostname *")
+						SetHostName
+						ConfHost "set hostname *"
+						;;
+					"set Locale *")
+						SetLocale
+						ConfHost "set Locale *"
+						;;
+					"set timezone")
+						SetTz
+						ConfHost "set timezone"
+						;;
+					"add users **")
+						add_users
+						ConfHost "add users **"
+						;;
+					"root password *")
+						dialog --msgbox "you won't see the characters as you type" 0 0
+						SetRootPassword
+						ConfHost "set root password"
+						;;
+					"Install UI")
+						Install_UI "Window Manager"
+						ConfHost "Install UI"
+						;;
+					"Set Bash Prompt")
+						SetBashPrompt
+						ConfHost "Set Bash Prompt"
+						;;
+					"Remove Users")
+						RemoveUsers usersTemp
+						ConfHost "root password *"
+						;;
+				esac
+				;;
+			1) MainMenu "Configure Host +" ;;
+		esac
+	elif [[ ! -d /run/archiso/airootfs ]] || [[ ! -d /run/archiso/bootmnt ]] && ( ( ! mountpoint /run/archiso/airootfs) && ( ! mountpoint /run/archiso/airootfs ) )
+	then		
+		dialog --msgbox "cannot configure host without a linux root partition" 0 0
+		MainMenu "Configure Host +"
+	fi
 }
 ############################################## end of host configuration ###################################################
 
@@ -2294,7 +2128,6 @@ InstallArch(){
 		MainMenu "Install Arch *"
 	elif mountpoint /mnt &>/dev/null
 	then
-		# nvidia linux nvlink/capabilities/fabric-mgmt 0
 		local packages=()
 		packages_temp=(base base-devel linu{x,x-{docs,headers}} grub efi{var,bootmgr} dkms broadcom-wl-dkms xf86-input-{libinput,synaptics} xf86-video-fbdev vim sudo)
 		for i in "${packages_temp[@]}"
@@ -2335,19 +2168,14 @@ InstallArch(){
 					fi
 				done
 
-				# local bootdisktype=$(lsblk "/dev/$mountptdev" -dnlo tran,hotplug,rm)
 				local bootdisktype=$(lsblk "/dev/$mountptdev" -dnlo tran,rm)
 				local GRUB_INSTALL_EXIT_CODE
-				# if [[ $bootdisktype == "usb 1 1" ]]
 				if [[ $bootdisktype == "usb 1" ]]
 				then
-					# grub-install -v --boot-directory="/mnt/boot" --bootloader-id "$bootloaderid" --efi-directory="/mnt/boot" --recheck --removable --target x86_efi-efi
 					grub-install -v --boot-directory="/mnt/boot" --bootloader-id "$bootloaderid" --efi-directory="/mnt/boot" --recheck --removable --target x86_efi-efi | GuageMeter "Installing Grub to USB drive $mountptdev" 1
 					GRUB_INSTALL_EXIT_CODE=$?
-				# elif [[ $bootdisktype == "sata 0 0" ]] || [[ $bootdisktype == "ata 0 0" ]]
 				elif [[ $bootdisktype == "sata 0" ]] || [[ $bootdisktype == "ata 0" ]]
 				then
-					# grub-install -v --boot-directory="/mnt/boot" --bootloader-id "$bootloaderid" --efi-directory="/mnt/boot" --recheck --target x86_efi-efi
 					grub-install -v --boot-directory="/mnt/boot" --bootloader-id "$bootloaderid" --efi-directory="/mnt/boot" --recheck --target x86_efi-efi | GuageMeter "Installing Grub to internal disk" 1
 					GRUB_INSTALL_EXIT_CODE=$?
 				fi
@@ -2434,7 +2262,7 @@ InstallArch(){
 		fi
 
 		local terminaleditorslist=()
-		# terminaleditorslist=("vim" "vim" off)
+		terminaleditorslist=("vim" "vim" off)
 		terminaleditorslist+=("neovim" "neovim" off)
 		terminaleditorslist+=("emacs" "emacs" off)
 		terminaleditorslist+=("joe" "joe" off)
@@ -2452,10 +2280,6 @@ InstallArch(){
 				then
 					packages=("${packages[@]}")
 					packages=("${editors[@]}")
-				# elif [[ -z "${editors[@]}" ]]
-				# then
-				# 	# packages="${packages[@]}"
-				# 	:
 				fi
 				;;
 			1)
@@ -2472,10 +2296,8 @@ InstallArch(){
 
 		dialog --msgbox "Extra packages that will be installed:\n${packages[*]}" 0 0
 
-		# pacstrap /mnt "$packages"
-		# case $? in
-		pacstrap /mnt "${packages[*]}" | GuageMeter "Installing extra linux packages" 1
-		case ${PIPESTATUS[0]} in
+		pacstrap /mnt "${packages[*]}"
+		case $? in
 			0) dialog --msgbox "Extra Linux packages have been installed packages" 0 0;;
 			*) dialog --msgbox "failed to install Extra Linux packages" 0 0;;
 		esac
@@ -2483,22 +2305,31 @@ InstallArch(){
 }
 
 Repo_Enable(){
-	dialog --yesno "enable \"multilib\" repo for packages with support for multiple architectures?" 5 80
-	case $? in
-		0)
-			linenumber=$(grep -ni "\[multilib\]" /etc/pacman.conf | sed 's/:/ /g' | awk '{ print $1 }')
-			sed -i "${linenumber}s/\#\[multilib/\[multilib/g" /etc/pacman.conf
-			linenumber=$((linenumber+1))
-			sed -i "${linenumber}s/\#Include/Include/g" /etc/pacman.conf
-			dialog --msgbox "\"multilib\" repo has been enabled. you can add, remove, disable or enable repos by editing the \"/etc/pacman.conf\" file" 0 0
-			pacman -Sy
-			;;
-		1)
-			dialog --no-label "exit" --yes-label "continue installation" --yesno "multilib repo not enabled. To enable it restart the script or uncomment lines #[multilib]\n#Include=/etc/pacman.d/mirrorlist\n in file \"/etc/pacman.conf\"" 6 63
-			case $? in
-				1) exit ;;
-			esac
-	esac
+	local multilib_linenum=$(grep -ni "multilib\]" /etc/pacman.conf | sed 's/:/ /g' | awk '{ print $1 }')
+	local multilib_include_linenum=$((multilib_linenum+1))
+	local multilib_line=$(grep -ni "multilib\]" /etc/pacman.conf | sed 's/:/ /g' | awk '{ print $2 }')
+	local multilib_include_line=$(cat -n /etc/pacman.conf | grep -i "$multilib_include_linenum" | sed 's/^\s*[0-9]*//g;s/^\s*Include.*/Include/g')
+
+	if [[ "$multilib_include_line" != "Inlclude*" ]] && [[ "$multilib_line" != "[multilib]" ]]
+	then
+		read -p "continue"
+		dialog --yesno "enable \"multilib\" repo for packages with support for multiple architectures?" 5 80
+		case $? in
+			0)
+				local linenumber=$(grep -ni "\[multilib\]" /etc/pacman.conf | sed 's/:/ /g' | awk '{ print $1 }')
+				sed -i "${linenumber}s/\#\[multilib/\[multilib/g" /etc/pacman.conf
+				linenumber=$((linenumber+1))
+				sed -i "${linenumber}s/\#Include/Include/g" /etc/pacman.conf
+				dialog --msgbox "\"multilib\" repo has been enabled. you can add, remove, disable or enable repos by editing the \"/etc/pacman.conf\" file" 0 0
+				pacman -Sy
+				;;
+			1)
+				dialog --no-label "exit" --yes-label "continue installation" --yesno "multilib repo not enabled. To enable it restart the script or uncomment lines #[multilib]\n#Include=/etc/pacman.d/mirrorlist\n in file \"/etc/pacman.conf\"" 6 63
+				case $? in
+					1) exit ;;
+				esac
+		esac
+	fi
 }
 
 MainMenu(){
@@ -2507,12 +2338,8 @@ MainMenu(){
 
 	clear
     # check if dialog is installed
-	# pacman -Qs dialog &>/dev/null
 	ls /usr/bin/dialog &>/dev/null
 	case $? in
-		# 0)
-		# 	echo ""
-		# 	;;
 		1|2)
 			echo -e "dialog not installed.\n"
 			read -s -n1 -p "press any key to install the git provided dialog package "
@@ -2523,7 +2350,6 @@ MainMenu(){
 					;;
 				1)
 					clear
-					# echo -e "\n\ndialog could not be installed"
 					echo -e "\n\ndialog could not be installed.\n\nPlease install provided dialog packages by typing \"pacman -Uvd <package name>\" with or without the \"--noconfirm\" argument.\n\ncurrent directory:\n$(pwd)\n\npackages in this directory:\n$(ls *.pkg*).\n\n\nexiting...\n\n"
 					exit
 					;;
@@ -2549,12 +2375,7 @@ MainMenu(){
 					MainMenu "Partition Disk **"
 					;;
 				"Configure Network **")
-					# dialog --msgbox "Configure Network" 0 0
 					ConfNet
-					# if [[ $? -eq 1 ]]
-					# then
-					# 	MainMenu "Configure Network **"
-					# fi
 					MainMenu "Configure Network **"
 					;;
 
@@ -2565,17 +2386,15 @@ MainMenu(){
 					;;
 
 				"Configure Host +")
-					# arch-chroot /mnt
-					mountpoint /mnt
-					case $? in
-						1)
-							dialog --msgbox "no root partition set" 0 0
-							;;
-						*)
-							ConfHost "set hostname *"
-							;;
-					esac
+					ConfHost "set hostname *"
 					MainMenu "Configure Host +"
+					# if ( mountpoint /mnt &>/dev/null || ( ( ! mountpoint / &>/dev/null ) && ( ! mountpoint /boot &>/dev/null ) ) )
+					# then
+					# 	dialog --msgbox "no root partition set" 0 0
+					# elif ( ( mountpoint /mnt &>/dev/null ) || ( ( mountpoint / &>/dev/null ) && ( mountpoint /boot &>/dev/null ) ) )
+					# then
+					# 	ConfHost "set hostname *"
+					# fi
 					;;
 
 				"Reboot")
@@ -2590,7 +2409,6 @@ MainMenu(){
 									;;
 							esac
 							reboot now -f
-							# clear;reset
 							;;
 						1) MainMenu "Reboot" ;;
 					esac
