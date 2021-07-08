@@ -1,5 +1,7 @@
 Just Run the script and go through the options. Also, when inserting a new disk you don't need to exit the script to let your newly inserted disk to show up in the disk menu. Just wait a few seconds and select the "Partition Disk\*\*" menu item to see the disk in the "Disk Selection Menu" And If you insert a disk when in the "Disk Selecteion Menu" just go back to the Main Menu and select "Partition Disk\*\*" Menu item<br><br><br>
 Plz Don't judge me for my horrible and confusing variable names and naming convention if you plan on reading the script 👀. It's something I came up with on the spot.
+
+When running on live disk you get to access installation options. when running on an installed system you get only host configuration options
 <br><br><br><br>
 
 ## <H1>To Add</H1>
