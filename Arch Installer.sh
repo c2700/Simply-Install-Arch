@@ -1549,9 +1549,11 @@ Install_UI(){
 
 	# $1 - options in this function's menu
 
-	pkgs=""
-	wmopts=()
-	ui_opts=()
+	local pkgs=""
+	local ui_type=""
+	local wmopts=()
+	local deopts=()
+	local ui_opts=()
 
 	ui_opts+=("Window Manager")
 	ui_opts+=("Just windows, statusbars, dmenus (minimal).No Graphics composition like on Gnome")
@@ -1580,30 +1582,37 @@ Install_UI(){
 			case $UI in
 				"Desktop Environment")
 					local DE
-					DE=$(dialog --cancel-label "BACK" --menu "Desktop Environment Menu" 0 0 0 "${deopts[@]}" 3>&1 1>&2 2>&3)
+					DE=$(dialog --no-tags --cancel-label "BACK" --menu "Desktop Environment Menu" 0 0 0 "${deopts[@]}" 3>&1 1>&2 2>&3)
 					case $? in
 						1) Install_UI "Desktop Environment" ;;
 						0) 
 							case $DE in
 								"KDE")
 									pkgs="$(pacman -Sg plasma kde-{applications,system,graphics,network,accessibility} kf{5,5-aids} | awk '{print $2}' | uniq)"
+									ui_type="KDE"
 									;;
 								"Gnome")
+									ui_type="Gnome"
 									pkgs="gnome gnome-extra"
 									;;
 								"cinnamon")
+									ui_type="cinnamon"
 									pkgs="$(pacman -Ssq cinnamon)"
 									;;
 								"deepin")
+									ui_type="deepin"
 									pkgs="deepi{n,n-extra}"
 									;;
 								"lxde")
+									ui_type="lxde"
 									pkgs="lxd{e,e-gtk3}"
 									;;
 								"lxqt")
+									ui_type="lxqt"
 									pkgs="lxqt"
 									;;
 								"mate")
+									ui_type="mate"
 									pkgs="mat{e,e-extra}"
 									;;
 							esac
@@ -1612,19 +1621,22 @@ Install_UI(){
 					;;
 				"Window Manager")
 					local WM
-					WM=$(dialog --cancel-label "BACK" --menu "Window Manager Menu" 0 0 0 "${wmopts[@]}"  3>&1 1>&2 2>&3)
+					WM=$(dialog --no-tags --cancel-label "BACK" --menu "Window Manager Menu" 0 0 0 "${wmopts[@]}"  3>&1 1>&2 2>&3)
 
 					case $? in
 						1) Install_UI "Window Manager" ;;
 						0)
 							case $WM in
 								"i3")
+									ui_type="i3"
 									pkgs=$(pacman -Ssq i3 | grep -iv 'py\|7\|perl\|sway')
 									;;
 								"bspwm")
+									ui_type="bspwm"
 									pkgs="bspwm"
 									;;
 								"awesome")
+									ui_type="awesome"
 									pkgs="awesom{e,e-terminal-fonts} vicious powerline "
 									;;
 							esac
@@ -1632,8 +1644,15 @@ Install_UI(){
 					esac
 					;;
 			esac
-			dialog --msgbox "$pkgs" 0 0
-			pacstrap /mnt $pkgs
+			dialog --msgbox "$ui_type packages that will be installed:\n$pkgs" 0 0
+
+			if [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( mountpoint /mnt &>/dev/null ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot &>/dev/null )
+			then
+				pacstrap /mnt $pkgs
+			elif ( ( ! mountpoint /mnt &>/dev/null ) || ( [[ ! -d /mnt/boot ]] && ( ! mountpoint /mnt/boot &>/dev/null ) ) ) && ( [[ ! -d /run/archiso/airootfs ]] && [[ ! -d /run/archiso/bootmnt ]] ) && ( ( mountpoint / &>/dev/null ) && ( mountpoint /boot &>/dev/null ) )
+			then
+				pacman -Syvd $pkgs
+			fi
 			ConfHost "Install UI"
 			;;
 	esac
@@ -1682,15 +1701,25 @@ SetTz(){
 			case $? in
 				1) SetTz ;;
 				0)
-					ln -sf $zone /mnt/etc/localtime &>/dev/null
-					arch-chroot /mnt/ hwclock -wrv | GuageMeter "Setting Hardware Clock" 1
-					if [[ ${PIPESTATUS[0]} -eq 0 ]]
-					then
-						dialog --msgbox "Hardware Clock and timezone are set $zone" 0 0
-					elif [[ ${PIPESTATUS[0]} -eq 0 ]]
-					then
-						dialog --msgbox "timezone or Hardware Clock could not be set" 0 0
-					fi
+						if [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( mountpoint /mnt &>/dev/null ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot &>/dev/null )
+						then
+							ln -sf $zone /mnt/etc/localtime &>/dev/null
+							arch-chroot /mnt/ hwclock -wv | GuageMeter "Setting Hardware Clock" 1
+							local HWCLOCK_EXIT_CODE=${PIPESTATUS[0]}
+							# hwclock -wv | GuageMeter "Setting Hardware Clock" 1
+							# HWCLOCK_EXIT_CODE=$?
+						elif ( ( ! mountpoint /mnt &>/dev/null ) || ( [[ ! -d /mnt/boot ]] && ( ! mountpoint /mnt/boot &>/dev/null ) ) ) && ( [[ ! -d /run/archiso/airootfs ]] && [[ ! -d /run/archiso/bootmnt ]] ) && ( ( mountpoint / &>/dev/null ) && ( mountpoint /boot &>/dev/null ) )
+						then
+							ln -sf $zone /etc/localtime &>/dev/null
+							hwclock -wv | GuageMeter "Setting Hardware Clock" 1
+							local HWCLOCK_EXIT_CODE=${PIPESTATUS[0]}
+							# hwclock -wv | GuageMeter "Setting Hardware Clock" 1
+							# HWCLOCK_EXIT_CODE=$?
+						fi
+					case $HWCLOCK_EXIT_CODE in
+						0) dialog --msgbox "Hardware Clock and timezone are set $zone" 0 0 ;;
+						1) dialog --msgbox "timezone or Hardware Clock could not be set" 0 0 ;;
+					esac
 					;;
 			esac
 			;;
@@ -1699,7 +1728,7 @@ SetTz(){
 
 SetLocale(){
 
-	LOCALE=()
+	local LOCALE=()
 	cat "/etc/locale.gen" | grep -i '#[a-zA-Z0-9]' | sed 's/#//' > locales.txt
 
 	while read txt
@@ -1711,31 +1740,61 @@ SetLocale(){
 
 	local LocaleDialog
 	LocaleDialog=$(dialog --scrollbar --visit-items --cancel-label "BACK" --title "Locale Selection Menu" --buildlist "\nUse the space bar to move locale options between the panes and use the tab for moving in between spacess. If no locale is selected then the deafult UTF-8 and ISO-8859 versions of the US english locales will be set \n\n           disabled locales                                          enabled locales" 0 0 0 "${LOCALE[@]}" 3>&1 1>&2 2>&3)
-	echo "${LocaleDialog[@]}" | sed 's/" "/"\n"/g;s/"//g' > locales.txt
-	while read txt
-	do
-		sed -i s/"#$txt"/"$txt"/g /mnt/etc/locale.gen
-	done < locales.txt
-	rm -rfv locales.txt &>/dev/null
-	local LocaleFormat
-	LocaleFormat=$(echo -e "\n\n${LocaleDialog[*]}\n" | sed 's/" "/"\n"/g')
-	arch-chroot /mnt locale-gen | GuageMeter "Generating Locales" 1
-	dialog --msgbox "locales set:$LocaleFormat" 0 0
+	case $? in
+		0)
+			unset LOCALE
+			echo "${LocaleDialog[@]}" | sed 's/" "/"\n"/g;s/"//g' > locales.txt
+			local LocaleFormat
+			if [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( mountpoint /mnt &>/dev/null ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot &>/dev/null )
+			then
+				while read txt
+				do
+					sed -i s/"#$txt"/"$txt"/g /mnt/etc/locale.gen
+				done < locales.txt
+				rm -rfv locales.txt &>/dev/null
+				LocaleFormat="$(echo -e "\n\n${LocaleDialog[*]}\n" | sed 's/" "/"\n"/g')"
+				arch-chroot /mnt locale-gen | GuageMeter "Generating Locales" 1
+			elif ( ( ! mountpoint /mnt &>/dev/null ) || ( [[ ! -d /mnt/boot ]] && ( ! mountpoint /mnt/boot &>/dev/null ) ) ) && ( [[ ! -d /run/archiso/airootfs ]] && [[ ! -d /run/archiso/bootmnt ]] ) && ( ( mountpoint / &>/dev/null ) && ( mountpoint /boot &>/dev/null ) )
+			then
+				while read txt
+				do
+					sed -i s/"#$txt"/"$txt"/g /etc/locale.gen
+				done < locales.txt
+				rm -rfv locales.txt &>/dev/null
+				LocaleFormat=$(echo -e "\n\n${LocaleDialog[*]}\n" | sed 's/" "/"\n"/g')
+				locale-gen | GuageMeter "Generating Locales" 1
+			fi
+			dialog --msgbox "Set Locales :$LocaleFormat" 0 0
+			unset LocaleFormat
+			;;
+		1) ConfHost "set Locale *" ;;
+	esac
+
 }
 
+
 SetHostName(){
-	local hostname="$(dialog --inputbox "Set host name" 0 0 3>&1 1>&2 2>&3)"
+	local hostname="$(dialog --inputbox "Set host name. Leave blank for default name \"arch\"" 0 0 3>&1 1>&2 2>&3)"
+
 	if [[ -z $hostname ]]
 	then
-		dialog --yesno "Default name 'arch' will be assigned as hostname. continue?" 0 0
-		case $? in
-			0) hostname="arch" ;;
-			1) SetHostName ;;
-		esac
+		hostname="arch"
 	fi
-	echo "$hostname" > "/mnt/etc/hostname"
-	dialog --msgbox "set $hostname as hostname. You can change the hostname in the /etc/hostname file (if you are not in live mode i.e.) or if you are in live mode then edit the /mnt/etc/hostname file" 0 0
-	echo -e "127.0.0.1\tlocalhost\n      ::1\tlocalhost" > "/mnt/etc/hostname"
+
+	if [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( mountpoint /mnt &>/dev/null ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot &>/dev/null )
+	then
+		echo "$hostname" > "/mnt/etc/hostname"
+		echo -e "127.0.0.1\tlocalhost\n      ::1\tlocalhost" > "/mnt/etc/hostname"
+	elif ( ( ! mountpoint /mnt &>/dev/null ) || ( [[ ! -d /mnt/boot ]] && ( ! mountpoint /mnt/boot &>/dev/null ) ) ) && ( [[ ! -d /run/archiso/airootfs ]] && [[ ! -d /run/archiso/bootmnt ]] ) && ( ( mountpoint / &>/dev/null ) && ( mountpoint /boot &>/dev/null ) )
+	then
+		echo "$hostname" > "/etc/hostname"
+		echo -e "127.0.0.1\tlocalhost\n      ::1\tlocalhost" > "/etc/hostname"
+	fi
+
+	dialog --yes-label "OK" --no-label "Back" --yesno "set \"$hostname\" as hostname. You can change the hostname in the /etc/hostname file (if you are not in live mode i.e.) or if you are in live mode then edit the /mnt/etc/hostname file. To reset hostname press \"Back\"" 0 0
+	case $? in
+		1) SetHostName ;;
+	esac
 }
 
 SetPassword(){
@@ -1764,11 +1823,19 @@ SetPassword(){
 				elif [[ ${#NewPassword} -ge 8 ]]
 				then
 					local ConfirmPassword="$(dialog --passwordbox "Confirm password for username $username" 0 0 3>&1 1>&2 2>&3)"
-					if [[ $ConfirmPassword == $NewPassword ]]
+					if [[ "$ConfirmPassword" == "$NewPassword" ]]
 					then
 						password=$NewPassword
-						printf "$NewPassword\n$NewPassword" | arch-chroot /mnt passwd $username &>/dev/null
-						case $? in
+						if [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( mountpoint /mnt &>/dev/null ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot &>/dev/null )
+						then
+							printf "$NewPassword\n$NewPassword" | arch-chroot /mnt passwd $username &>/dev/null
+							SETPASSWD_EXIT_CODE=${PIPESTATUS[1]}
+						elif ( ( ! mountpoint /mnt &>/dev/null ) || ( [[ ! -d /mnt/boot ]] && ( ! mountpoint /mnt/boot &>/dev/null ) ) ) && ( [[ ! -d /run/archiso/airootfs ]] && [[ ! -d /run/archiso/bootmnt ]] ) && ( ( mountpoint / &>/dev/null ) && ( mountpoint /boot &>/dev/null ) )
+						then
+							printf "$NewPassword\n$NewPassword" | passwd $username &>/dev/null
+							SETPASSWD_EXIT_CODE=${PIPESTATUS[1]}
+						fi
+						case $SETPASSWD_EXIT_CODE in
 							0) dialog --msgbox "password for $username is set" 0 0 ;;
 							1)
 								dialog --msgbox "password for $username is weak" 0 0
@@ -1813,9 +1880,18 @@ add_users(){
 				dialog --msgbox "you won't see the password characters as they are typed" 0 0
 				SetPassword $username
 			fi
-			dialog --msgbox "created username $username and password is set" 0 0
-			arch-chroot /mnt useradd -m $username -G users -g power,wheel,storage &>/dev/null
-			case $? in
+
+			if [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs ) && ( mountpoint /run/archiso/bootmnt ) && ( mountpoint /mnt ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot )
+			then
+				arch-chroot /mnt useradd -m $username -G users -g power,wheel,storage &>/dev/null
+				USERADD_EXIT_CODE=$?
+			elif ( ( ! mountpoint /mnt ) || ( [[ ! -d /mnt/boot ]] && ( ! mountpoint /mnt/boot ) ) ) && ( [[ ! -d /run/archiso/airootfs ]] && [[ ! -d /run/archiso/bootmnt ]] ) && ( ( mountpoint / ) && ( mountpoint /boot ) )
+			then
+				useradd -m $username -G users -g power,wheel,storage &>/dev/null
+				USERADD_EXIT_CODE=$?
+			fi
+
+			case $USERADD_EXIT_CODE in
 				0) 
 					dialog --msgbox "Created user $username" 0 0
 					SetPassword $username
@@ -1823,13 +1899,10 @@ add_users(){
 				9)
 					dialog --yesno "User $username already exists. Reset password?" 0 0
 					case $? in
-						0)
-							SetPassword $username
-							;;
+						0) SetPassword $username ;;
 					esac
 					;;
 			esac
-			
 			;;
 	esac
 }
@@ -1844,43 +1917,34 @@ BashPromptPreview(){
 SetPrompt(){
 
 	bashrc_file="$1"
+	local folder_path=""
+
+	if [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( mountpoint /mnt &>/dev/null ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot &>/dev/null )
+	then
+		folder_path="/mnt/home"
+	elif ( ( ! mountpoint /mnt &>/dev/null ) || ( [[ ! -d /mnt/boot ]] && ( ! mountpoint /mnt/boot &>/dev/null ) ) ) && ( [[ ! -d /run/archiso/airootfs ]] && [[ ! -d /run/archiso/bootmnt ]] ) && ( ( mountpoint / &>/dev/null ) && ( mountpoint /boot &>/dev/null ) )
+	then
+		folder_path="/home"
+	fi
+
 
 	local Users=($(grep [1-9][0-9][0-9][0-9] /mnt/etc/passwd | grep -iv nobody | sed 's/\:/ \: /g' | awk '{print $1}'))
 	if [[ ${#Users[@]} -eq 1 ]]
 	then
-		cp -rfv bashrc/"$1" /home/$Users/.bashrc &>/dev/null
+		cp shell\ rc/bash/"$1" "$folder_path/${Users[0]}/.bashrc" &>/dev/null
 		dialog --msgbox "set $1 as the bash prompt for user ${Users[0]}" 0 0
 	elif [[ ${#Users[@]} -gt 1 ]]
 	then
-		dialog --extra-button --extra-label "Few" --ok-label "One" --no-label "All" --yesno "set  for all users, one user or selected user?" 0 0
+		dialog --yes-label "OK" --no-label "Skip" --yesno "set  for all users, one user or selected user?" 0 0
 		case $? in
 			0)
-				local UsersTemp=()
-				for i in ${Users[@]}
-				do
-					UsersTemp+=("$i" "")
-				done
-				local User="$(dialog --no-tags --menu "Select a user to set the $bashrc_file bashrc file" 0 0 0 "${UsersTemp[@]}" 3>&1 1>&2 2>&3)"
-
-				cp -rfv bashrc/"$bashrc_file" /mnt/home/$User/.bashrc &>/dev/null
-				dialog --msgbox "Set $bashrc_file for user $User" 0 0
-				unset Users UsersTemp
-				;;
-			1)
-				for i in ${Users[@]}
-				do
-					cp -rfv bashrc/"$bashrc_file" /mnt/home/$i/.bashrc &>/dev/null
-				done
-				dialog --msgbox "Set $bashrc_file for all users" 0 0
-				;;
-			3)
 				local UsersTemp=()
 				for i in ${Users[@]}
 				do
 					UsersTemp+=("$i" "" 0)
 				done
 
-				local SelectedUsers="$(dialog --no-tags --checklist "Select users that will use this $bashrc_file bashrc file" 0 0 0 "${UsersTemp[@]}" 3>&1 1>&2 2>&3)"
+				local SelectedUsers="$(dialog --no-tags --checklist "Select user(s) that will use this $bashrc_file bashrc file" 0 0 0 "${UsersTemp[@]}" 3>&1 1>&2 2>&3)"
 
 				local userText=""
 				if [[ ${#SelectedUsers[@]} -eq 1 ]]
@@ -1898,15 +1962,15 @@ SetPrompt(){
 
 				for i in ${SelectedUsers[@]}
 				do
-					cp -rf bashrc/"$bashrc_file" /mnt/home/$User/.bashrc &>/dev/null
+					cp shell\ rc/bash/"$bashrc_file" "$folder_path/$User/.bashrc" &>/dev/null
 				done | GuageMeter "Setting $bashrc_file for $userText ${SelectedUsersTemp[@]}"
-
 				dialog --msgbox "Set $bashrc_file for $userText ${SelectedUsersTemp[@]}" 0 0
 				unset SelectedUsers SelectedUsersTemp UsersTemp userText
 				;;
+			1) dialog --msgbox "default bashrc will be used" 0 0 ;;
 		esac
 	fi
-	unset Users
+	unset Users folder_path
 }
 
 SetBashPrompt(){
@@ -1976,6 +2040,7 @@ SetBashPrompt(){
 }
 
 RemoveUsers(){
+
 	local usersTempArgs=$1[@]
 	local usersTemp=${!usersTempArgs[@]}
 	unset usersTempArgs
@@ -1991,7 +2056,13 @@ RemoveUsers(){
 		dialog --yesno "${usersTemp[0]} is the only available user. Delete regardless?" 0 0
 		case $? in
 			0)
-				arch-chroot userdel -rf ${DeleteUsers[0]} &>/dev/null
+				if [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( mountpoint /mnt &>/dev/null ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot &>/dev/null )
+				then
+					arch-chroot userdel -rf ${DeleteUsers[0]} &>/dev/null
+				elif ( ( ! mountpoint /mnt &>/dev/null ) || ( [[ ! -d /mnt/boot ]] && ( ! mountpoint /mnt/boot &>/dev/null ) ) ) && ( [[ ! -d /run/archiso/airootfs ]] && [[ ! -d /run/archiso/bootmnt ]] ) && ( ( mountpoint / &>/dev/null ) && ( mountpoint /boot &>/dev/null ) )
+				then
+					userdel -rf ${DeleteUsers[0]} &>/dev/null
+				fi
 				dialog --msgbox "Deleted user ${DeleteUsers[0]}" 0 0
 				;;
 		esac
@@ -2007,17 +2078,27 @@ RemoveUsers(){
 		then
 			userText="user"
 			DeleteUsersTempText=($(TempArrayWithAmpersand DeleteUsersTempText))
-			arch-chroot userdel -rf ${DeleteUsers[0]} &>/dev/null
 		elif [[ ${DeleteUsers[@]} -gt 1 ]]
 		then
 			userText="users"
 			DeleteUsersTempText=($(TempArrayWithAmpersand DeleteUsersTempText))
+		fi
+
+		if [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( mountpoint /mnt &>/dev/null ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot &>/dev/null )
+		then
 			for n in ${DeleteUsers[@]}
 			do
 				arch-chroot userdel -rf $n &>/dev/null
 			done
+		elif ( ( ! mountpoint /mnt &>/dev/null ) || ( [[ ! -d /mnt/boot ]] && ( ! mountpoint /mnt/boot &>/dev/null ) ) ) && ( [[ ! -d /run/archiso/airootfs ]] && [[ ! -d /run/archiso/bootmnt ]] ) && ( ( mountpoint / &>/dev/null ) && ( mountpoint /boot &>/dev/null ) )
+		then
+			for n in ${DeleteUsers[@]}
+			do
+				userdel -rf $n &>/dev/null
+			done
 		fi
 		dialog --msgbox "Deleted $userText ${DeleteUsersTempText[*]}" 0 0
+		unset DeleteUsersTemp DeleteUsersTempText userText
 	fi
 }
 
@@ -2026,7 +2107,16 @@ SetRootPassword(){
 	RootPassword=$(dialog --no-cancel --passwordbox "Enter root password. If no root password is provided then root password will be set to '0n3 Punch M@n'" 0 0 3>&1 1>&2 2>&3)
 	if [[ -z $RootPassword ]]
 	then
-		printf "0n3 Punch M@n\n0n3 Punch M@n" | arch-chroot /mnt passwd &>/dev/null
+		if [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( mountpoint /mnt &>/dev/null ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot &>/dev/null )
+		then
+			printf "0n3 Punch M@n\n0n3 Punch M@n" | arch-chroot /mnt passwd &>/dev/null
+		elif ( ( ! mountpoint /mnt &>/dev/null ) || ( [[ ! -d /mnt/boot ]] && ( ! mountpoint /mnt/boot &>/dev/null ) ) ) && ( [[ ! -d /run/archiso/airootfs ]] && [[ ! -d /run/archiso/bootmnt ]] ) && ( ( mountpoint / &>/dev/null ) && ( mountpoint /boot &>/dev/null ) )
+		then
+			##############################
+			# check if a password is set #
+			##############################
+			printf "0n3 Punch M@n\n0n3 Punch M@n" | passwd &>/dev/null
+		fi
 		dialog --msgbox "default root password '0n3 Punch M@n' is set " 0 0
 	elif [[ -n $RootPassword ]]
 	then
@@ -2038,13 +2128,22 @@ SetRootPassword(){
 			SetRootPassword
 		elif [[ "$RootPassword" == "$ConfirmPassword" ]]
 		then
-			printf "$RootPassword\n$RootPassword" | arch-chroot /mnt passwd &>/dev/null
-			case ${PIPESTATUS[1]} in
-			0) dialog --msgbox "root password is set" 0 0 ;;
-			10)
-				dialog --msgbox "root password entered is weak and is not set" 0 0
-				SetRootPassword
-				;;
+			if [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( mountpoint /mnt &>/dev/null ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot &>/dev/null )
+			then
+				printf "$RootPassword\n$RootPassword" | arch-chroot /mnt passwd &>/dev/null
+				SETROOTPASSWORD_EXIT_CODE=${PIPESTATUS[1]}
+			elif ( ( ! mountpoint /mnt &>/dev/null ) || ( [[ ! -d /mnt/boot ]] && ( ! mountpoint /mnt/boot &>/dev/null ) ) ) && ( [[ ! -d /run/archiso/airootfs ]] && [[ ! -d /run/archiso/bootmnt ]] ) && ( ( mountpoint / &>/dev/null ) && ( mountpoint /boot &>/dev/null ) )
+			then
+				printf "$RootPassword\n$RootPassword" | passwd &>/dev/null
+				SETROOTPASSWORD_EXIT_CODE=${PIPESTATUS[1]}
+			fi
+
+			case $SETROOTPASSWORD_EXIT_CODE in
+				0) dialog --msgbox "root password is set" 0 0 ;;
+				10)
+					dialog --msgbox "root password entered is weak and is not set" 0 0
+					SetRootPassword
+					;;
 			esac
 		fi
 	fi
@@ -2053,69 +2152,71 @@ SetRootPassword(){
 ConfHost(){
 	# $1 - menu option item
 
-	if [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( ( mountpoint /run/archiso/airootfs) && ( mountpoint /run/archiso/airootfs ) ) 
+	local usersTemp=""
+
+	if ( ( ! mountpoint /mnt &>/dev/null ) || ( [[ ! -d /mnt/boot ]] && ( ! mountpoint /mnt/boot &>/dev/null ) ) ) && ( [[ ! -d /run/archiso/airootfs ]] && [[ ! -d /run/archiso/bootmnt ]] ) && ( ( mountpoint / &>/dev/null ) && ( mountpoint /boot &>/dev/null ) )
 	then
-		local usersTemp=($(cat /etc/passwd | sed 's/:/ : /g' | grep -iG '[1-9][0-9][0-9][0-9]\d*' | grep -iv nobody | awk '{ print $1 }'))
-		local HostOpt=("set hostname *" "set your computer name")
-		HostOpt+=("set Locale *" "set your computer language")
-		HostOpt+=("set timezone" "configure which timezone you are in")
-		HostOpt+=("add users **" "add users")
-		HostOpt+=("root password *" "set root password")
-		HostOpt+=("Install UI" "Install Desktop Environment or Window Manager")
-		HostOpt+=("Set Bash Prompt" "File that's used to tell how the terminal prompt should look like")
-		# local "${HostOpt[0]}"=$1
-		if [[ -n ${usersTemp[@]} ]]
-		then
-			HostOpt+=("Remove Users" "Delete existing user(s)")
-		fi
-		$1="${HostOpt[0]}"
-		local opt
-		opt=$(dialog --cancel-label "BACK" --default-item "${1}" --menu "Host Configuration Menu" 0 0 0 "${HostOpt[@]}" 3>&1 1>&2 2>&3)
-		case $? in
-			0)
-				case $opt in
-					"set hostname *")
-						SetHostName
-						ConfHost "set hostname *"
-						;;
-					"set Locale *")
-						SetLocale
-						ConfHost "set Locale *"
-						;;
-					"set timezone")
-						SetTz
-						ConfHost "set timezone"
-						;;
-					"add users **")
-						add_users
-						ConfHost "add users **"
-						;;
-					"root password *")
-						dialog --msgbox "you won't see the characters as you type" 0 0
-						SetRootPassword
-						ConfHost "set root password"
-						;;
-					"Install UI")
-						Install_UI "Window Manager"
-						ConfHost "Install UI"
-						;;
-					"Set Bash Prompt")
-						SetBashPrompt
-						ConfHost "Set Bash Prompt"
-						;;
-					"Remove Users")
-						RemoveUsers usersTemp
-						ConfHost "root password *"
-						;;
-				esac
-				;;
-			1) MainMenu "Configure Host +" ;;
-		esac
-	elif [[ ! -d /run/archiso/airootfs ]] || [[ ! -d /run/archiso/bootmnt ]] && ( ( ! mountpoint /run/archiso/airootfs) && ( ! mountpoint /run/archiso/airootfs ) )
-	then		
-		dialog --msgbox "cannot configure host without a linux root partition" 0 0
-		MainMenu "Configure Host +"
+		usersTemp=($(cat /etc/passwd | sed 's/:/ : /g' | grep -iG '[1-9][0-9][0-9][0-9]\d*' | grep -iv nobody | awk '{ print $1 }'))
+	elif [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( mountpoint /mnt &>/dev/null ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot &>/dev/null )
+	then
+		usersTemp=($(cat /mnt/etc/passwd | sed 's/:/ : /g' | grep -iG '[1-9][0-9][0-9][0-9]\d*' | grep -iv nobody | awk '{ print $1 }'))
 	fi
+
+	local HostOpt=("set hostname *" "set your computer name")
+	HostOpt+=("set Locale *" "set your computer language")
+	HostOpt+=("set timezone" "configure which timezone you are in")
+	HostOpt+=("add users **" "add users")
+	HostOpt+=("root password *" "set root password")
+	HostOpt+=("Install UI" "Install Desktop Environment or Window Manager")
+	HostOpt+=("Set Bash Prompt" "File that's used to tell how the terminal prompt should look like")
+	# local "${HostOpt[0]}"=$1
+	if [[ -n ${usersTemp[@]} ]]
+	then
+		HostOpt+=("Remove Users" "Delete existing user(s)")
+	fi
+	$1="${HostOpt[0]}"
+	local opt
+	opt=$(dialog --cancel-label "BACK" --default-item "${1}" --menu "Host Configuration Menu" 0 0 0 "${HostOpt[@]}" 3>&1 1>&2 2>&3)
+	case $? in
+		0)
+			case $opt in
+				"set hostname *")
+					SetHostName
+					ConfHost "set hostname *"
+					;;
+				"set Locale *")
+					SetLocale
+					ConfHost "set Locale *"
+					;;
+				"set timezone")
+					SetTz
+					ConfHost "set timezone"
+					;;
+				"add users **")
+					add_users
+					ConfHost "add users **"
+					;;
+				"root password *")
+					dialog --msgbox "you won't see the characters as you type" 0 0
+					SetRootPassword
+					ConfHost "set root password"
+					;;
+				"Install UI")
+					Install_UI "Window Manager"
+					ConfHost "Install UI"
+					;;
+				"Set Bash Prompt")
+					SetBashPrompt
+					ConfHost "Set Bash Prompt"
+					;;
+				"Remove Users")
+					RemoveUsers usersTemp
+					ConfHost "root password *"
+					;;
+			esac
+			;;
+		1) MainMenu "Configure Host +" ;;
+	esac
 }
 ############################################## end of host configuration ###################################################
 
@@ -2358,14 +2459,31 @@ MainMenu(){
 	esac
 
 
-	local menuopt=("Partition Disk **" "format/Partition/select Hard Disks and mount partitions")
-	menuopt+=("Configure Network **" "Check connectivity and connect to a network")
-	menuopt+=("Install Arch *" "Install the base system")
-	menuopt+=("Configure Host +" "Personalize the machine by setting Hostname, adding users etc.")
-	menuopt+=("Reboot" "Reboot the computer")
 
+	local menuopt=()
 	local menuitem
-	menuitem=$(dialog --no-mouse --default-item "${1}" --cancel-label "Exit" --title "Install Menu" --menu "To install arch all options followed by\n  i) '**' are priority 1\n ii) '*'are priority 2\niii) '+'are priority 3\n\nThe rest are optional" 0 0 0 "${menuopt[@]}" 3>&1 1>&2 2>&3)
+	local MenuItemText
+	local MenuItemTitle
+	# installed base but on live || not installed base but on live
+	if ( ( [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( mountpoint /mnt &>/dev/null ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot &>/dev/null ) ) || ( [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( ! mountpoint /mnt &>/dev/null ) && [[ ! -d /mnt/boot ]] ) )
+	then
+		MenuItemTitle="Install Menu"
+		MenuItemText="To install arch all options followed by\n  i) '**' are priority 1\n ii) '*'are priority 2\niii) '+'are priority 3\n\nThe rest are optional"
+		menuopt=("Partition Disk **" "format/Partition/select Hard Disks and mount partitions")
+		menuopt+=("Configure Network **" "Check connectivity and connect to a network")
+		menuopt+=("Install Arch *" "Install the base system")
+		menuopt+=("Configure Host +" "Personalize the machine by setting Hostname, adding users etc.")
+	# installed & running base
+	elif ( ( ! mountpoint /mnt ) || ( [[ ! -d /mnt/boot ]] && ( ! mountpoint /mnt/boot ) ) ) && ( [[ ! -d /run/archiso/airootfs ]] && [[ ! -d /run/archiso/bootmnt ]] ) && ( ( mountpoint / ) && ( mountpoint /boot ) )
+	then
+		MenuItemTitle="Host Configuration Menu"
+		menuopt+=("Configure Network" "Check connectivity and connect to a network")
+		menuopt+=("Configure Host" "Personalize the machine by setting Hostname, adding users etc.")
+		MenuItemText=""
+	fi
+	menuopt+=("Reboot" "Reboot the machine")
+
+	menuitem=$(dialog --no-mouse --default-item "${1}" --cancel-label "Exit" --title "$MenuItemTitle" --menu "$MenuItemText" 0 0 0 "${menuopt[@]}" 3>&1 1>&2 2>&3)
 
 	case $? in
 		0)
@@ -2374,7 +2492,7 @@ MainMenu(){
 					PartitionDisk
 					MainMenu "Partition Disk **"
 					;;
-				"Configure Network **")
+				"Configure Network **"|"Configure Network")
 					ConfNet
 					MainMenu "Configure Network **"
 					;;
@@ -2385,18 +2503,16 @@ MainMenu(){
 					MainMenu "Install Arch *"
 					;;
 
-				"Configure Host +")
-					ConfHost "set hostname *"
+				"Configure Host +"|"Configure Host")
+					if ( [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( mountpoint /mnt &>/dev/null ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot &>/dev/null ) ) || ( ( mountpoint / &>/dev/null ) && ( mountpoint /boot &>/dev/null ) )
+					then
+						ConfHost "set hostname *"
+					elif [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs ) && ( mountpoint /run/archiso/bootmnt ) && ( ! mountpoint /mnt ) && [[ ! -d /mnt/boot ]]
+					then
+						dialog --msgbox "Cannot configure host without a Linux System installed" 0 0
+					fi
 					MainMenu "Configure Host +"
-					# if ( mountpoint /mnt &>/dev/null || ( ( ! mountpoint / &>/dev/null ) && ( ! mountpoint /boot &>/dev/null ) ) )
-					# then
-					# 	dialog --msgbox "no root partition set" 0 0
-					# elif ( ( mountpoint /mnt &>/dev/null ) || ( ( mountpoint / &>/dev/null ) && ( mountpoint /boot &>/dev/null ) ) )
-					# then
-					# 	ConfHost "set hostname *"
-					# fi
 					;;
-
 				"Reboot")
 					dialog --yesno "Reboot the machine" 0 0
 					case $? in
