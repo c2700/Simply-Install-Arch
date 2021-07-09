@@ -278,7 +278,7 @@ ConfNet(){
 				;;
 			1)
 				unset NMList
-				MainMenu "Configure Network **" ;;
+				MainMenu "Configure Network **"
 				;;
 		esac
 	fi
@@ -2607,8 +2607,19 @@ Repo_Enable(){
 MainMenu(){
 
 	# $1 - menu option item
-
 	clear
+
+	local uid=$(id -u)
+	ls /usr/bin/dialog &>/dev/null
+	DIALOG_CHECK_EXIT_CODE=$?
+	if [[ $uid -ne 0 ]] && [[ $DIALOG_CHECK_EXIT_CODE -eq 0 ]]
+	then
+		dialog --msgbox "please run this script as root to configure" 0 0
+	elif [[ $uid -ne 0 ]] && [[ $DIALOG_CHECK_EXIT_CODE -eq 0 ]]
+	then
+		echo "\E[1m\t\t\t\t\t\t\t\tplease run this script as root to configure\E[m"
+	fi
+
     # check if dialog is installed
 	ls /usr/bin/dialog &>/dev/null
 	case $? in
