@@ -31,7 +31,11 @@
 # DIALOG_HELP_ITEM_HELP=2
 # DIALOG_EXTRA=3
 
+
+
 # commonly used code blocks
+
+# pretty much like a progress bar
 GuageMeter(){
 	# $1 - guagebox text
 	# $2 - number
@@ -39,7 +43,7 @@ GuageMeter(){
 	while [ $c -le 100 ]
 	    do
 	        echo "###"
-			echo $c
+			echo "$c"
 			echo "### $c%"
 			((c+=$2))
 	        ((c+=1))
@@ -74,6 +78,7 @@ DiscardFromArray(){
 	echo "${UnsetArray[@]}"
 }
 
+# return has/have and disk/disks texts based on the number of elements in the array passed as argument
 TempArrayWithAmpersandHasHaveTexts(){
 	# $1 - Size of Temp Array
 	local TempArraySize=$1
@@ -90,6 +95,7 @@ TempArrayWithAmpersandHasHaveTexts(){
 	echo "$disk $have"
 }
 
+# return an array with an "&" in the -2 index of an array passed as argument
 TempArrayWithAmpersand(){
 
 	# $1 - TempArray
@@ -179,6 +185,7 @@ iwd_mngr(){
 		wireless_dev="$(dialog --menu "Wireless Card Selection Menu" 0 0 0 "${wireless_cards[@]}" 3>&1 1>&2 2>&3)"
 	fi
 
+	# pass in network arguments
 	clear
 	iwctl station "$wireless_dev" scan
 	clear
@@ -200,7 +207,8 @@ iwd_mngr(){
 
 
 ConfNet(){
-	NMList=()
+
+	# check network availability
 	ping -c4 google.com &>/dev/null | GuageMeter "Checking for network availablity" 1
 	if [[ ${PIPESTATUS[0]} -eq 0 ]]
 	then
@@ -210,60 +218,70 @@ ConfNet(){
 		dialog --title "Network Status" --msgbox "network not available. will search for available network managers" 0 0
 	fi
 
-
+	# create an array of available network managers for use in dialog
+	local NMList=()
 	ls /bin/wifi-menu &>/dev/null
-
-	if [[ $? -eq 0 ]]
-	then
-		NMList+=("wifi-menu")
-		NMList+=("")
-	fi
-
+	case $? in
+		0)
+			NMList+=("wifi-menu")
+			NMList+=("")
+			;;
+	esac
+	
 	ls /usr/lib/systemd/system/NetworkManager* &>/dev/null
-	if [[ $? -eq 0 ]]
-	then
-		NMList+=("networkmanager")
-		NMList+=("")
-	fi
+	case $? in
+		0)
+			NMList+=("networkmanager")
+			NMList+=("")
+			;;
+	esac
 
 	ls /usr/lib/systemd/system/iwd* &>/dev/null
-	if [[ $? -eq 0 ]]
-	then
-		NMList+=("iwd")
-		NMList+=("")
-	fi
+	case $? in
+		0)
+			NMList+=("iwd")
+			NMList+=("")
+			;;
+	esac	
 
-	if [[ ${#NMList[@]} -eq 0 ]]
+	if [[ -z ${NMList[@]} ]]
 	then
+		unset NMList
 		dialog --msgbox "no networkmanagers available. Local networkmanager package will be installed" 0 0
 		pacman -Uvd --noconfirm --needed "$(ls networkmanager*)"
 		dialog --msgbox "enabling NetworkManager" 0 0
 		nmtui
 		MainMenu "Configure Network"
+	elif [[ -n ${NMList[@]} ]]
+	then
+		local NM
+		NM=$(dialog --cancel-label "BACK" --menu "Availble Network Managers" 0 0 0  "${NMList[@]}" 3>&1 1>&2 2>&3)
+
+		case $? in
+			0)
+				case $NM in
+					"wifi-menu")
+						unset NMList
+						wifi-menu
+						;;
+					"networkmanager")
+						unset NMList
+						nmtui
+						MainMenu "Configure Network **"
+						;;
+					"iwd")
+						unset NMList
+						iwd_mngr
+						MainMenu "Configure Network **"
+						;;
+				esac
+				;;
+			1)
+				unset NMList
+				MainMenu "Configure Network **" ;;
+				;;
+		esac
 	fi
-
-	local NM
-	NM=$(dialog --cancel-label "BACK" --menu "Availble Network Managers" 0 0 0  "${NMList[@]}" 3>&1 1>&2 2>&3)
-
-	case $? in
-		0)
-			case $NM in
-				"wifi-menu")
-					wifi-menu
-					;;
-				"networkmanager")
-					nmtui
-					MainMenu "Configure Network **"
-					;;
-				"iwd")
-					iwd_mngr
-					MainMenu "Configure Network **"
-					;;
-			esac
-			;;
-		1) MainMenu "Configure Network **" ;;
-		255) ConfNet ;;
-	esac
 }
 
 
@@ -285,6 +303,7 @@ ConfirmMounts(){
 
 	local linuxfs="ext4"
 
+	# filesystem selection menu
 	dialog --yes-label "Change filesystem" --no-label "Use Default" --yesno "Use default ext4 for linux filesystem or use a different filesystem?" 0 0
 	case $? in
 		0)
@@ -319,19 +338,21 @@ ConfirmMounts(){
 	esac
 	unset linuxfs_list
 
-	clear
+	# arrays that will store disks that will be mounted or is mounted, will be formatted or reformatted using existing, selected (root and home partitions only) or default filesystem
 	local Reformat_Disks=()
 	local Format_Disks=()
 	local MountParts=()
 	local m_MountedPartitions=()
+
 	for k in ${m_MountDisksTemp[@]}
 	do
-		local m_DiskName=$(lsblk /dev/$k -dnlo vendor,model | awk '{ gsub("\\s+"," "); print $0 }')
-		local m_DiskSize=$(lsblk /dev/$k -dnlo size | sed 's/^\s*//g;s/[mM]/ MB/g;s/[gG]/ GB/g;s/[tT]/ TB/g')
+		local m_DiskName=$(lsblk /dev/$k -dnlo vendor,model | awk '{ gsub("\\s+"," "); print $0 }') # gets disk name in one text
+		local m_DiskSize=$(lsblk /dev/$k -dnlo size | sed 's/^\s*//g;s/[mM]/ MB/g;s/[gG]/ GB/g;s/[tT]/ TB/g') # changes "M" to " MB"
 		local m_DiskPartTable=$(lsblk /dev/$k -dnlo pttype)
-		local MountPartsString="\n/dev/$k ($m_DiskName - $m_DiskPartTable - $m_DiskSize)\n"
+		local MountPartsString="\n/dev/$k ($m_DiskName - $m_DiskPartTable - $m_DiskSize)\n" # array of disk info string
 		unset m_DiskName m_DiskSize
 
+		# make an array of selected partitions to their respective disks
 		local m_partitions=()
 		for m in ${m_MountPartitionsTextsTemp[@]}
 		do
@@ -340,6 +361,8 @@ ConfirmMounts(){
 				m_partitions+=("$m")
 			fi
 		done
+
+		# create array of disk and partition info strings to view as a tree structure in the mount confirmation dialog when partitions are equal to one
 		if [[ ${#m_partitions[@]} -eq 1 ]]
 		then
 			local partfsformat=$(lsblk /dev/${m_partitions[0]} -nlo fsver,fstype | sed 's/FAT32 vfat/FAT32/g;s/1.0   ext4/ext4/g;s/1     swap/swap/g')
@@ -442,6 +465,8 @@ ConfirmMounts(){
 			MountPartsString+="\n"
 			MountParts+=("$MountPartsString")
 			unset MountPartsString m_MountPoint
+
+		# create array of disk and partition info strings to view as a tree structure in the mount confirmation dialog when partitions are greater than one
 		elif [[ ${#m_partitions[@]} -gt 1 ]]
 		then
 			for l in ${m_partitions[@]}
@@ -550,11 +575,14 @@ ConfirmMounts(){
 			MountParts+=("$MountPartsString")
 			unset MountPartsString
 		fi
-		unset m_partitions # MountPartsString
+		unset m_partitions
 	done
 
 	local MountPartsString="${MountParts[*]}"
 
+
+	# create dialogs based on the array of format, reformat and mountedpartitions arrays:
+	# dialog to format and mount all disks
 	if [[ -z ${Reformat_Disks[@]} ]] && ([[ "${Format_Disks[@]}" == "${m_MountPartitionsTextsTemp[@]}" ]] || [[ ${#Format_Disks[@]} -eq ${#m_MountPartitionsTextsTemp[@]} ]])
 	then
 		dialog --scrollbar --yes-label "Back" --no-label "Format & Mount" --title "partition mount confirmation" --yesno "1) +Format - Will format the partition with specified filesystem format. Reformatting will\n             not apply here.\n2) *Format - If the \"Re-Format\" is selected it will reformat the partition using existing filesystem\n             format wiping the partition.\n\nFormat:\n  Disk\n  \`-  Partition --> Size --> Partition Label --> Filesystem --> (+|*)Format --> MountPoint\n${MountPartsString[*]}\n\n" 20 110
@@ -568,6 +596,8 @@ ConfirmMounts(){
 				MountPartitions m_MountPartitionsTextsTemp
 				;;
 		esac
+
+	# dialog to reformat all unformatted disks and mount all disks
 	elif [[ -n ${Reformat_Disks[@]} ]] && [[ -n ${Format_Disks[@]} ]] && ([[ "${Reformat_Disks[@]}" != "${Format_Disks[@]}" ]] || [[ ${#Reformat_Disks[@]} -ne ${#Format_Disks[@]} ]])
 	then
 		dialog --scrollbar --ok-label "Back" --cancel-label "Format & Mount" --extra-button --extra-label "Re-Format & Mount" --title "partition mount confirmation" --yesno "1) +Format - Will format the partition with specified filesystem format. Reformatting will\n             not apply here.\n2) *Format - If the \"Re-Format\" is selected it will reformat the partition using existing filesystem.\n3) *(Format_1 -> Format_2) - Will reformat the existing \"Format_1\" filesystem with \"Format_2\" filesystem\n                             partition with different filesystem format.\n\nFormat:\n  Disk\n  \`-  Partition --> Size --> Partition Label --> Filesystem --> (+|*)Format --> MountPoint\n${MountPartsString[*]}\n\n" 20 110
@@ -590,6 +620,8 @@ ConfirmMounts(){
 				MountPartitions m_MountPartitionsTextsTemp
 				;;
 		esac
+
+	# dialog to reformat and mount all disks or only mount all disks
 	elif [[ -z ${Format_Disks[@]} ]] && ([[ "${Reformat_Disks[@]}" == "${m_MountPartitionsTextsTemp[@]}" ]] || [[ ${#Reformat_Disks[@]} -eq ${#m_MountPartitionsTextsTemp[@]} ]]) && ([[ -z ${m_MountedPartitions[@]} ]] || [[ "${m_MountedPartitions[@]}" != "${m_MountPartitionsTextsTemp[@]}" ]] || [[ ${#m_MountedPartitions[@]} -ne ${#m_MountPartitionsTextsTemp[@]} ]])
 	then
 		dialog --scrollbar --ok-label "Back" --cancel-label "Mount" --extra-button --extra-label "Re-Format All & Mount" --title "partition mount confirmation" --yesno "1) *Format - If the \"Re-Format\" is selected it will reformat the partition using existing filesystem\n             format wiping the partition.\n2) *(Format_1 -> Format_2) - Will reformat the existing \"Format_1\" filesystem with \"Format_2\" filesystem\n                             partition with different filesystem format.\n\nFormat:\n  Disk\n  \`-  Partition --> Size --> Partition Label --> Filesystem --> (+|*)Format --> MountPoint\n${MountPartsString[*]}\n\n" 20 110
@@ -605,6 +637,8 @@ ConfirmMounts(){
 				MountPartitions m_MountPartitionsTextsTemp
 				;;
 		esac		
+
+	# dialog to reformat and mount all disks or skip this step if all relevant operations are done
 	elif [[ -z ${Format_Disks[@]} ]] && ([[ "${Reformat_Disks[@]}" == "${m_MountPartitionsTextsTemp[@]}" ]] || [[ ${#Reformat_Disks[@]} -eq ${#m_MountPartitionsTextsTemp[@]} ]]) && ([[ -n ${m_MountedPartitions[@]} ]] || [[ "${m_MountedPartitions[@]}" == "${m_MountPartitionsTextsTemp[@]}" ]] || [[ ${#m_MountedPartitions[@]} -eq ${#m_MountPartitionsTextsTemp[@]} ]])
 	then
 		dialog --scrollbar --ok-label "Back" --cancel-label "skip" --extra-button --extra-label "Re-Format All & Mount" --title "partition mount confirmation" --yesno "1) *Format - If the \"Re-Format\" is selected it will reformat the partition using existing filesystem\n             format wiping the partition.\n2) *(Format_1 -> Format_2) - Will reformat the existing \"Format_1\" filesystem with \"Format_2\" filesystem\n                             partition with different filesystem format.\n\nFormat:\n  Disk\n  \`-  Partition --> Size --> Partition Label --> Filesystem --> (+|*)Format --> MountPoint\n${MountPartsString[*]}\n\n" 20 110
@@ -631,6 +665,7 @@ FormatPartition(){
 	local m_parttypename="$(lsblk "/dev/$Partition" -dlno parttypename)"
 	local m_existingfs="$(lsblk "/dev/$Partition" -dlno fstype)"
 
+	# formats partition if filesystem does not exist. reformats partition if filesystem exists
 	case $m_parttypename in
 		"Linux filesystem"|"Linux home"|"Linux")
 			if [[ -z $m_existingfs ]] || [[ "$m_existingfs" == "" ]] || [[ "$m_existingfs" =~ " " ]]
@@ -664,7 +699,14 @@ FormatPartition(){
 }
 
 UnMountPartitions(){
+
+	# disable all swaps
 	swapoff -av
+
+	# unmount order.
+	# 1 - /mnt/home
+	# 2 - /mnt/boot
+	# 3 - /mnt/
 	if [[ -d /mnt/home ]]
 	then
 		if mountpoint /mnt/home &>/dev/null
@@ -676,12 +718,17 @@ UnMountPartitions(){
 	if mountpoint /mnt/boot &>/dev/null
 	then
 		umount /mnt/boot &>/dev/null
+		rm -rf /mnt/boot &>/dev/null
 		if mountpoint /mnt/ &>/dev/null
 		then
 			umount /mnt/ &>/dev/null
 		fi
 	elif ! mountpoint /mnt/boot &>/dev/null
 	then
+		if [[ -d /mnt/boot ]]
+		then
+			rm -rf /mnt/boot &>/dev/null
+		fi
 		if mountpoint /mnt/ &>/dev/null
 		then
 			umount /mnt/ &>/dev/null
@@ -694,6 +741,7 @@ MountPartitions(){
 	local Partitions=${!PartitionsArgs}
 	unset PartitionsArgs
 
+	# enable swap first
 	for k in ${Partitions[@]}
 	do
 		local m_parttypename="$(lsblk "/dev/$k" -dlno parttypename)"
@@ -706,7 +754,10 @@ MountPartitions(){
 		unset m_parttypename partfsformat
 	done
 
-
+	# mount order.
+	# 1 - /mnt/
+	# 2 - /mnt/boot
+	# 3 - /mnt/home
 	while ( ( ! mountpoint /mnt/)  || ( [[ ! -e /mnt/boot ]] && [[ ! -d /mnt/boot ]] || ( ! mountpoint /mnt/boot) ) )
 	do
 		if ! mountpoint /mnt &>/dev/null
@@ -859,8 +910,14 @@ CheckEditMount(){
 						DisksWithoutPartitionsPresent m_Disks
 						local DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE=$?
 						case $? in
-							0) MountViewPartitions m_Disks ;;
-							1) CheckEditMount m_Disks $DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE ;;
+							0)
+								unset DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE
+								MountViewPartitions m_Disks
+								;;
+							1)
+								unset DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE
+								CheckEditMount m_Disks $DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE
+								;;
 						esac
 						;;
 				esac
@@ -875,8 +932,14 @@ CheckEditMount(){
 						DisksWithoutPartitionsPresent m_Disks
 						local DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE=$?
 						case $DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE in
-							0) MountViewPartitions m_Disks ;;
-							1) CheckEditMount m_Disks $DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE ;;
+							0)
+								unset DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE
+								MountViewPartitions m_Disks
+								;;
+							1)
+								unset DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE
+								CheckEditMount m_Disks $DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE
+								;;
 						esac
 						;;
 					3)
@@ -1011,6 +1074,7 @@ EditDisk(){
 
 	local diskeditors=()
 
+	# disk editor array for use in dialog
 	for i in "gdisk" "cgdisk" "fdisk" "sfdisk" "cfdisk" "parted"
 	do
 		which "$i" &>/dev/null
@@ -1033,6 +1097,7 @@ EditDisk(){
 					for i in "${m_Disks[@]}"
 					do
 						clear;reset
+						# center and bold text
 						printf "\E[1m\t\t\t\t\t\t\t\tEditing Disk '/dev/$i' with $DiskEditor\n\n\n\E[m"
 						"$DiskEditor" "/dev/$i"
 						local m_DiskPartCheck=()
@@ -1065,6 +1130,7 @@ WritePartitionTable(){
 			local m_Disks=("${!m_DisksArgs}")
 			unset m_DisksArgs
 
+			# write partition table
 			local diskhave=($(TempArrayWithAmpersandHasHaveTexts ${#m_Disks[@]}))
 			local m_DisksTemp=("${m_Disks[@]}")
 			m_DisksTemp=($(TempArrayWithAmpersand m_DisksTemp))
@@ -1081,6 +1147,7 @@ WritePartitionTable(){
 	esac
 }
 
+# maybe the wrong function name for the purpose it serves but this is where disks and the options to manipulate the disks are shown
 PartitionDisk(){
 
 	local DiskList=($(DiskListTemp | awk '{print $1}'))
@@ -1101,6 +1168,7 @@ PartitionDisk(){
 	done
 
 
+	# disk name in key value pair
 	local DiskModelString=""
 	for i in ${DiskList[@]}
 	do
@@ -1109,6 +1177,7 @@ PartitionDisk(){
 		DiskModelString=""
 	done
 
+	# disk info in key value pair
 	for i in ${DiskList[@]}
 	do
 		if [[ -z ${DiskPartTable[$i]} ]] && [[ -z ${DiskSize[$i]} ]] && [[ -z ${DiskName[$i]} ]]
@@ -1125,6 +1194,7 @@ PartitionDisk(){
 	Disks=($(dialog --scrollbar --cancel-label "Back" --column-separator "|" --checklist "Disk Selection Menu" 0 0 0 "${DiskListInfo[@]}" 3>&1 1>&2 2>&3))
 	DISKS_EXIT_CODE=$?
 
+	# check number of partitions and go to select disks or edit selected disks
 	if [[ ${#Disks[@]} -eq 1 ]]
 	then
 	    local DiskPartsCheck=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $1 }'))
@@ -1153,6 +1223,7 @@ PartitionDisk(){
 				local m_NoPartTableDisks=($(DisksWithoutPartitionTable Disks))
 				if [[ -n "${m_NoPartTableDisks[@]}" ]]
 				then
+					# set partition table if not set
 					local diskhave0000=($(TempArrayWithAmpersandHasHaveTexts ${#m_NoPartTableDisks[@]}))
 					if [[ "${m_NoPartTableDisks[@]}" == "${Disks[@]}" ]]
 					then
@@ -1202,6 +1273,7 @@ PartitionDisk(){
 					fi
 				fi
 
+				# check for empty disks and edit disks accordingly
 				dialog --extra-button --extra-label "Mount" --ok-label "Back" --cancel-label "Edit" --yesno "Select \"Edit\" for Editting and then mounting the partitions of this disk or select \"Mount\" to only select, format and mount existing Linux filesystem/EFI/swap partitions" 0 0
 				case $? in
 					0) PartitionDisk ;;
@@ -1211,14 +1283,16 @@ PartitionDisk(){
 						DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE=$?
 						case $DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE in
 							0) CheckEditMount Disks $DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE ;;
-							1) MountViewPartitions Disks ;;
+							1)
+								unset DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE
+								MountViewPartitions Disks
+								;;
 						esac
 						unset DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE
 						;;
 					3)
 						DisksWithoutPartitionsPresent Disks
-						DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE=$?
-						CheckEditMount Disks $DISKSWITHOUTPARTITIONSPRESENT_EXIT_CODE
+						CheckEditMount Disks $?
 						;;
 				esac
 			fi
@@ -1226,7 +1300,7 @@ PartitionDisk(){
 	esac
 }
 
-# View and mount all disks containing only linux install compatible partitions
+# View and mount all disk partitions containing only linux install compatible characteristics
 MountViewPartitions(){
 
 	# $1 - Disks
@@ -1250,6 +1324,7 @@ MountViewPartitions(){
 	local SelectedPartitions=()
 	local DiscardDisks=()
 
+	# check for partitions containing partition table or discard accordingly
 	if [[ -n "${NoPartDisks[@]}" ]]
 	then
 		local diskhave=($(TempArrayWithAmpersandHasHaveTexts ${#NoPartDisks}))
@@ -1266,6 +1341,7 @@ MountViewPartitions(){
 		unset NoPartDisksTemp diskhave NoPartDisks
 	fi
 
+	# loop to create an array of strings holding partition info
 	for (( a = 0; a < ${#Disks[@]}; a++))
 	do
 		local DiskPartName=($(DiskPartInfoTemp "${Disks[$i]}" | awk '{ print $1 }'))
@@ -1280,16 +1356,20 @@ MountViewPartitions(){
 
 		if [[ -z ${DiskPartSizeTemp[@]} ]] && [[ -z ${DiskPartFsTypeTemp[@]} ]] && [[ -z ${DiskPartName[@]} ]]
 	    then
+	    	# do not consider partitions not consisting any partition info
 	        continue
 	    elif [[ -n ${DiskPartSizeTemp[@]} ]] && [[ -n ${DiskPartFsTypeTemp[@]} ]] && [[ -n ${DiskPartName[@]} ]]
     	then
+			# array of partitions
 			DiskPartName=($(DiskPartInfoTemp "${Disks[$a]}" | awk '{ print $1 }'))
 
+			# Partition Size in key value pair
 			for i in ${DiskPartName[@]}
 			do
 				DiskPartSize["$i"]="$(lsblk /dev/"$i" -nlo size | sed 's/^\s*//g;s/G/ GB/g;s/M/ MB/g;s/T/ TB/')"
 			done
 
+			# Partition lable in key value pair
 			for i in ${DiskPartName[@]}
 			do
 				local m_label="$(lsblk /dev/"$i" -nlo partlabel | sed 's/^\s*//g')"
@@ -1302,12 +1382,14 @@ MountViewPartitions(){
 				fi
 			done
 
+			# Partition type in key value pair
 			for i in ${DiskPartName[@]}
 			do
 				DiskPartFsType["$i"]="$(lsblk /dev/"$i" -nlo parttypename | sed 's/^\s*//g')"
 			done
 
 
+			# Partition filesystem in key value pair
 			for i in ${DiskPartName[@]}
 			do
 				local m_fstype="$(lsblk /dev/"$i" -nlo fstype,fsver | sed 's/swap   1/swap/g;s/ext4   1.0/ext4/g;s/vfat   FAT32/FAT32/g')"
@@ -1322,6 +1404,7 @@ MountViewPartitions(){
 			done
 
 
+			# Partition information in key value pair
 			local DiskPartListInfo=()
 			for i in ${DiskPartName[@]}
 			do
@@ -1331,8 +1414,9 @@ MountViewPartitions(){
 				DiskPartListInfo+=(0)
 				unset partinfo
 			done
-			unset DiskPartName DiskPartFsTypeTemp DiskPartSize DiskPartLabel DiskPartFsType
+			unset DiskPartName DiskPartFsTypeTemp DiskPartSize DiskPartLabel DiskPartFsType # PartFs
 
+			# disk info to be shown in MountMenu
 			local m_DiskVendor="$(lsblk "/dev/${Disks[$a]}" -dnlo vendor | sed 's/\s*$//g')"
 			local m_DiskModel="$(lsblk "/dev/${Disks[$a]}" -dnlo model)"
 			local m_DiskSize="$(lsblk "/dev/${Disks[$a]}" -dnlo size | sed 's/G/ GB/g;s/M/ MB/g;s/T/ TB/')"
@@ -1344,6 +1428,8 @@ MountViewPartitions(){
 			partition=($(dialog --cancel-label "Back" --column-separator "|" --title "Partition Mount Menu" --extra-button --extra-label "Mount" --checklist "OK - Will discard upcoming disks saving selected partitions of current\n     and prior disks\nMount - Will show partitions of all selected available disks\n\nPartitions in /dev/${Disks[$a]} ($m_DiskNameString - $m_DiskSize)\n\ncheckbox items format:\nPartition---size--(partition type)-----(Filesystem)--(partition label)" 0 0 0 "${DiskPartListInfo[@]}" 3>&1 1>&2 2>&3))
 			PARTITION_EXIT_CODE=$?
 			unset m_DiskSize m_DiskNameString
+
+			# arrays to hold number of selected partitions based on partition type
 			for g in ${partition[@]}
 			do
 				local fstype="$(lsblk "/dev/$g" -nlo parttypename)"
@@ -1368,6 +1454,7 @@ MountViewPartitions(){
 
 			case $PARTITION_EXIT_CODE in
 				0)
+					# press ok to discard upcoming disks (excluding current dialog where disks have been selected)
 					if [[ -z "${partition[@]}" ]]
 					then
 						unset DisksSize
@@ -1384,6 +1471,7 @@ MountViewPartitions(){
 						fi
 					fi
 
+					# "discard", "edit" and "select partition" behaviour
 					if [[ ${#DiscardDisks[@]} -eq 1 ]] && [[ "${DiscardDisks[@]}" == "${Disks[@]}" ]]
 					then
 						dialog --msgbox "No Disk/Partiton selected for insallation. Please Select a Disk and few Partitions" 0 0
@@ -1418,6 +1506,7 @@ MountViewPartitions(){
 				1) PartitionDisk ;;
 
 				3)
+					# array of selected partitions and Disks to discard
 					if [[ -z "${partition[@]}" ]]
 					then
 						unset DisksSize
@@ -1450,6 +1539,7 @@ MountViewPartitions(){
 	Disks=($(DiscardFromArray Disks DiscardDisks))
 	unset DiscardDisks
 
+	# conditionals on what to do if the right number of and partitions are not selected
 	if [[ $total_parts -eq 0 ]]
 	then
 		local diskhave=($(TempArrayWithAmpersandHasHaveTexts ${#Disks[@]}))
@@ -1545,6 +1635,7 @@ MountViewPartitions(){
 
 ################################################## host configuration ######################################################
 
+# To install a desktop environment or a window manager
 Install_UI(){
 
 	# $1 - options in this function's menu
@@ -1568,8 +1659,9 @@ Install_UI(){
 			wmopts+=("i3" "")
 			wmopts+=("bspwm" "")
 			wmopts+=("awesome" "")
+			wmopts+=("xmonad" "")
+			wmopts+=("enlightenment" "")
 
-			deopts=()
 			deopts+=("KDE" "")
 			deopts+=("Gnome" "")
 			deopts+=("cinnamon" "")
@@ -1639,6 +1731,14 @@ Install_UI(){
 									ui_type="awesome"
 									pkgs="awesom{e,e-terminal-fonts} vicious powerline "
 									;;
+								"xmonad")
+									ui_type="xmonad"
+									pkgs="xmonad xmonad-{contrib,utils}"
+									;;
+								"enlightenment")
+									ui_type="enlightenment"
+									pkgs="enlightenment ef{l,l-docs}"
+									;;
 							esac
 							;;
 					esac
@@ -1646,9 +1746,12 @@ Install_UI(){
 			esac
 			dialog --msgbox "$ui_type packages that will be installed:\n$pkgs" 0 0
 
+			# when base is installed and script is running from live disk
 			if [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( mountpoint /mnt &>/dev/null ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot &>/dev/null )
 			then
 				pacstrap /mnt $pkgs
+
+			# when base is installed and script is running from installed device
 			elif ( ( ! mountpoint /mnt &>/dev/null ) || ( [[ ! -d /mnt/boot ]] && ( ! mountpoint /mnt/boot &>/dev/null ) ) ) && ( [[ ! -d /run/archiso/airootfs ]] && [[ ! -d /run/archiso/bootmnt ]] ) && ( ( mountpoint / &>/dev/null ) && ( mountpoint /boot &>/dev/null ) )
 			then
 				pacman -Syvd $pkgs
@@ -1701,6 +1804,7 @@ SetTz(){
 			case $? in
 				1) SetTz ;;
 				0)
+						# when base is installed and script is running from live disk
 						if [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( mountpoint /mnt &>/dev/null ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot &>/dev/null )
 						then
 							ln -sf $zone /mnt/etc/localtime &>/dev/null
@@ -1708,6 +1812,8 @@ SetTz(){
 							local HWCLOCK_EXIT_CODE=${PIPESTATUS[0]}
 							# hwclock -wv | GuageMeter "Setting Hardware Clock" 1
 							# HWCLOCK_EXIT_CODE=$?
+
+						# when base is installed and script is running from installed device
 						elif ( ( ! mountpoint /mnt &>/dev/null ) || ( [[ ! -d /mnt/boot ]] && ( ! mountpoint /mnt/boot &>/dev/null ) ) ) && ( [[ ! -d /run/archiso/airootfs ]] && [[ ! -d /run/archiso/bootmnt ]] ) && ( ( mountpoint / &>/dev/null ) && ( mountpoint /boot &>/dev/null ) )
 						then
 							ln -sf $zone /etc/localtime &>/dev/null
@@ -1729,8 +1835,11 @@ SetTz(){
 SetLocale(){
 
 	local LOCALE=()
+
+	# temporary file to store locale.gen info
 	cat "/etc/locale.gen" | grep -i '#[a-zA-Z0-9]' | sed 's/#//' > locales.txt
 
+	# locale selection checklist items
 	while read txt
 	do
 		LOCALE+=("$txt")
@@ -1745,23 +1854,27 @@ SetLocale(){
 			unset LOCALE
 			echo "${LocaleDialog[@]}" | sed 's/" "/"\n"/g;s/"//g' > locales.txt
 			local LocaleFormat
+
+			# when base is installed and script is running from live disk
 			if [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( mountpoint /mnt &>/dev/null ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot &>/dev/null )
 			then
 				while read txt
 				do
 					sed -i s/"#$txt"/"$txt"/g /mnt/etc/locale.gen
-				done < locales.txt
+				done < locales.txt # substituing texts in "locale.gen" with texts in "locales.txt"
 				rm -rfv locales.txt &>/dev/null
-				LocaleFormat="$(echo -e "\n\n${LocaleDialog[*]}\n" | sed 's/" "/"\n"/g')"
+				LocaleFormat="$(echo -e "\n\n${LocaleDialog[*]}\n" | sed 's/" "/"\n"/g')" # locales text for use in dialog
 				arch-chroot /mnt locale-gen | GuageMeter "Generating Locales" 1
+
+			# when base is installed and script is running from installed device
 			elif ( ( ! mountpoint /mnt &>/dev/null ) || ( [[ ! -d /mnt/boot ]] && ( ! mountpoint /mnt/boot &>/dev/null ) ) ) && ( [[ ! -d /run/archiso/airootfs ]] && [[ ! -d /run/archiso/bootmnt ]] ) && ( ( mountpoint / &>/dev/null ) && ( mountpoint /boot &>/dev/null ) )
 			then
 				while read txt
 				do
 					sed -i s/"#$txt"/"$txt"/g /etc/locale.gen
-				done < locales.txt
+				done < locales.txt # substituing texts in "locale.gen" with texts in "locales.txt"
 				rm -rfv locales.txt &>/dev/null
-				LocaleFormat=$(echo -e "\n\n${LocaleDialog[*]}\n" | sed 's/" "/"\n"/g')
+				LocaleFormat=$(echo -e "\n\n${LocaleDialog[*]}\n" | sed 's/" "/"\n"/g') # locales text for use in dialog
 				locale-gen | GuageMeter "Generating Locales" 1
 			fi
 			dialog --msgbox "Set Locales :$LocaleFormat" 0 0
@@ -1774,17 +1887,20 @@ SetLocale(){
 
 
 SetHostName(){
-	local hostname="$(dialog --inputbox "Set host name. Leave blank for default name \"arch\"" 0 0 3>&1 1>&2 2>&3)"
+	local hostname="$(dialog --inputbox "Set host name or eave blank to set default name \"arch\"" 0 0 3>&1 1>&2 2>&3)"
 
 	if [[ -z $hostname ]]
 	then
 		hostname="arch"
 	fi
 
+	# when base is installed and script is running from live disk
 	if [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( mountpoint /mnt &>/dev/null ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot &>/dev/null )
 	then
 		echo "$hostname" > "/mnt/etc/hostname"
 		echo -e "127.0.0.1\tlocalhost\n      ::1\tlocalhost" > "/mnt/etc/hostname"
+
+	# when base is installed and script is running from installed device
 	elif ( ( ! mountpoint /mnt &>/dev/null ) || ( [[ ! -d /mnt/boot ]] && ( ! mountpoint /mnt/boot &>/dev/null ) ) ) && ( [[ ! -d /run/archiso/airootfs ]] && [[ ! -d /run/archiso/bootmnt ]] ) && ( ( mountpoint / &>/dev/null ) && ( mountpoint /boot &>/dev/null ) )
 	then
 		echo "$hostname" > "/etc/hostname"
@@ -1798,6 +1914,10 @@ SetHostName(){
 }
 
 SetPassword(){
+
+	dialog --msgbox "you won't see the password characters as they are typed" 0 0
+
+	# password needs to be equal or greater than 8 characters
 
 	local username=$1
 
@@ -1826,10 +1946,14 @@ SetPassword(){
 					if [[ "$ConfirmPassword" == "$NewPassword" ]]
 					then
 						password=$NewPassword
+
+						# when base is installed and script is running from live disk
 						if [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( mountpoint /mnt &>/dev/null ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot &>/dev/null )
 						then
 							printf "$NewPassword\n$NewPassword" | arch-chroot /mnt passwd $username &>/dev/null
 							SETPASSWD_EXIT_CODE=${PIPESTATUS[1]}
+
+						# when base is installed and script is running from installed device
 						elif ( ( ! mountpoint /mnt &>/dev/null ) || ( [[ ! -d /mnt/boot ]] && ( ! mountpoint /mnt/boot &>/dev/null ) ) ) && ( [[ ! -d /run/archiso/airootfs ]] && [[ ! -d /run/archiso/bootmnt ]] ) && ( ( mountpoint / &>/dev/null ) && ( mountpoint /boot &>/dev/null ) )
 						then
 							printf "$NewPassword\n$NewPassword" | passwd $username &>/dev/null
@@ -1873,18 +1997,17 @@ add_users(){
 		0)
 			if [[ -z $username ]]
 			then
-				dialog --msgbox "username cannot be an empty string" 0 0
+				dialog --msgbox "username cannot be empty" 0 0
 				add_users
-			elif [[ -n $username ]]
-			then
-				dialog --msgbox "you won't see the password characters as they are typed" 0 0
-				SetPassword $username
 			fi
 
+			# when base is installed and script is running from live disk
 			if [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs ) && ( mountpoint /run/archiso/bootmnt ) && ( mountpoint /mnt ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot )
 			then
 				arch-chroot /mnt useradd -m $username -G users -g power,wheel,storage &>/dev/null
 				USERADD_EXIT_CODE=$?
+
+			# when base is installed and script is running from installed device
 			elif ( ( ! mountpoint /mnt ) || ( [[ ! -d /mnt/boot ]] && ( ! mountpoint /mnt/boot ) ) ) && ( [[ ! -d /run/archiso/airootfs ]] && [[ ! -d /run/archiso/bootmnt ]] ) && ( ( mountpoint / ) && ( mountpoint /boot ) )
 			then
 				useradd -m $username -G users -g power,wheel,storage &>/dev/null
@@ -1908,6 +2031,7 @@ add_users(){
 }
 
 BashPromptPreview(){
+	# drops to a subshell using the set rc file
 	clear
 	bash_prompt="$1"
 	curdir="$PWD"
@@ -1919,9 +2043,12 @@ SetPrompt(){
 	bashrc_file="$1"
 	local folder_path=""
 
+	# when base is installed and script is running from live disk
 	if [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( mountpoint /mnt &>/dev/null ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot &>/dev/null )
 	then
 		folder_path="/mnt/home"
+
+	# when base is installed and script is running from installed device
 	elif ( ( ! mountpoint /mnt &>/dev/null ) || ( [[ ! -d /mnt/boot ]] && ( ! mountpoint /mnt/boot &>/dev/null ) ) ) && ( [[ ! -d /run/archiso/airootfs ]] && [[ ! -d /run/archiso/bootmnt ]] ) && ( ( mountpoint / &>/dev/null ) && ( mountpoint /boot &>/dev/null ) )
 	then
 		folder_path="/home"
@@ -1929,10 +2056,14 @@ SetPrompt(){
 
 
 	local Users=($(grep [1-9][0-9][0-9][0-9] /mnt/etc/passwd | grep -iv nobody | sed 's/\:/ \: /g' | awk '{print $1}'))
+
+	# set bashrc file for only one existing user
 	if [[ ${#Users[@]} -eq 1 ]]
 	then
 		cp shell\ rc/bash/"$1" "$folder_path/${Users[0]}/.bashrc" &>/dev/null
 		dialog --msgbox "set $1 as the bash prompt for user ${Users[0]}" 0 0
+
+	# set bashrc file to selected users
 	elif [[ ${#Users[@]} -gt 1 ]]
 	then
 		dialog --yes-label "OK" --no-label "Skip" --yesno "set  for all users, one user or selected user?" 0 0
@@ -2056,9 +2187,12 @@ RemoveUsers(){
 		dialog --yesno "${usersTemp[0]} is the only available user. Delete regardless?" 0 0
 		case $? in
 			0)
+				# when base is installed and script is running from live disk
 				if [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( mountpoint /mnt &>/dev/null ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot &>/dev/null )
 				then
 					arch-chroot userdel -rf ${DeleteUsers[0]} &>/dev/null
+
+				# when base is installed and script is running from installed device
 				elif ( ( ! mountpoint /mnt &>/dev/null ) || ( [[ ! -d /mnt/boot ]] && ( ! mountpoint /mnt/boot &>/dev/null ) ) ) && ( [[ ! -d /run/archiso/airootfs ]] && [[ ! -d /run/archiso/bootmnt ]] ) && ( ( mountpoint / &>/dev/null ) && ( mountpoint /boot &>/dev/null ) )
 				then
 					userdel -rf ${DeleteUsers[0]} &>/dev/null
@@ -2084,12 +2218,15 @@ RemoveUsers(){
 			DeleteUsersTempText=($(TempArrayWithAmpersand DeleteUsersTempText))
 		fi
 
+		# when base is installed and script is running from live disk
 		if [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( mountpoint /mnt &>/dev/null ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot &>/dev/null )
 		then
 			for n in ${DeleteUsers[@]}
 			do
 				arch-chroot userdel -rf $n &>/dev/null
 			done
+
+		# when base is installed and script is running from installed device
 		elif ( ( ! mountpoint /mnt &>/dev/null ) || ( [[ ! -d /mnt/boot ]] && ( ! mountpoint /mnt/boot &>/dev/null ) ) ) && ( [[ ! -d /run/archiso/airootfs ]] && [[ ! -d /run/archiso/bootmnt ]] ) && ( ( mountpoint / &>/dev/null ) && ( mountpoint /boot &>/dev/null ) )
 		then
 			for n in ${DeleteUsers[@]}
@@ -2107,14 +2244,14 @@ SetRootPassword(){
 	RootPassword=$(dialog --no-cancel --passwordbox "Enter root password. If no root password is provided then root password will be set to '0n3 Punch M@n'" 0 0 3>&1 1>&2 2>&3)
 	if [[ -z $RootPassword ]]
 	then
+		# when base is installed and script is running from live disk
 		if [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( mountpoint /mnt &>/dev/null ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot &>/dev/null )
 		then
 			printf "0n3 Punch M@n\n0n3 Punch M@n" | arch-chroot /mnt passwd &>/dev/null
+
+		# when base is installed and script is running from installed device
 		elif ( ( ! mountpoint /mnt &>/dev/null ) || ( [[ ! -d /mnt/boot ]] && ( ! mountpoint /mnt/boot &>/dev/null ) ) ) && ( [[ ! -d /run/archiso/airootfs ]] && [[ ! -d /run/archiso/bootmnt ]] ) && ( ( mountpoint / &>/dev/null ) && ( mountpoint /boot &>/dev/null ) )
 		then
-			##############################
-			# check if a password is set #
-			##############################
 			printf "0n3 Punch M@n\n0n3 Punch M@n" | passwd &>/dev/null
 		fi
 		dialog --msgbox "default root password '0n3 Punch M@n' is set " 0 0
@@ -2128,10 +2265,13 @@ SetRootPassword(){
 			SetRootPassword
 		elif [[ "$RootPassword" == "$ConfirmPassword" ]]
 		then
+			# when base is installed and script is running from live disk
 			if [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( mountpoint /mnt &>/dev/null ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot &>/dev/null )
 			then
 				printf "$RootPassword\n$RootPassword" | arch-chroot /mnt passwd &>/dev/null
 				SETROOTPASSWORD_EXIT_CODE=${PIPESTATUS[1]}
+
+			# when base is installed and script is running from installed device
 			elif ( ( ! mountpoint /mnt &>/dev/null ) || ( [[ ! -d /mnt/boot ]] && ( ! mountpoint /mnt/boot &>/dev/null ) ) ) && ( [[ ! -d /run/archiso/airootfs ]] && [[ ! -d /run/archiso/bootmnt ]] ) && ( ( mountpoint / &>/dev/null ) && ( mountpoint /boot &>/dev/null ) )
 			then
 				printf "$RootPassword\n$RootPassword" | passwd &>/dev/null
@@ -2154,14 +2294,18 @@ ConfHost(){
 
 	local usersTemp=""
 
+	# when base is installed and script is running from live disk
 	if ( ( ! mountpoint /mnt &>/dev/null ) || ( [[ ! -d /mnt/boot ]] && ( ! mountpoint /mnt/boot &>/dev/null ) ) ) && ( [[ ! -d /run/archiso/airootfs ]] && [[ ! -d /run/archiso/bootmnt ]] ) && ( ( mountpoint / &>/dev/null ) && ( mountpoint /boot &>/dev/null ) )
 	then
 		usersTemp=($(cat /etc/passwd | sed 's/:/ : /g' | grep -iG '[1-9][0-9][0-9][0-9]\d*' | grep -iv nobody | awk '{ print $1 }'))
+
+	# when base is installed and script is running from installed device
 	elif [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( mountpoint /mnt &>/dev/null ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot &>/dev/null )
 	then
 		usersTemp=($(cat /mnt/etc/passwd | sed 's/:/ : /g' | grep -iG '[1-9][0-9][0-9][0-9]\d*' | grep -iv nobody | awk '{ print $1 }'))
 	fi
 
+	# host config options for use in dialog
 	local HostOpt=("set hostname *" "set your computer name")
 	HostOpt+=("set Locale *" "set your computer language")
 	HostOpt+=("set timezone" "configure which timezone you are in")
@@ -2223,23 +2367,32 @@ ConfHost(){
 
 InstallArch(){
 
-	if ! mountpoint /mnt &>/dev/null
+	# check if linux partition is mounted
+	# if ! mountpoint /mnt &>/dev/null
+	if ( [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( ! mountpoint /mnt &>/dev/null ) && [[ ! -d /mnt/boot ]] && ( ! mountpoint /mnt/boot &>/dev/null ) )
 	then
 		dialog --msgbox "root partition not mounted" 0 0
 		MainMenu "Install Arch *"
-	elif mountpoint /mnt &>/dev/null
+
+	elif ( [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( mountpoint /mnt &>/dev/null ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot &>/dev/null ) )
 	then
 		local packages=()
+
+		# variable holding regex form of packages
 		packages_temp=(base base-devel linu{x,x-{docs,headers}} grub efi{var,bootmgr} dkms broadcom-wl-dkms xf86-input-{libinput,synaptics} xf86-video-fbdev vim sudo)
+
+		# expanding the regex package variable for display in dialog
 		for i in "${packages_temp[@]}"
 		do
 			packages+=("$i")
 		done
 		unset packages_temp
 
+		# installing system
 		pacstrap /mnt "${packages[@]}"
 		case $? in
 			0)
+				# installing grub 
 				dialog --msgbox "Installed Arch Base system successfully" 0 0
 				local bootloaderid
 				bootloaderid="$(dialog --inputbox "Bootloader ID - Input Any Text. Leave Blank for default ID" 0 0 3>&1 1>&2 2>&3)"
@@ -2271,10 +2424,14 @@ InstallArch(){
 
 				local bootdisktype=$(lsblk "/dev/$mountptdev" -dnlo tran,rm)
 				local GRUB_INSTALL_EXIT_CODE
+
+				# check if grub install device is removable usb
 				if [[ $bootdisktype == "usb 1" ]]
 				then
 					grub-install -v --boot-directory="/mnt/boot" --bootloader-id "$bootloaderid" --efi-directory="/mnt/boot" --recheck --removable --target x86_efi-efi | GuageMeter "Installing Grub to USB drive $mountptdev" 1
 					GRUB_INSTALL_EXIT_CODE=$?
+
+				# check if grub install device is internal drive
 				elif [[ $bootdisktype == "sata 0" ]] || [[ $bootdisktype == "ata 0" ]]
 				then
 					grub-install -v --boot-directory="/mnt/boot" --bootloader-id "$bootloaderid" --efi-directory="/mnt/boot" --recheck --target x86_efi-efi | GuageMeter "Installing Grub to internal disk" 1
@@ -2282,6 +2439,7 @@ InstallArch(){
 				fi
 				unset bootdisktype mountptdev
 
+				# create an fstab
 				case $GRUB_INSTALL_EXIT_CODE in
 					0)
 						dialog --msgbox "Installed Grub successfully" 0 0
@@ -2312,10 +2470,10 @@ InstallArch(){
 				then
 					genfstab -U "/mnt" > "/mnt/etc/fstab"
 					case $? in
-						0) dialog --msgbox "Failed to install Arch Base system but created fstab entry. Exiting the Installer" 0 0 ;;
+						0) dialog --msgbox "Failed to install Arch Base system but created fstab entry. You can try creating the fstab manuall by executing \"genfstab /mnt/etc/fstab\"Exiting the Installer" 0 0 ;;
 						*) dialog --msgbox "Failed to install Arch Base system. Exiting the Installer" 0 0 ;;
 					esac
-				elif [[ ! -f "/mnt/etc/fstab" ]] || [[ ! -d "/mnt/etc/" ]]
+				elif ( [[ ! -d /mnt ]] || ( ! mountpoint /mnt ) ) || ( [[ ! -f "/mnt/etc/fstab" ]] && [[ ! -d "/mnt/etc/" ]] )
 				then
 					dialog --msgbox "Failed to install Arch Base system. Exiting the Installer" 0 0
 				fi
@@ -2323,8 +2481,10 @@ InstallArch(){
 				;;
 		esac
 
+		# variable to hold cpu info
 		cpu_vendor=$(cat /proc/cpuinfo | grep vendor | uniq | awk '{print $3}')
 
+		# create variables holding regex packages, expand them for dispalying in dialog
 		local intel_gpu=()
 		local intel_gpu_temp=(libva-intel-driver lib32-{libva-intel-driver,vulkan-intel} vulkan-intel intel-graphics-compiler)
 		for i in ${intel_gpu_temp[@]}
@@ -2334,6 +2494,7 @@ InstallArch(){
 		unset intel_gpu_temp
 
 
+		# create variables holding regex packages, expand them for dispalying in dialog
 		local nvidia_gpu=()
 		local nvidia_gpu_temp=(ffnvcodec-headers libvdpau opencl-nvidia xf86-video-nouveau lib32-{libvdpau,nvidia-utils,opencl-nvidia} nvidia-{dkms,lts,prime,settings,utils})
 		for i in ${nvidia_gpu_temp[@]}
@@ -2343,6 +2504,7 @@ InstallArch(){
 		unset nvidia_gpu_temp
 
 
+		# array of packages based on the cpu
 		packages=()
 		if [[ $cpu_vendor == "AuthenticAMD" ]]
 		then
@@ -2362,6 +2524,7 @@ InstallArch(){
 			packages+=("${intel_gpu[@]}")
 		fi
 
+		# terminal text editors array for use in dialog
 		local terminaleditorslist=()
 		terminaleditorslist=("vim" "vim" off)
 		terminaleditorslist+=("neovim" "neovim" off)
@@ -2406,17 +2569,25 @@ InstallArch(){
 }
 
 Repo_Enable(){
+	# line number where multilib is commented
 	local multilib_linenum=$(grep -ni "multilib\]" /etc/pacman.conf | sed 's/:/ /g' | awk '{ print $1 }')
+
+	# increment multilib line number to uncomment the "Include" line 
 	local multilib_include_linenum=$((multilib_linenum+1))
+
+	# line number where Include is commented
 	local multilib_line=$(grep -ni "multilib\]" /etc/pacman.conf | sed 's/:/ /g' | awk '{ print $2 }')
+
+	# line where Include is commented
 	local multilib_include_line=$(cat -n /etc/pacman.conf | grep -i "$multilib_include_linenum" | sed 's/^\s*[0-9]*//g;s/^\s*Include.*/Include/g')
 
+	# compare the values holding the text in the "include line number" and the "multilib line number"
 	if [[ "$multilib_include_line" != "Inlclude*" ]] && [[ "$multilib_line" != "[multilib]" ]]
 	then
-		read -p "continue"
 		dialog --yesno "enable \"multilib\" repo for packages with support for multiple architectures?" 5 80
 		case $? in
 			0)
+				# uncomment the multilib lines and it's dependednt lines
 				local linenumber=$(grep -ni "\[multilib\]" /etc/pacman.conf | sed 's/:/ /g' | awk '{ print $1 }')
 				sed -i "${linenumber}s/\#\[multilib/\[multilib/g" /etc/pacman.conf
 				linenumber=$((linenumber+1))
@@ -2459,13 +2630,12 @@ MainMenu(){
 	esac
 
 
-
 	local menuopt=()
 	local menuitem
 	local MenuItemText
 	local MenuItemTitle
 	# installed base but on live || not installed base but on live
-	if ( ( [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( mountpoint /mnt &>/dev/null ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot &>/dev/null ) ) || ( [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( ! mountpoint /mnt &>/dev/null ) && [[ ! -d /mnt/boot ]] ) )
+	if ( [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( mountpoint /mnt &>/dev/null ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot &>/dev/null ) ) || ( [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( ! mountpoint /mnt &>/dev/null ) && [[ ! -d /mnt/boot ]] )
 	then
 		MenuItemTitle="Install Menu"
 		MenuItemText="To install arch all options followed by\n  i) '**' are priority 1\n ii) '*'are priority 2\niii) '+'are priority 3\n\nThe rest are optional"
@@ -2484,7 +2654,7 @@ MainMenu(){
 	menuopt+=("Reboot" "Reboot the machine")
 
 	menuitem=$(dialog --no-mouse --default-item "${1}" --cancel-label "Exit" --title "$MenuItemTitle" --menu "$MenuItemText" 0 0 0 "${menuopt[@]}" 3>&1 1>&2 2>&3)
-
+# installed & running base
 	case $? in
 		0)
 			case $menuitem in
@@ -2504,9 +2674,12 @@ MainMenu(){
 					;;
 
 				"Configure Host +"|"Configure Host")
+					# installed base but on live || not installed base but on live
 					if ( [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( mountpoint /mnt &>/dev/null ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot &>/dev/null ) ) || ( ( mountpoint / &>/dev/null ) && ( mountpoint /boot &>/dev/null ) )
 					then
 						ConfHost "set hostname *"
+
+					# running live not installed system
 					elif [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs ) && ( mountpoint /run/archiso/bootmnt ) && ( ! mountpoint /mnt ) && [[ ! -d /mnt/boot ]]
 					then
 						dialog --msgbox "Cannot configure host without a Linux System installed" 0 0
