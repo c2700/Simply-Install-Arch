@@ -2679,8 +2679,14 @@ MainMenu(){
 					;;
 
 				"Install Arch *")
-					Repo_Enable
-					InstallArch
+					if ( [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( mountpoint /mnt &>/dev/null ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot &>/dev/null ) )
+					then
+						Repo_Enable
+						InstallArch
+					elif ( [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) ) && ( ( ! mountpoint /mnt ) || ( [[ ! -d /mnt/boot ]] && ( ! mountpoint /mnt/boot ) ) )
+					then
+						dialog --msgbox "root partition not configured" 0 0
+					fi
 					MainMenu "Install Arch *"
 					;;
 
