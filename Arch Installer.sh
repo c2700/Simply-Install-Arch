@@ -2614,7 +2614,8 @@ MainMenu(){
 	DIALOG_CHECK_EXIT_CODE=$?
 	if [[ $uid -ne 0 ]] && [[ $DIALOG_CHECK_EXIT_CODE -eq 0 ]]
 	then
-		dialog --msgbox "please run this script as root to configure" 0 0
+		dialog --msgbox "please run this script as root to configure this system" 0 0
+		exit
 	elif [[ $uid -ne 0 ]] && [[ $DIALOG_CHECK_EXIT_CODE -eq 0 ]]
 	then
 		echo "\E[1m\t\t\t\t\t\t\t\tplease run this script as root to configure\E[m"
