@@ -758,7 +758,7 @@ MountPartitions(){
 	# 1 - /mnt/
 	# 2 - /mnt/boot
 	# 3 - /mnt/home
-	while ( ( ! mountpoint /mnt/)  || ( [[ ! -e /mnt/boot ]] && [[ ! -d /mnt/boot ]] || ( ! mountpoint /mnt/boot) ) )
+	while ( ( ! mountpoint /mnt/) || ( [[ ! -e /mnt/boot ]] && [[ ! -d /mnt/boot ]] || ( ! mountpoint /mnt/boot) ) )
 	do
 		if ! mountpoint /mnt &>/dev/null
 		then
@@ -800,7 +800,7 @@ MountPartitions(){
 					local m_parttypename="$(lsblk "/dev/$k" -dlno parttypename)"
 					local partfsformat="$(lsblk "/dev/$k" -dlno fstype,fsver | awk '{ print $1" "$2 }' | sed 's/vfat FAT32/FAT32/g;s/ext4 1.0/ext4/g;s/swap 1/swap/g')"
 					local partfsformat2="$(lsblk "/dev/$k" -dlno fstype,fsver | awk '{ print $1" "$2 }')"
-					if ([[ "$m_parttypename" == "EFI System" ]] || [[ "$m_parttypename" == "EFI (FAT-12/16/32)" ]]) && [[ "$partfsformat" == "FAT32" ]] || [[ "$partfsformat2" == "vfat FAT32" ]]
+					if ( [[ "$m_parttypename" == "EFI System" ]] || [[ "$m_parttypename" == "EFI (FAT-12/16/32)" ]] ) && [[ "$partfsformat" == "FAT32" ]] || [[ "$partfsformat2" == "vfat FAT32" ]]
 					then
 						mount "/dev/$k" "/mnt/boot/"
 					fi
@@ -816,14 +816,14 @@ MountPartitions(){
 					local m_parttypename="$(lsblk "/dev/$k" -dlno parttypename)"
 					if [[ "$m_parttypename" == "Linux home" ]]
 					then
-						if [[ -d  "/mnt/home/" ]]
+						if [[ -d "/mnt/home/" ]]
 						then
 							if ! mountpoint "/mnt/home/" &>/dev/null
 							then
 								mount "/dev/$k" /mnt/home/
 								homepart="$k"
 							fi
-						elif [[ ! -d  "/mnt/home/" ]]
+						elif [[ ! -d "/mnt/home/" ]]
 						then
 							mkdir "/mnt/home/"
 							mount "/dev/$k" /mnt/home/
@@ -836,6 +836,7 @@ MountPartitions(){
 			fi
 		fi
 	done
+
 	unset Partitions homepart
 }
 
@@ -1393,7 +1394,7 @@ MountViewPartitions(){
 			for i in ${DiskPartName[@]}
 			do
 				local m_fstype="$(lsblk /dev/"$i" -nlo fstype,fsver | sed 's/swap   1/swap/g;s/ext4   1.0/ext4/g;s/vfat   FAT32/FAT32/g')"
-				if  [[ -z $m_fstype ]] || [[ $m_fstype =~ " " ]]
+				if [[ -z $m_fstype ]] || [[ $m_fstype =~ " " ]]
 				then
 					PartFs["$i"]="(Will Be formatted)"
 				elif [[ -n $m_fstype ]] && [[ ! $m_fstype =~ " " ]]
@@ -1433,19 +1434,19 @@ MountViewPartitions(){
 			for g in ${partition[@]}
 			do
 				local fstype="$(lsblk "/dev/$g" -nlo parttypename)"
-				if [[ "$fstype" ==  "EFI System" || "$fstype" == "EFI (FAT-12/16/32)" ]]
+				if [[ "$fstype" == "EFI System" || "$fstype" == "EFI (FAT-12/16/32)" ]]
 				then
 					efi_parts+=("$g")
-				elif [[ "$fstype" ==  "Linux filesystem" || "$fstype" == "Linux" ]]
+				elif [[ "$fstype" == "Linux filesystem" || "$fstype" == "Linux" ]]
 				then
 					linux_fs_parts+=("$g")
-				elif [[ "$fstype" ==  "Linux swap" ]]
+				elif [[ "$fstype" == "Linux swap" ]]
 				then
 					linux_swap_parts+=("$g")
-				elif [[ "$fstype" ==  "Linux home" ]]
+				elif [[ "$fstype" == "Linux home" ]]
 				then
 					linux_home_parts+=("$g")
-				elif [[ "$fstype" ==  "Linux user's home" ]]
+				elif [[ "$fstype" == "Linux user's home" ]]
 				then
 					linux_user_home_parts+=("$g")
 				fi
@@ -1713,7 +1714,7 @@ Install_UI(){
 					;;
 				"Window Manager")
 					local WM
-					WM=$(dialog --no-tags --cancel-label "BACK" --menu "Window Manager Menu" 0 0 0 "${wmopts[@]}"  3>&1 1>&2 2>&3)
+					WM=$(dialog --no-tags --cancel-label "BACK" --menu "Window Manager Menu" 0 0 0 "${wmopts[@]}" 3>&1 1>&2 2>&3)
 
 					case $? in
 						1) Install_UI "Window Manager" ;;
@@ -2659,6 +2660,7 @@ MainMenu(){
 	elif ( ( ! mountpoint /mnt ) || ( [[ ! -d /mnt/boot ]] && ( ! mountpoint /mnt/boot ) ) ) && ( [[ ! -d /run/archiso/airootfs ]] && [[ ! -d /run/archiso/bootmnt ]] ) && ( ( mountpoint / ) && ( mountpoint /boot ) )
 	then
 		MenuItemTitle="Host Configuration Menu"
+		menuopt=("Partition Disk **" "format/Partition/select Hard Disks and mount partitions")
 		menuopt+=("Configure Network" "Check connectivity and connect to a network")
 		menuopt+=("Configure Host" "Personalize the machine by setting Hostname, adding users etc.")
 		MenuItemText=""
