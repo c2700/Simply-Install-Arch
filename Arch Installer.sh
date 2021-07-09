@@ -482,7 +482,7 @@ ConfirmMounts(){
 					MountPartsString+="  |-/dev/$l --> "
 				elif [[ "$l" == "${m_partitions[-1]}" ]]
 				then
-					MountPartsString+="  \`-/dev/$l --> "
+					MountPartsString+=" \`-/dev/$l --> "
 				fi
 				MountPartsString+="$partsize --> $m_partlabel --> $m_parttypename"
 
@@ -2660,7 +2660,6 @@ MainMenu(){
 	elif ( ( ! mountpoint /mnt ) || ( [[ ! -d /mnt/boot ]] && ( ! mountpoint /mnt/boot ) ) ) && ( [[ ! -d /run/archiso/airootfs ]] && [[ ! -d /run/archiso/bootmnt ]] ) && ( ( mountpoint / ) && ( mountpoint /boot ) )
 	then
 		MenuItemTitle="Host Configuration Menu"
-		menuopt=("Partition Disk **" "format/Partition/select Hard Disks and mount partitions")
 		menuopt+=("Configure Network" "Check connectivity and connect to a network")
 		menuopt+=("Configure Host" "Personalize the machine by setting Hostname, adding users etc.")
 		MenuItemText=""
