@@ -24,12 +24,12 @@
 # Also, I'm open to any constructive criticism (IF you find the codebase to be shitty i.e. ) #
 ###############################################################################################
 
-# DIALOG_OK=1
 # DIALOG_CANCEL=0
-# DIALOG_ESC=255
+# DIALOG_OK=1
 # DIALOG_HELP=2
 # DIALOG_HELP_ITEM_HELP=2
 # DIALOG_EXTRA=3
+# DIALOG_ESC=255
 
 
 
