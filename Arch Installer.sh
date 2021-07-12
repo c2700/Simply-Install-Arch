@@ -312,8 +312,10 @@ ConfirmMounts(){
 			linuxfs_list+=("ext3" "ext3")
 			linuxfs_list+=("ext2" "ext2")
 			linuxfs_list+=("btrfs" "btrfs")
+			linuxfs_list+=("bfs" "bfs")
 			linuxfs_list+=("xfs" "xfs")
 			linuxfs_list+=("zfs" "zfs")
+			linuxfs_list+=("jfs" "jfs")
 			local linuxfschange=""
 			linuxfschange=$(dialog --no-tags --menu "Select filesystem to use as linux filesystem" 0 0 0 "${linuxfs_list[@]}" 3>&1 1>&2 2>&3)
 			case $? in
@@ -327,14 +329,10 @@ ConfirmMounts(){
 						dialog --msgbox "Using $linuxfs filesystem" 0 0
 					fi
 					;;
-				1)
-					dialog --msgbox "Using default ext4 linux filesystem" 0 0
-					;;
+				1) dialog --msgbox "Using default ext4 linux filesystem" 0 0 ;;
 			esac
 			;;
-		1)
-			dialog --msgbox "Using default ext4 linux filesystem" 0 0
-			;;
+		1) dialog --msgbox "Using default ext4 linux filesystem" 0 0 ;;
 	esac
 	unset linuxfs_list
 
@@ -462,7 +460,6 @@ ConfirmMounts(){
 					Format_Disks+=("${m_partitions[0]}")
 				fi
 			fi
-			MountPartsString+="\n"
 			MountParts+=("$MountPartsString")
 			unset MountPartsString m_MountPoint
 
@@ -482,7 +479,7 @@ ConfirmMounts(){
 					MountPartsString+="  |-/dev/$l --> "
 				elif [[ "$l" == "${m_partitions[-1]}" ]]
 				then
-					MountPartsString+=" \`-/dev/$l --> "
+					MountPartsString+="  \`-/dev/$l --> "
 				fi
 				MountPartsString+="$partsize --> $m_partlabel --> $m_parttypename"
 
@@ -585,7 +582,7 @@ ConfirmMounts(){
 	# dialog to format and mount all disks
 	if [[ -z ${Reformat_Disks[@]} ]] && ([[ "${Format_Disks[@]}" == "${m_MountPartitionsTextsTemp[@]}" ]] || [[ ${#Format_Disks[@]} -eq ${#m_MountPartitionsTextsTemp[@]} ]])
 	then
-		dialog --scrollbar --yes-label "Back" --no-label "Format & Mount" --title "partition mount confirmation" --yesno "1) +Format - Will format the partition with specified filesystem format. Reformatting will\n             not apply here.\n2) *Format - If the \"Re-Format\" is selected it will reformat the partition using existing filesystem\n             format wiping the partition.\n\nFormat:\n  Disk\n  \`-  Partition --> Size --> Partition Label --> Filesystem --> (+|*)Format --> MountPoint\n${MountPartsString[*]}\n\n" 20 110
+		dialog --scrollbar --yes-label "Back" --no-label "Format & Mount" --title "partition mount confirmation" --yesno "1) +Format - Will format the partition with specified filesystem format. Reformatting will\n             not apply here.\n2) *Format - If the \"Re-Format\" is selected it will reformat the partition using existing filesystem\n             format wiping the partition.\nFormat:\n  Disk\n  \`-  Partition --> Size --> Partition Label --> Filesystem --> (+|*)Format --> MountPoint\n${MountPartsString[*]}\n\n" 20 110
 		case $? in
 			0) PartitionDisk ;;
 			1)
@@ -679,10 +676,10 @@ FormatPartition(){
 		"EFI System"|"EFI (FAT-12/16/32)")
 			if [[ -z $m_existingfs ]] || [[ "$m_existingfs" == "" ]] || [[ "$m_existingfs" =~ " " ]]
 			then
-				mkfs.fat -F32 "/dev/$Partition" &>/dev/null | GuageMeter "Formatting partition /dev/$Partition with $fsformat" 1
+				mkfs.fat -F32 "/dev/$Partition" &>/dev/null | GuageMeter "Formatting partition /dev/$Partition with FAT32" 1
 			elif [[ -n $m_existingfs ]] || [[ "$m_existingfs" != "" ]] || [[ ! "$m_existingfs" =~ " " ]]
 			then
-				printf "y\n" | mkfs.fat -F32 "/dev/$Partition" &>/dev/null | GuageMeter "Reformatting partition /dev/$Partition with $fsformat" 1
+				printf "y\n" | mkfs.fat -F32 "/dev/$Partition" &>/dev/null | GuageMeter "Reformatting partition /dev/$Partition with FAT32" 1
 			fi
 			;;
 		"Linux swap")
@@ -739,105 +736,238 @@ UnMountPartitions(){
 MountPartitions(){
 	local PartitionsArgs=$1[@]
 	local Partitions=${!PartitionsArgs}
+	local mounted=()
+	local fail_drive=()
+	local mountfails=()
 	unset PartitionsArgs
 
-	# enable swap first
-	for k in ${Partitions[@]}
-	do
-		local m_parttypename="$(lsblk "/dev/$k" -dlno parttypename)"
-		local partfsformat="$(lsblk "/dev/$k" -dlno fstype,fsver | awk '{ print $1" "$2 }' | sed 's/vfat FAT32/FAT32/g;s/ext4 1.0/ext4/g;s/swap 1/swap/g')"
-
-		if [[ "$m_parttypename" == "Linux swap" ]] || [[ "$partfsformat" == "swap" ]]
-		then
-			swapon "/dev/$k"
-		fi
-		unset m_parttypename partfsformat
-	done
-
-	# mount order.
+	# mount order
 	# 1 - /mnt/
 	# 2 - /mnt/boot
 	# 3 - /mnt/home
-	while ( ( ! mountpoint /mnt/) || ( [[ ! -e /mnt/boot ]] && [[ ! -d /mnt/boot ]] || ( ! mountpoint /mnt/boot) ) )
+
+	# exec  1> >(tee -ia bash.log)
+	# exec  2> >(tee -ia bash.log >& 2)
+	# exec {FD}> bash.log
+	# exec  2> >(tee -ia trace.txt)
+
+	while ( ! mountpoint /mnt &>/dev/null ) || ( [[ ! -d /mnt/boot ]] || ( ! mountpoint /mnt/boot &>/dev/null ) )
 	do
-		if ! mountpoint /mnt &>/dev/null
+		if ( ! mountpoint /mnt &>/dev/null )
 		then
 			for k in ${Partitions[@]}
 			do
-				local m_parttypename="$(lsblk "/dev/$k" -dlno parttypename)"
-				local partfsformat="$(lsblk "/dev/$k" -dlno fstype,fsver | awk '{ print $1" "$2 }' | sed 's/vfat FAT32/FAT32/g;s/ext4 1.0/ext4/g;s/swap 1/swap/g')"
-				if [[ "$m_parttypename" == "Linux filesystem" ]] || [[ "$m_parttypename" == "Linux" ]]
+				local partfsformat="$(lsblk "/dev/$k" -dlno fstype,fsver | awk '{ print $1" "$2 }' | sed 's/vfat FAT32/FAT32/g;s/ 1.0//g;s/swap 1/swap/g')"
+				local partfsformat2="$(lsblk "/dev/$k" -dlno fstype,fsver | awk '{ print $1" "$2 }')"
+				local m_parttypenametemp="$(lsblk /dev/$k -nlo parttypename | grep -ie 'linux filesystem\|swap\|linux.*home' | sed -E 's/\s{13}/  /g')"
+				local m_sizetemp="$(lsblk /dev/$k -nlo size | sed 's/^\s*//g')"
+				local m_partlabeltemp="$(lsblk /dev/$k -nlo partlabel | sed -E 's/\s{13}/  /g')"
+
+				if [[ -z $m_partlabeltemp ]] || [[ "$m_partlabeltemp" == "" ]] || [[ "$m_partlabeltemp" =~ " " ]]
+				then
+					m_partlabeltemp="No Label"
+				fi
+
+				if [[ "$m_parttypenametemp" == "Linux filesystem" ]] || [[ "$m_parttypenametemp" == "Linux" ]]
 				then
 					case $partfsformat in
-						"ext2"|"ext3"|"ext4"|"btrffs"|"xfs"|"zfs") mount "/dev/$k" /mnt/ ;;
+						"ext4"|"ext3"|"ext2"|"xfs"|"zfs"|"bfs"|"btrfs"|"jfs")
+							mount /dev/$k /mnt
+							case $? in
+								0) 
+									if [[ ! -d /mnt/boot ]]
+									then
+										mkdir /mnt/boot
+									fi
+									fail_drive+=("$k")
+									mounted+=("/dev/$k --> $m_sizetemp --> $partfsformat - $m_parttypenametemp ($m_partlabeltemp) --> $(lsblk /dev/$k -nlo mountpoint )\n")
+									read -n1 -p "/mnt mount"
+									break
+									;;
+								1)  
+									mountfails+=("/dev/$k --> $m_sizetemp --> $partfsformat - $m_parttypenametemp ($m_partlabeltemp) --> $(lsblk /dev/$k -nlo mountpoint )\n")
+									break
+									;;
+							esac
+							;;
 					esac
 				fi
-				unset m_parttypename partfsformat
+				unset m_parttypename partfsformat m_parttypenametemp m_sizetemp m_partlabeltemp
 			done
-		elif mountpoint /mnt &>/dev/null
-		then
-			if [[ -d /mnt/boot/ ]] && [[ -e /mnt/boot/ ]]
+
+			if ! mountpoint /mnt &>/dev/null
 			then
-				if ! mountpoint /mnt/boot &>/dev/null
+				dialog --msgbox "could not mount '/dev/${fail_drive[0]}' to '/'. Therefore cannot mount other partitions. you can manually try mounting the partition or changing the partition type to the right partition type and format it with the relevant filesystem and mount it" 0 0
+				break
+			fi
+		elif ( mountpoint /mnt &>/dev/null )
+		then
+			if [[ -d /mnt/boot ]]
+			then
+				if ( ! mountpoint /mnt/boot/ &>/dev/null )
 				then
 					for k in ${Partitions[@]}
 					do
-						local m_parttypename="$(lsblk "/dev/$k" -dlno parttypename)"
-						local partfsformat="$(lsblk "/dev/$k" -dlno fstype,fsver | awk '{ print $1" "$2 }' | sed 's/vfat FAT32/FAT32/g;s/ext4 1.0/ext4/g;s/swap 1/swap/g')"
+						local partfsformat="$(lsblk "/dev/$k" -dlno fstype,fsver | awk '{ print $1" "$2 }' | sed 's/vfat FAT32/FAT32/g;s/ 1.0//g;s/swap 1/swap/g')"
 						local partfsformat2="$(lsblk "/dev/$k" -dlno fstype,fsver | awk '{ print $1" "$2 }')"
-						if ([[ "$m_parttypename" == "EFI System" ]] || [[ "$m_parttypename" == "EFI (FAT-12/16/32)" ]]) && [[ "$partfsformat" == "FAT32" ]] || [[ "$partfsformat2" == "vfat FAT32" ]]
-						then
-							mount "/dev/$k" "/mnt/boot/"
-						fi
-						unset m_parttypename partfsformat partfsformat2
-					done
-				fi
-			elif [[ ! -d /mnt/boot/ ]]
-			then
-				mkdir "/mnt/boot/"
-				for k in ${Partitions[@]}
-				do
-					local m_parttypename="$(lsblk "/dev/$k" -dlno parttypename)"
-					local partfsformat="$(lsblk "/dev/$k" -dlno fstype,fsver | awk '{ print $1" "$2 }' | sed 's/vfat FAT32/FAT32/g;s/ext4 1.0/ext4/g;s/swap 1/swap/g')"
-					local partfsformat2="$(lsblk "/dev/$k" -dlno fstype,fsver | awk '{ print $1" "$2 }')"
-					if ( [[ "$m_parttypename" == "EFI System" ]] || [[ "$m_parttypename" == "EFI (FAT-12/16/32)" ]] ) && [[ "$partfsformat" == "FAT32" ]] || [[ "$partfsformat2" == "vfat FAT32" ]]
-					then
-						mount "/dev/$k" "/mnt/boot/"
-					fi
-					unset m_parttypename partfsformat partfsformat2 
-				done
-			fi
+						local m_parttypenametemp="$(lsblk /dev/$k -nlo parttypename | grep -ie 'linux filesystem\|^linux$' | sed -E 's/\s{13}/  /g')"
+						local m_sizetemp="$(lsblk /dev/$k -nlo size | sed 's/^\s*//g')"
+						local m_partlabeltemp="$(lsblk /dev/$k -nlo partlabel | sed -E 's/\s{13}/  /g')"
 
-			if mountpoint /mnt/boot &>/dev/null
+						if [[ -z $m_partlabeltemp ]] || [[ "$m_partlabeltemp" == "" ]] || [[ "$m_partlabeltemp" =~ " " ]]
+						then
+							m_partlabeltemp="No Label"
+						fi
+
+						if [[ "$m_parttypenametemp" == "EFI System" ]] || [[ "$partfsformat" == "FAT32" ]] || [[ "$partfsformat2" == "vfat FAT32" ]]
+						then
+							mount /dev/$k /mnt/boot
+							case $? in
+								0) 
+									mounted+=("/dev/$k --> $m_sizetemp --> $partfsformat - $m_parttypenametemp ($m_partlabeltemp) --> $(lsblk /dev/$k -nlo mountpoint )\n")
+									break
+									;;
+								1) 
+									dialog --msgbox "could not mount disk /dev/$k/ (EFI partition) to /mnt/boot" 0 0
+									mountfails+=("/dev/$k --> $m_sizetemp --> $partfsformat - $m_parttypenametemp ($m_partlabeltemp) --> $(lsblk /dev/$k -nlo mountpoint )\n")
+									fail_drive+=("$k")
+									break
+									;;
+							esac
+						fi
+						unset m_parttypename partfsformat m_parttypenametemp m_sizetemp m_partlabeltemp
+					done
+					if ( ! mountpoint /mnt/boot/ &>/dev/null )
+					then
+						dialog --msgbox "could not mount /dev/${fail_drive[0]} (EFI Partition) to /mnt/boot" 0 0
+						break
+					fi
+				fi
+			elif [[ ! -d /mnt/boot ]]
 			then
-				local homepart
+				mkdir /mnt/boot
 				for k in ${Partitions[@]}
 				do
-					local m_parttypename="$(lsblk "/dev/$k" -dlno parttypename)"
-					if [[ "$m_parttypename" == "Linux home" ]]
+					local partfsformat="$(lsblk "/dev/$k" -dlno fstype,fsver | awk '{ print $1" "$2 }' | sed 's/vfat FAT32/FAT32/g;s/ 1.0//g;s/swap 1/swap/g')"
+					local partfsformat2="$(lsblk "/dev/$k" -dlno fstype,fsver | awk '{ print $1" "$2 }')"
+					local m_parttypenametemp="$(lsblk /dev/$k -nlo parttypename | grep -ie 'EFI System' | sed -E 's/\s{13}/  /g')"
+					local m_sizetemp="$(lsblk /dev/$k -nlo size | sed 's/^\s*//g')"
+					local m_partlabeltemp="$(lsblk /dev/$k -nlo partlabel | sed -E 's/\s{13}/  /g')"
+
+					if [[ -z $m_partlabeltemp ]] || [[ "$m_partlabeltemp" == "" ]] || [[ "$m_partlabeltemp" =~ " " ]]
 					then
-						if [[ -d "/mnt/home/" ]]
-						then
-							if ! mountpoint "/mnt/home/" &>/dev/null
-							then
-								mount "/dev/$k" /mnt/home/
-								homepart="$k"
-							fi
-						elif [[ ! -d "/mnt/home/" ]]
-						then
-							mkdir "/mnt/home/"
-							mount "/dev/$k" /mnt/home/
-							homepart="$k"
-							break
-						fi
+						m_partlabeltemp="No Label"
 					fi
-					unset m_parttypename
+
+					if [[ "$m_parttypenametemp" == "EFI System" ]] || [[ "$partfsformat" == "FAT32" ]] || [[ "$partfsformat2" == "vfat FAT32" ]]
+					then
+						mount /dev/$k /mnt/boot
+						case $? in
+							0) 
+								mounted+=("/dev/$k --> $m_sizetemp --> $partfsformat - $m_parttypenametemp ($m_partlabeltemp) --> $(lsblk /dev/$k -nlo mountpoint )\n")
+								break
+								;;
+							1) 
+								mountfails+=("/dev/$k --> $m_sizetemp --> $partfsformat - $m_parttypenametemp ($m_partlabeltemp) --> $(lsblk /dev/$k -nlo mountpoint )\n")
+								fail_drive+=("$k")
+								break 
+								;;
+						esac
+						# break
+					fi
+					unset m_parttypename partfsformat m_parttypenametemp m_sizetemp m_partlabeltemp
 				done
+				if [[ ! -d /mnt/boot ]]
+				then
+					dialog --msgbox "could not create /mnt/boot. Therefore cannot mount /dev/${fail_drive[0]} (EFI Partition)" 0 0
+					break
+				elif ( ! mountpoint /mnt/boot &>/dev/null )
+				then
+					dialog --msgbox "could not mount /dev/${fail_drive[0]} (EFI Partition) to /mnt/boot" 0 0
+					break
+				fi
 			fi
 		fi
 	done
 
-	unset Partitions homepart
+	if mountpoint /mnt &>/dev/null
+	then
+		local homepart
+		for t in ${Partitions[@]}
+		do
+			local m_parttypename="$(lsblk "/dev/$k" -dlno parttypename)"
+			local partfsformat="$(lsblk "/dev/$k" -dlno fstype,fsver | awk '{ print $1" "$2 }' | sed 's/swap 1/swap/g;s/ 1.0//g')"
+			local m_parttypenametemp="$(lsblk /dev/$k -nlo parttypename | grep -ie 'swap' | sed -E 's/\s{13}/  /g')"
+			local m_sizetemp="$(lsblk /dev/$k -nlo size | sed 's/^\s*//g')"
+			local m_partlabeltemp="$(lsblk /dev/$k -nlo partlabel | sed -E 's/\s{13}/  /g')"
+
+			if [[ "$m_parttypenametemp" == "Linux home" ]]
+			then
+				homepart="$t"
+				mkdir /mnt/home
+				mount /dev/$t
+				case $? in
+					0)
+						mounted+=("/dev/$t --> $m_sizetemp --> $partfsformat - $m_parttypenametemp ($m_partlabeltemp) --> $(lsblk /dev/$t -nlo mountpoint )\n")
+						unset homepart
+						break
+						;;
+					1)
+						mountfails+=("/dev/$t --> $m_sizetemp --> $partfsformat - $m_parttypenametemp ($m_partlabeltemp) --> $(lsblk /dev/$t -nlo mountpoint )\n")
+						dialog --msgbox "could not mount home partition /dev/$homepart" 0 0
+						unset homepart
+						break
+						;;
+				esac
+			fi
+			unset m_parttypename partfsformat m_parttypenametemp m_sizetemp m_partlabeltemp
+		done
+	fi
+
+	local enabled_swap=()
+	local disabled_swap=()
+	local swap_parts=()
+	local swapstatetext=""
+
+	for k in ${Partitions[@]}
+	do
+		local m_parttypename="$(lsblk "/dev/$k" -dlno parttypename)"
+		local partfsformat="$(lsblk "/dev/$k" -dlno fstype,fsver | awk '{ print $1" "$2 }' | sed 's/swap 1/swap/g;s/ 1.0//g')"
+		local m_parttypenametemp="$(lsblk /dev/$k -nlo parttypename | grep -ie 'swap' | sed -E 's/\s{13}/  /g')"
+		local m_sizetemp="$(lsblk /dev/$k -nlo size | sed 's/^\s*//g')"
+		local m_partlabeltemp="$(lsblk /dev/$k -nlo partlabel | sed -E 's/\s{13}/  /g')"
+
+		if [[ -z $m_partlabeltemp ]] || [[ "$m_partlabeltemp" == "" ]] || [[ "$m_partlabeltemp" =~ " " ]]
+		then
+			m_partlabeltemp="No Label"
+		fi
+
+		if [[ "$m_parttypename" == "Linux swap" ]] || [[ "$partfsformat" == "swap" ]]
+		then
+			swap_parts+=("$k")
+			swapon "/dev/$k"
+			case $? in
+				0) enabled_swap+=("\n$k --> $m_sizetemp --> $m_parttypenametemp ($m_partlabeltemp) --> swap enabled") ;;
+				1) disabled_swap+=("\n$k --> $m_sizetemp --> $m_parttypenametemp ($m_partlabeltemp)") ;;
+			esac
+		fi
+		unset m_parttypename partfsformat m_parttypenametemp m_sizetemp m_partlabeltemp m_parttypename partfsformat
+	done
+
+	local mountdialogstring=""
+	if [[ -n ${mounted[@]} ]] && [[ -z ${mountfails[@]} ]] && [[ -n ${enabled_swap[@]} ]] && [[ -z ${disabled_swap[@]} ]]
+	then
+		mountdialogstring="partitions mounted:\n${mounted[*]}${enabled_swap[*]}\n"
+	elif [[ -z ${mounted[@]} ]] && [[ -n ${mountfails[@]} ]] && [[ -z ${enabled_swap[@]} ]] && [[ -n ${disabled_swap[@]} ]]
+	then
+		mountdialogstring="partitions failed to be mounted:\n${mountfails[*]}${disabled_swap[*]}\n"
+	elif [[ -n ${mounted[@]} ]] && [[ -n ${mountfails[@]} ]] && [[ -n ${enabled_swap[@]} ]] && [[ -n ${disabled_swap[@]} ]]
+	then
+		mountdialogstring="partitions mounted:\n${mounted[*]}${enabled_swap[*]}\npartitions failed to mount:\n${mountfails[*]}\n${disabled_swap[*]}\n"
+	fi
+	dialog --scrollbar --msgbox "$mountdialogstring" 10 90
+	unset mountdialogstring
+
 }
 
 
@@ -1087,7 +1217,8 @@ EditDisk(){
 
 	local disksTemp=("${m_Disks[@]}")
 	disksTemp=($(TempArrayWithAmpersand disksTemp))
-	local DiskEditor="$(dialog --no-tags --cancel-label "Back" --menu "Disk Editor Menu\n\nSelect a Disk Editor to Edit the $disk ${disksTemp[*]}" 0 0 0 "${diskeditors[@]}" 3>&1 1>&2 2>&3)"
+	local DiskEditor
+	DiskEditor="$(dialog --no-tags --cancel-label "Back" --menu "Disk Editor Menu\n\nSelect a Disk Editor to Edit the $disk ${disksTemp[*]}" 0 0 0 "${diskeditors[@]}" 3>&1 1>&2 2>&3)"
 	case $? in
 		1) PartitionDisk ;;
 		0)
@@ -1142,9 +1273,7 @@ WritePartitionTable(){
 			dialog --msgbox "$PartTable Partiton Table set on ${diskhave[0]} ${m_DisksTemp[*]}" 0 0 3>&1 1>&2 2>&3
 			unset diskhave
 			;;
-		1)
-			PartitionDisk
-			;;
+		1) PartitionDisk ;;
 	esac
 }
 
@@ -1324,6 +1453,7 @@ MountViewPartitions(){
 
 	local SelectedPartitions=()
 	local DiscardDisks=()
+	local DiscardDisksTemp
 
 	# check for partitions containing partition table or discard accordingly
 	if [[ -n "${NoPartDisks[@]}" ]]
@@ -1345,6 +1475,7 @@ MountViewPartitions(){
 	# loop to create an array of strings holding partition info
 	for (( a = 0; a < ${#Disks[@]}; a++))
 	do
+		local PartitionMenuItemFormatText=""
 		local DiskPartName=($(DiskPartInfoTemp "${Disks[$i]}" | awk '{ print $1 }'))
 		local DiskPartSizeTemp=($(DiskPartInfoTemp "${Disks[$i]}" | awk '{ print $2}'))
 		local DiskPartFsTypeTemp=($(DiskPartTypeName "${Disks[$i]}" | awk '{ $1=$2=NULL; gsub("^\\s*",""); for(i=1;i<=NF;i++){ if(i == NF){ print $i" "i} else { print $i } } }'))
@@ -1393,17 +1524,16 @@ MountViewPartitions(){
 			# Partition filesystem in key value pair
 			for i in ${DiskPartName[@]}
 			do
-				local m_fstype="$(lsblk /dev/"$i" -nlo fstype,fsver | sed 's/swap   1/swap/g;s/ext4   1.0/ext4/g;s/vfat   FAT32/FAT32/g')"
+				local m_fstype="$(lsblk /dev/"$i" -nlo fstype,fsver | awk '{ print $1" "$2 }' | sed 's/swap 1/swap/g;s/ 1.0//g;s/vfat FAT32/FAT32/g')"
 				if [[ -z $m_fstype ]] || [[ $m_fstype =~ " " ]]
 				then
-					PartFs["$i"]="(Will Be formatted)"
+					PartFs["$i"]="(Will be formatted)"
 				elif [[ -n $m_fstype ]] && [[ ! $m_fstype =~ " " ]]
 				then
 					PartFs["$i"]="$m_fstype"
 				fi
 				unset m_fstype
 			done
-
 
 			# Partition information in key value pair
 			local DiskPartListInfo=()
@@ -1424,10 +1554,17 @@ MountViewPartitions(){
 			local m_DiskNameString="$m_DiskVendor $m_DiskModel"
 			unset m_DiskVendor m_DiskModel
 
-			local DisksSize=$((${#Disks[@]}-1))
 			local partition=()
-			partition=($(dialog --cancel-label "Back" --column-separator "|" --title "Partition Mount Menu" --extra-button --extra-label "Mount" --checklist "OK - Will discard upcoming disks saving selected partitions of current\n     and prior disks\nMount - Will show partitions of all selected available disks\n\nPartitions in /dev/${Disks[$a]} ($m_DiskNameString - $m_DiskSize)\n\ncheckbox items format:\nPartition---size--(partition type)-----(Filesystem)--(partition label)" 0 0 0 "${DiskPartListInfo[@]}" 3>&1 1>&2 2>&3))
-			PARTITION_EXIT_CODE=$?
+
+			if [[ ${#Disks[@]} -eq 1 ]]
+			then
+				partition=($(dialog --ok-label "Mount" --cancel-label "Back" --column-separator "|" --title "Partition Mount Menu" --checklist "Partitions in /dev/${Disks[$a]} ($m_DiskNameString - $m_DiskSize)\n\ncheckbox items format:\nPartition---size---(partition type)---(Filesystem)--(partition label)" 0 0 0 "${DiskPartListInfo[@]}" 3>&1 1>&2 2>&3))
+				PARTITION_EXIT_CODE=$?
+			elif [[ ${#Disks[@]} -gt 1 ]]
+			then
+				partition=($(dialog --cancel-label "Back" --column-separator "|" --title "Partition Mount Menu" --extra-button --extra-label "Mount" --checklist "OK - Will discard upcoming disks saving selected partitions of current\n     and prior disks\nMount - Will show partitions of all selected available disks\n\nPartitions in /dev/${Disks[$a]} ($m_DiskNameString - $m_DiskSize)\n\ncheckbox items format:\nPartition---size---(partition type)---(Filesystem)--(partition label)" 0 0 0 "${DiskPartListInfo[@]}" 3>&1 1>&2 2>&3))
+				PARTITION_EXIT_CODE=$?
+			fi
 			unset m_DiskSize m_DiskNameString
 
 			# arrays to hold number of selected partitions based on partition type
@@ -1453,21 +1590,31 @@ MountViewPartitions(){
 				unset fstype
 			done
 
+			local DisksSize=$((${#Disks[@]}-1))
 			case $PARTITION_EXIT_CODE in
 				0)
 					# press ok to discard upcoming disks (excluding current dialog where disks have been selected)
 					if [[ -z "${partition[@]}" ]]
 					then
 						unset DisksSize
-						DiscardDisks=("${Disks[@]:$a}")
+						# DiscardDisksTemp=("${Disks[@]}")
+						# DiscardDisks=("${DiscardDisksTemp[@]:$a}")
+						DiscardDisks=("${Disks[@]}")
+						DiscardDisks=("${DiscardDisks[@]:$a}")
+						unset DiscardDisksTemp
 					elif [[ -n ${partition[@]} ]]
 					then
 						SelectedPartitions+=("${partition[@]}")
 						if [[ "${Disks[-1]}" != "${Disks[$a]}" ]]
 						then
 							unset DisksSize
-							a=$((a+1))
-							DiscardDisks=("${Disks[@]:$a}")
+							local size=${#Disks[@]}
+							size=$((size-1))
+							# DiscardDisksTemp=("${Disks[@]}")
+							# DiscardDisks=("${DiscardDisksTemp[@]:$a}")
+							DiscardDisks=("${Disks[@]}")
+							DiscardDisks=("${DiscardDisks[$a]:$size}")
+							unset DiscardDisksTemp size
 							break
 						fi
 					fi
@@ -1565,9 +1712,7 @@ MountViewPartitions(){
 				unset SelectedPartitions
 				MountViewPartitions Disks
 				;;
-			1)
-				ConfirmMounts Disks SelectedPartitions
-				;;
+			1) ConfirmMounts Disks SelectedPartitions ;;
 		esac
 	elif [[ ${#efi_parts[@]} -eq 1 ]] && [[ ${#linux_fs_parts[@]} -eq 1 ]] && ( [[ ${#linux_home_parts[@]} -eq 0 ]] || [[ ${#linux_user_home_parts[@]} -eq 0 ]] ) && [[ ${#linux_swap_parts[@]} -eq 0 ]]
 	then
@@ -1577,9 +1722,7 @@ MountViewPartitions(){
 				unset SelectedPartitions
 				MountViewPartitions Disks
 				;;
-			1)
-				ConfirmMounts Disks SelectedPartitions
-				;;
+			1) ConfirmMounts Disks SelectedPartitions ;;
 		esac
 	elif [[ ${#efi_parts[@]} -eq 1 ]] && [[ ${#linux_fs_parts[@]} -eq 1 ]] && [[ ${#linux_swap_parts[@]} -eq 0 ]]
 	then
@@ -1589,9 +1732,7 @@ MountViewPartitions(){
 				unset SelectedPartitions
 				MountViewPartitions Disks
 				;;
-			1)
-				ConfirmMounts Disks SelectedPartitions
-				;;
+			1) ConfirmMounts Disks SelectedPartitions ;;
 		esac
 	elif [[ ${#efi_parts[@]} -gt 1 ]] && [[ ${#linux_fs_parts[@]} -gt 1 ]]
 	then
@@ -1608,7 +1749,7 @@ MountViewPartitions(){
 		esac
 	elif [[ ${#linux_fs_parts[@]} -eq 0 ]]
 	then
-		dialog --msgbox "No Disk with Linux filesystem selected. please select one from the partitions of the selected ${diskhave[0]} ${m_DisksTemp[*]}" 0 0
+		dialog --msgbox "No partition with Linux filesystem selected. please select one from the partitions of the selected ${diskhave[0]} ${m_DisksTemp[*]}" 0 0
 		unset diskhave m_DisksTemp SelectedPartitions
 		MountViewPartitions Disks
 	elif [[ ${#linux_fs_parts[@]} -gt 1 ]]
@@ -2003,13 +2144,13 @@ add_users(){
 			fi
 
 			# when base is installed and script is running from live disk
-			if [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs ) && ( mountpoint /run/archiso/bootmnt ) && ( mountpoint /mnt ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot )
+			if [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( mountpoint /mnt &>/dev/null ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot &>/dev/null )
 			then
 				arch-chroot /mnt useradd -m $username -G users -g power,wheel,storage &>/dev/null
 				USERADD_EXIT_CODE=$?
 
 			# when base is installed and script is running from installed device
-			elif ( ( ! mountpoint /mnt ) || ( [[ ! -d /mnt/boot ]] && ( ! mountpoint /mnt/boot ) ) ) && ( [[ ! -d /run/archiso/airootfs ]] && [[ ! -d /run/archiso/bootmnt ]] ) && ( ( mountpoint / ) && ( mountpoint /boot ) )
+			elif ( ( ! mountpoint /mnt &>/dev/null ) || ( [[ ! -d /mnt/boot ]] && ( ! mountpoint /mnt/boot &>/dev/null ) ) ) && ( [[ ! -d /run/archiso/airootfs ]] && [[ ! -d /run/archiso/bootmnt ]] ) && ( ( mountpoint &>/dev/null / ) && ( mountpoint /boot &>/dev/null ) )
 			then
 				useradd -m $username -G users -g power,wheel,storage &>/dev/null
 				USERADD_EXIT_CODE=$?
@@ -2390,6 +2531,7 @@ InstallArch(){
 		unset packages_temp
 
 		# installing system
+		pacman-key --init
 		pacstrap /mnt "${packages[@]}"
 		case $? in
 			0)
@@ -2474,7 +2616,7 @@ InstallArch(){
 						0) dialog --msgbox "Failed to install Arch Base system but created fstab entry. You can try creating the fstab manuall by executing \"genfstab /mnt/etc/fstab\"Exiting the Installer" 0 0 ;;
 						*) dialog --msgbox "Failed to install Arch Base system. Exiting the Installer" 0 0 ;;
 					esac
-				elif ( [[ ! -d /mnt ]] || ( ! mountpoint /mnt ) ) || ( [[ ! -f "/mnt/etc/fstab" ]] && [[ ! -d "/mnt/etc/" ]] )
+				elif ( [[ ! -d /mnt ]] || ( ! mountpoint /mnt &>/dev/null ) ) || ( [[ ! -f "/mnt/etc/fstab" ]] && [[ ! -d "/mnt/etc/" ]] )
 				then
 					dialog --msgbox "Failed to install Arch Base system. Exiting the Installer" 0 0
 				fi
@@ -2608,66 +2750,91 @@ Repo_Enable(){
 MainMenu(){
 
 	# $1 - menu option item
-	clear
 
-	local uid=$(id -u)
-	ls /usr/bin/dialog &>/dev/null
-	DIALOG_CHECK_EXIT_CODE=$?
-	if [[ $uid -ne 0 ]] && [[ $DIALOG_CHECK_EXIT_CODE -eq 0 ]]
+	local DIALOG_CHECK_EXIT_CODE
+
+	# installed base but on live || not installed base but on live
+	if [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( mountpoint /mnt &>/dev/null ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot &>/dev/null ) || ( [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( ! mountpoint /mnt &>/dev/null ) && [[ ! -d /mnt/boot ]] )
 	then
-		dialog --msgbox "please run this script as root to configure this system" 0 0
-		exit
-	elif [[ $uid -ne 0 ]] && [[ $DIALOG_CHECK_EXIT_CODE -eq 0 ]]
+		# ls /usr/bin/dialog &>/dev/null
+		which dialog &>/dev/null
+		DIALOG_CHECK_EXIT_CODE=$?
+
+	# installed & running base
+	elif ( ( ! mountpoint /mnt &>/dev/null ) || ( [[ ! -d /mnt/boot ]] && ( ! mountpoint /mnt/boot &>/dev/null ) ) ) && ( [[ ! -d /run/archiso/airootfs ]] && [[ ! -d /run/archiso/bootmnt ]] ) && ( ( mountpoint / &>/dev/null ) && ( mountpoint /boot &>/dev/null ) )
 	then
-		echo "\E[1m\t\t\t\t\t\t\t\tplease run this script as root to configure\E[m"
+		local uid=$(id -u)
+		# pacman -Qs dialog &>/dev/null
+		which dialog &>/dev/null
+		DIALOG_CHECK_EXIT_CODE=$?
+		case $DIALOG_CHECK_EXIT_CODE in
+			0)
+				if [[ $uid -ne 0 ]]
+				then
+					unset uid
+					dialog --msgbox "please run this script as root to configure this system. Exiting script" 0 0
+					clear
+					reset
+					exit
+				fi
+				;;
+			1)
+				if [[ $uid -ne 0 ]]
+				then
+					unset uid
+					echo "\E[1m\t\t\t\t\t\t\t\tplease run this script as root to configure this system. Exiting script\E[m"
+					clear
+					reset
+					exit
+				fi
+		esac
 	fi
 
-    # check if dialog is installed
-	ls /usr/bin/dialog &>/dev/null
-	case $? in
+	case $DIALOG_CHECK_EXIT_CODE in
 		1|2)
+			clear
 			echo -e "dialog not installed.\n"
-			read -s -n1 -p "press any key to install the git provided dialog package "
-			pacman -Uvd --noconfirm "$(ls dialog*)"
+			read -p "press any key to install the git provided dialog package " -s -n1
+			clear
+			pacman -Uvd --noconfirm "$(ls dialog*.pkg.tar.zst)"
 			case $? in
-				0)
-					dialog --msgbox "installed dialog" 0 0
-					;;
+				0) dialog --msgbox "installed dialog" 0 0 ;;
 				1)
 					clear
-					echo -e "\n\ndialog could not be installed.\n\nPlease install provided dialog packages by typing \"pacman -Uvd <package name>\" with or without the \"--noconfirm\" argument.\n\ncurrent directory:\n$(pwd)\n\npackages in this directory:\n$(ls *.pkg*).\n\n\nexiting...\n\n"
+					echo -e "\n\ndialog could not be installed.\n\nPlease install provided dialog packages by typing \"pacman -U <package name>\" with or without the \"-vd --noconfirm\" arguments ('-v' -> verbose '-d' -> debug '--noconfirm' -> auto inputs \"yes to every question thrown by the package manager\").\n\ncurrent directory: $(pwd)\npackages in this directory:\n\n$(ls *.pkg*).\n\n\nexiting...\n\n"
 					exit
 					;;
 			esac
 			;;
 	esac
-
+	unset DIALOG_CHECK_EXIT_CODE
 
 	local menuopt=()
 	local menuitem
 	local MenuItemText
 	local MenuItemTitle
+
 	# installed base but on live || not installed base but on live
 	if ( [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( mountpoint /mnt &>/dev/null ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot &>/dev/null ) ) || ( [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( ! mountpoint /mnt &>/dev/null ) && [[ ! -d /mnt/boot ]] )
 	then
 		MenuItemTitle="Install Menu"
-		MenuItemText="To install arch all options followed by\n  i) '**' are priority 1\n ii) '*'are priority 2\niii) '+'are priority 3\n\nThe rest are optional"
+		MenuItemText="To install arch all options followed by\n  i) '**' are priority 1\n ii) '*'are priority 2\niii) '+' are priority 3 - optional during installation. you can run the script from an\n                          installed drive to configure the host the script will only have\n                          \"host configuration\" options.\n\nThe rest are optional"
 		menuopt=("Partition Disk **" "format/Partition/select Hard Disks and mount partitions")
 		menuopt+=("Configure Network **" "Check connectivity and connect to a network")
 		menuopt+=("Install Arch *" "Install the base system")
 		menuopt+=("Configure Host +" "Personalize the machine by setting Hostname, adding users etc.")
+
 	# installed & running base
-	elif ( ( ! mountpoint /mnt ) || ( [[ ! -d /mnt/boot ]] && ( ! mountpoint /mnt/boot ) ) ) && ( [[ ! -d /run/archiso/airootfs ]] && [[ ! -d /run/archiso/bootmnt ]] ) && ( ( mountpoint / ) && ( mountpoint /boot ) )
+	elif ( ( ! mountpoint /mnt &>/dev/null ) || ( [[ ! -d /mnt/boot ]] && ( ! mountpoint /mnt/boot &>/dev/null ) ) ) && ( [[ ! -d /run/archiso/airootfs ]] && [[ ! -d /run/archiso/bootmnt ]] ) && ( ( mountpoint / &>/dev/null ) && ( mountpoint /boot &>/dev/null ) )
 	then
 		MenuItemTitle="Host Configuration Menu"
-		menuopt+=("Configure Network" "Check connectivity and connect to a network")
+		menuopt=("Configure Network" "Check connectivity and connect to a network")
 		menuopt+=("Configure Host" "Personalize the machine by setting Hostname, adding users etc.")
 		MenuItemText=""
 	fi
 	menuopt+=("Reboot" "Reboot the machine")
 
 	menuitem=$(dialog --no-mouse --default-item "${1}" --cancel-label "Exit" --title "$MenuItemTitle" --menu "$MenuItemText" 0 0 0 "${menuopt[@]}" 3>&1 1>&2 2>&3)
-# installed & running base
 	case $? in
 		0)
 			case $menuitem in
@@ -2699,7 +2866,7 @@ MainMenu(){
 						ConfHost "set hostname *"
 
 					# running live not installed system
-					elif [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs ) && ( mountpoint /run/archiso/bootmnt ) && ( ! mountpoint /mnt ) && [[ ! -d /mnt/boot ]]
+					elif [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( ! mountpoint /mnt &>/dev/null ) && [[ ! -d /mnt/boot ]]
 					then
 						dialog --msgbox "Cannot configure host without a Linux System installed" 0 0
 					fi
