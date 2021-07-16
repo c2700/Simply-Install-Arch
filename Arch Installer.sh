@@ -645,7 +645,11 @@ ConfirmMounts(){
 				UnMountPartitions
 				for u in ${m_MountPartitionsTextsTemp[@]}
 				do
-					wipefs "/dev/$u"
+					wipefs "/dev/$u" | GuageMeter "Wiping partition /dev/$u" 1
+				done
+
+				for u in ${m_MountPartitionsTextsTemp[@]}
+				do
 					FormatPartition "$u" "$linuxfs"
 				done
 				MountPartitions m_MountPartitionsTextsTemp
@@ -698,7 +702,7 @@ FormatPartition(){
 UnMountPartitions(){
 
 	# disable all swaps
-	swapoff -av
+	swapoff -a
 
 	# unmount order.
 	# 1 - /mnt/home
@@ -738,6 +742,7 @@ MountPartitions(){
 	local Partitions=${!PartitionsArgs}
 	local mounted=()
 	local fail_drive=()
+	local already_mounted=()
 	local mountfails=()
 	unset PartitionsArgs
 
@@ -745,11 +750,6 @@ MountPartitions(){
 	# 1 - /mnt/
 	# 2 - /mnt/boot
 	# 3 - /mnt/home
-
-	# exec  1> >(tee -ia bash.log)
-	# exec  2> >(tee -ia bash.log >& 2)
-	# exec {FD}> bash.log
-	# exec  2> >(tee -ia trace.txt)
 
 	while ( ! mountpoint /mnt &>/dev/null ) || ( [[ ! -d /mnt/boot ]] || ( ! mountpoint /mnt/boot &>/dev/null ) )
 	do
@@ -774,18 +774,20 @@ MountPartitions(){
 						"ext4"|"ext3"|"ext2"|"xfs"|"zfs"|"bfs"|"btrfs"|"jfs")
 							mount /dev/$k /mnt
 							case $? in
-								0) 
+								0)
 									if [[ ! -d /mnt/boot ]]
 									then
 										mkdir /mnt/boot
 									fi
-									fail_drive+=("$k")
 									mounted+=("/dev/$k --> $m_sizetemp --> $partfsformat - $m_parttypenametemp ($m_partlabeltemp) --> $(lsblk /dev/$k -nlo mountpoint )\n")
-									read -n1 -p "/mnt mount"
 									break
 									;;
 								1)  
 									mountfails+=("/dev/$k --> $m_sizetemp --> $partfsformat - $m_parttypenametemp ($m_partlabeltemp) --> $(lsblk /dev/$k -nlo mountpoint )\n")
+									break
+									;;
+								32)
+									already_mounted+=("/dev/$k --> $m_sizetemp --> $partfsformat - $m_parttypenametemp ($m_partlabeltemp) --> $(lsblk /dev/$k -nlo mountpoint )\n")
 									break
 									;;
 							esac
@@ -810,7 +812,7 @@ MountPartitions(){
 					do
 						local partfsformat="$(lsblk "/dev/$k" -dlno fstype,fsver | awk '{ print $1" "$2 }' | sed 's/vfat FAT32/FAT32/g;s/ 1.0//g;s/swap 1/swap/g')"
 						local partfsformat2="$(lsblk "/dev/$k" -dlno fstype,fsver | awk '{ print $1" "$2 }')"
-						local m_parttypenametemp="$(lsblk /dev/$k -nlo parttypename | grep -ie 'linux filesystem\|^linux$' | sed -E 's/\s{13}/  /g')"
+						local m_parttypenametemp="$(lsblk /dev/$k -nlo parttypename | grep -ie 'efi\|linux filesystem\|^linux$' | sed -E 's/\s{13}/  /g')"
 						local m_sizetemp="$(lsblk /dev/$k -nlo size | sed 's/^\s*//g')"
 						local m_partlabeltemp="$(lsblk /dev/$k -nlo partlabel | sed -E 's/\s{13}/  /g')"
 
@@ -831,6 +833,10 @@ MountPartitions(){
 									dialog --msgbox "could not mount disk /dev/$k/ (EFI partition) to /mnt/boot" 0 0
 									mountfails+=("/dev/$k --> $m_sizetemp --> $partfsformat - $m_parttypenametemp ($m_partlabeltemp) --> $(lsblk /dev/$k -nlo mountpoint )\n")
 									fail_drive+=("$k")
+									break
+									;;
+								32)
+									already_mounted+=("/dev/$k --> $m_sizetemp --> $partfsformat - $m_parttypenametemp ($m_partlabeltemp) --> $(lsblk /dev/$k -nlo mountpoint )\n")
 									break
 									;;
 							esac
@@ -863,7 +869,7 @@ MountPartitions(){
 					then
 						mount /dev/$k /mnt/boot
 						case $? in
-							0) 
+							0)
 								mounted+=("/dev/$k --> $m_sizetemp --> $partfsformat - $m_parttypenametemp ($m_partlabeltemp) --> $(lsblk /dev/$k -nlo mountpoint )\n")
 								break
 								;;
@@ -871,6 +877,10 @@ MountPartitions(){
 								mountfails+=("/dev/$k --> $m_sizetemp --> $partfsformat - $m_parttypenametemp ($m_partlabeltemp) --> $(lsblk /dev/$k -nlo mountpoint )\n")
 								fail_drive+=("$k")
 								break 
+								;;
+							32)
+								already_mounted+=("/dev/$k --> $m_sizetemp --> $partfsformat - $m_parttypenametemp ($m_partlabeltemp) --> $(lsblk /dev/$k -nlo mountpoint )\n")
+								break
 								;;
 						esac
 						# break
@@ -890,22 +900,27 @@ MountPartitions(){
 		fi
 	done
 
-	if mountpoint /mnt &>/dev/null
+	if ( mountpoint /mnt &>/dev/null ) && ( mountpoint /mnt/boot &>/dev/null )
 	then
 		local homepart
 		for t in ${Partitions[@]}
 		do
-			local m_parttypename="$(lsblk "/dev/$k" -dlno parttypename)"
-			local partfsformat="$(lsblk "/dev/$k" -dlno fstype,fsver | awk '{ print $1" "$2 }' | sed 's/swap 1/swap/g;s/ 1.0//g')"
-			local m_parttypenametemp="$(lsblk /dev/$k -nlo parttypename | grep -ie 'swap' | sed -E 's/\s{13}/  /g')"
-			local m_sizetemp="$(lsblk /dev/$k -nlo size | sed 's/^\s*//g')"
-			local m_partlabeltemp="$(lsblk /dev/$k -nlo partlabel | sed -E 's/\s{13}/  /g')"
+			local m_parttypename="$(lsblk "/dev/$t" -dlno parttypename)"
+			local partfsformat="$(lsblk "/dev/$t" -dlno fstype,fsver | awk '{ print $1" "$2 }' | sed 's/swap 1/swap/g;s/ 1.0//g')"
+			local m_parttypenametemp="$(lsblk /dev/$t -nlo parttypename | grep -ie 'home' | sed -E 's/\s{13}/  /g')"
+			local m_sizetemp="$(lsblk /dev/$t -nlo size | sed 's/^\s*//g')"
+			local m_partlabeltemp="$(lsblk /dev/$t -nlo partlabel | sed -E 's/\s{13}/  /g')"
+
+			if [[ -z $m_partlabeltemp ]] || [[ "$m_partlabeltemp" == "" ]] || [[ "$m_partlabeltemp" =~ " " ]]
+			then
+				m_partlabeltemp="No Label"
+			fi
 
 			if [[ "$m_parttypenametemp" == "Linux home" ]]
 			then
 				homepart="$t"
 				mkdir /mnt/home
-				mount /dev/$t
+				mount /dev/$t /mnt/home
 				case $? in
 					0)
 						mounted+=("/dev/$t --> $m_sizetemp --> $partfsformat - $m_parttypenametemp ($m_partlabeltemp) --> $(lsblk /dev/$t -nlo mountpoint )\n")
@@ -918,6 +933,10 @@ MountPartitions(){
 						unset homepart
 						break
 						;;
+					32)
+						already_mounted+=("/dev/$k --> $m_sizetemp --> $partfsformat - $m_parttypenametemp ($m_partlabeltemp) --> $(lsblk /dev/$k -nlo mountpoint )\n")
+						break
+						;;
 				esac
 			fi
 			unset m_parttypename partfsformat m_parttypenametemp m_sizetemp m_partlabeltemp
@@ -927,6 +946,7 @@ MountPartitions(){
 	local enabled_swap=()
 	local disabled_swap=()
 	local swap_parts=()
+	local swap_already_enabled=()
 	local swapstatetext=""
 
 	for k in ${Partitions[@]}
@@ -947,27 +967,41 @@ MountPartitions(){
 			swap_parts+=("$k")
 			swapon "/dev/$k"
 			case $? in
-				0) enabled_swap+=("\n$k --> $m_sizetemp --> $m_parttypenametemp ($m_partlabeltemp) --> swap enabled") ;;
-				1) disabled_swap+=("\n$k --> $m_sizetemp --> $m_parttypenametemp ($m_partlabeltemp)") ;;
+				0) enabled_swap+=("/dev/$k --> $m_sizetemp --> $m_parttypenametemp ($m_partlabeltemp) --> swap enabled") ;;
+				255)
+					swap_already_enabled+=("/dev/$k --> $m_sizetemp --> $partfsformat - $m_parttypenametemp ($m_partlabeltemp) --> $(lsblk /dev/$k -nlo mountpoint )\n")
+					break
+					;;
+				1) disabled_swap+=("/dev/$k --> $m_sizetemp --> $m_parttypenametemp ($m_partlabeltemp)") ;;
 			esac
 		fi
 		unset m_parttypename partfsformat m_parttypenametemp m_sizetemp m_partlabeltemp m_parttypename partfsformat
 	done
 
 	local mountdialogstring=""
-	if [[ -n ${mounted[@]} ]] && [[ -z ${mountfails[@]} ]] && [[ -n ${enabled_swap[@]} ]] && [[ -z ${disabled_swap[@]} ]]
+
+	# fresh mount
+	if [[ -n ${mounted[@]} ]] && [[ -z ${fail_drive[@]} ]] && [[ -z ${already_mounted[@]} ]] && [[ -z ${mountfails[@]} ]] && [[ -n ${enabled_swap[@]} ]] && [[ -z ${disabled_swap[@]} ]] && [[ -z ${swap_already_enabled[@]} ]]
 	then
-		mountdialogstring="partitions mounted:\n${mounted[*]}${enabled_swap[*]}\n"
-	elif [[ -z ${mounted[@]} ]] && [[ -n ${mountfails[@]} ]] && [[ -z ${enabled_swap[@]} ]] && [[ -n ${disabled_swap[@]} ]]
+		mountdialogstring="partitions mounted:\n${mounted[*]}${enabled_swap[*]}"
+
+	# all already mounted
+	elif [[ -z ${mounted[@]} ]] && [[ -z ${fail_drive[@]} ]] && [[ -n ${already_mounted[@]} ]] && [[ -z ${mountfails[@]} ]] && [[ -z ${enabled_swap[@]} ]] && [[ -z ${disabled_swap[@]} ]] && [[ -n ${swap_already_enabled[@]} ]]
 	then
-		mountdialogstring="partitions failed to be mounted:\n${mountfails[*]}${disabled_swap[*]}\n"
-	elif [[ -n ${mounted[@]} ]] && [[ -n ${mountfails[@]} ]] && [[ -n ${enabled_swap[@]} ]] && [[ -n ${disabled_swap[@]} ]]
+		mountdialogstring="partitions already mounted:\n${already_mounted[*]}${swap_already_enabled[*]}"
+
+	# some already mounted with fails
+	elif [[ -n ${mounted[@]} ]] && [[ -n ${fail_drive[@]} ]] && [[ -n ${already_mounted[@]} ]] && [[ -n ${mountfails[@]} ]] && [[ -n ${enabled_swap[@]} ]] && [[ -n ${disabled_swap[@]} ]] && [[ -n ${swap_already_enabled[@]} ]]
 	then
-		mountdialogstring="partitions mounted:\n${mounted[*]}${enabled_swap[*]}\npartitions failed to mount:\n${mountfails[*]}\n${disabled_swap[*]}\n"
+		mountdialogstring="partitions mounted:\n${mounted[*]}${enabled_swap[*]}\npartitions already mounted:\n${already_mounted[*]}${swap_already_enabled[*]}\npartitions failed to mount:\n${fail_drive[*]}${disabled_swap[*]}"
+
+	# some already mounted without fails
+	elif [[ -n ${mounted[@]} ]] && [[ -z ${fail_drive[@]} ]] && [[ -n ${already_mounted[@]} ]] && [[ -n ${mountfails[@]} ]] && [[ -n ${enabled_swap[@]} ]] && [[ -z ${disabled_swap[@]} ]] && [[ -n ${swap_already_enabled[@]} ]]
+	then
+		mountdialogstring="partitions mounted:\n${mounted[*]}${enabled_swap[*]}\npartitions already mounted:\n${already_mounted[*]}${swap_already_enabled[*]}"
 	fi
 	dialog --scrollbar --msgbox "$mountdialogstring" 10 90
-	unset mountdialogstring
-
+	# unset mountdialogstring
 }
 
 
@@ -1223,7 +1257,7 @@ EditDisk(){
 		1) PartitionDisk ;;
 		0)
 			local m_NonePartDisks=()
-			dialog --no-label "Back" --yes-label "OK" --yesno "					partition type ----------------> partition filesystem format\n\nPartitions to be created and formatted to:\n	Mandatory:\n		1) EFI system partition -> FAT32(This is where the bootloader and the kernel resides)\n		2) Linux filesystem -----> ext4 (This is the linux root partition)\n\n	Optional but recommended:\n		1) Linux swap -> swap (used when machine runs out of RAM/physical memory)" 0 0
+			dialog --no-label "Back" --yes-label "OK" --yesno "					 partition type -----> partition filesystem format\n\nPartitions to be created and formatted to:\n\n  Mandatory:\n   1) EFI system partition -> FAT32(This is where the bootloader and the kernel resides)\n   2) Linux filesystem -----> ext4/ext3/ext2/xfs/zfs/bfs/btrfs/jfs (This is the linux root partition)\n\n  Optional but recommended:\n   1) Linux swap -> swap (used when machine runs out of RAM/physical memory\n\n  Optional:\n   1) Linux home -> Same format as Linux filesystem partition (used as storage unit for home directory of all users\n                                                               except root)" 0 0
 			case $? in
 				0)
 					for i in "${m_Disks[@]}"
@@ -1253,9 +1287,10 @@ EditDisk(){
 
 WritePartitionTable(){
 	local PartTableTemp=()
+	local PartTable
 	PartTableTemp+=("GPT" "supports 128 primary partitions, mutiple bootloaders, storage more than 2TB")
 	PartTableTemp+=("MBR" "supports 4 primary partitions, max storage of 2TB")
-	local PartTable="$(dialog --cancel-label "Back" --menu "Partition Table Menu\n\nSelect the partition Table to be written on $disk ${m_NoneDisksTemp[*]}" 0 0 0 "${PartTableTemp[@]}" 3>&1 1>&2 2>&3)"
+	PartTable="$(dialog --cancel-label "Back" --menu "Partition Table Menu\n\nSelect the partition Table to write" 0 0 0 "${PartTableTemp[@]}" 3>&1 1>&2 2>&3)"
 	case $? in
 		0)
 			local m_DisksArgs=$1[@]
@@ -1268,7 +1303,17 @@ WritePartitionTable(){
 			m_DisksTemp=($(TempArrayWithAmpersand m_DisksTemp))
 			for b in ${m_Disks[@]}
 			do
-				parted "/dev/$b" mktable "$PartTable" &>/dev/null
+				local GuageMeterText=""
+				local m_pttype=$(lsblk /dev/$b -dnlo pttype)
+				if [[ -n $pttype ]] || [[ "$pttype" != "" ]] || [[ ! "$pttype" =~ " " ]]
+				then
+					parted "/dev/$b" mktable "$PartTable" ---pretend-input-tty <<< "y" &>/dev/null # | GuageMeter "Re-Writing $m_pttype with $PartTable on disk /dev/$b" 1
+					partprobe /dev/$b
+				elif [[ -z $pttype ]] || [[ "$pttype" == "" ]] || [[ "$pttype" =~ " " ]]
+				then
+					parted "/dev/$b" mktable "$PartTable" | GuageMeter "Setting $PartTable on disk /dev/$b" 1
+					partprobe /dev/$b
+				fi
 			done
 			dialog --msgbox "$PartTable Partiton Table set on ${diskhave[0]} ${m_DisksTemp[*]}" 0 0 3>&1 1>&2 2>&3
 			unset diskhave
@@ -1323,6 +1368,20 @@ PartitionDisk(){
 	local Disks=()
 	Disks=($(dialog --scrollbar --cancel-label "Back" --column-separator "|" --checklist "Disk Selection Menu" 0 0 0 "${DiskListInfo[@]}" 3>&1 1>&2 2>&3))
 	DISKS_EXIT_CODE=$?
+
+	local partswithparttable=()
+	for o in ${Disks[@]}
+	do
+		IsPartitionTablePresent $o
+		case $? in
+			0) partswithparttable+=("$o") ;;
+		esac
+	done
+
+	if [[ -n ${partswithparttable[@]} ]]
+	then
+		WritePartitionTable partswithparttable
+	fi
 
 	# check number of partitions and go to select disks or edit selected disks
 	if [[ ${#Disks[@]} -eq 1 ]]
@@ -1704,36 +1763,31 @@ MountViewPartitions(){
 				MountViewPartitions Disks
 				;;
 		esac
-	elif ([[ ${#linux_home_parts[@]} -eq 0 ]] || [[ ${#linux_user_home_parts[@]} -eq 0 ]]) && [[ ${#linux_swap_parts[@]} -ge 1 ]] && [[ ${#efi_parts[@]} -eq 1 ]] && [[ ${#linux_fs_parts[@]} -eq 1 ]] && [[ $total_parts -ge 3 ]]
+
+	elif [[ -z ${linux_fs_parts[@]} ]]
 	then
-		dialog --yes-label "Back" --no-label "continue" --yesno "No linux home or linux user's home partition selected. Continue without one of these partitions or Go Back to the partition mount menu to select a home partition?" 0 0
-		case $? in
-			0)
-				unset SelectedPartitions
-				MountViewPartitions Disks
-				;;
-			1) ConfirmMounts Disks SelectedPartitions ;;
-		esac
-	elif [[ ${#efi_parts[@]} -eq 1 ]] && [[ ${#linux_fs_parts[@]} -eq 1 ]] && ( [[ ${#linux_home_parts[@]} -eq 0 ]] || [[ ${#linux_user_home_parts[@]} -eq 0 ]] ) && [[ ${#linux_swap_parts[@]} -eq 0 ]]
+		dialog --msgbox "No partition with Linux filesystem selected. Please select one from the partitions of the selected ${diskhave[0]} ${m_DisksTemp[*]}" 0 0
+		unset diskhave m_DisksTemp SelectedPartitions
+		MountViewPartitions Disks
+
+	elif [[ -z ${efi_parts[@]} ]]
 	then
-		dialog --yes-label "Back" --no-label "Continue" --yesno "No swap and linux home partitions selected. Continue without them or go back to the partition selection menu?" 0 0
-		case $? in
-			0)
-				unset SelectedPartitions
-				MountViewPartitions Disks
-				;;
-			1) ConfirmMounts Disks SelectedPartitions ;;
-		esac
-	elif [[ ${#efi_parts[@]} -eq 1 ]] && [[ ${#linux_fs_parts[@]} -eq 1 ]] && [[ ${#linux_swap_parts[@]} -eq 0 ]]
+		dialog --msgbox "No EFI partition selected. Please select one from the partitions of the selected ${diskhave[0]} ${m_DisksTemp[*]}. (The EFI partition is basically where the kernel and the boot files reside)" 0 0
+		unset SelectedPartitions
+		MountViewPartitions Disks
+
+	elif [[ ${#linux_fs_parts[@]} -gt 1 ]] && [[ ${#efi_parts[@]} -eq 1 ]]
 	then
-		dialog --yes-label "Back" --no-label "continue" --yesno "No swap partition selected. Recommended to have a swap partition. Continue without a swap partition or Go Back to the partition mount menu to select a swap partition?" 0 0
-		case $? in
-			0)
-				unset SelectedPartitions
-				MountViewPartitions Disks
-				;;
-			1) ConfirmMounts Disks SelectedPartitions ;;
-		esac
+		dialog --msgbox "Use one Linux filesystem partition. Using ${diskhave[0]} ${m_DisksTemp[*]}" 0 0
+		unset diskhave m_DisksTemp SelectedPartitions
+		MountViewPartitions Disks
+
+	elif [[ ${#efi_parts[@]} -gt 1 ]] &&  [[ ${#linux_fs_parts[@]} -eq 1 ]]
+	then
+		dialog --msgbox "Use only one EFI partition (This is basically where the kernel and the boot files reside)" 0 0
+		unset SelectedPartitions
+		MountViewPartitions Disks
+
 	elif [[ ${#efi_parts[@]} -gt 1 ]] && [[ ${#linux_fs_parts[@]} -gt 1 ]]
 	then
 		dialog --yes-label "Disk Menu" --no-label "Use Selected Disks" --yesno "Too many Linux essential partitions selected. Please select one linux filesystem and one EFI partition. The linux filesystem and one EFI partition are mandatory and the rest are optional though swap is a recommended optional. Go back to the Disk Selection Menu or Use the currently selected ${diskhave[0]} ${m_DisksTemp[*]}" 0 0
@@ -1747,26 +1801,45 @@ MountViewPartitions(){
 				MountViewPartitions Disks
 				;;
 		esac
-	elif [[ ${#linux_fs_parts[@]} -eq 0 ]]
+
+	elif [[ ${#efi_parts[@]} -eq 1 ]] && [[ ${#linux_fs_parts[@]} -eq 1 ]] && [[ -z ${linux_swap_parts[@]} ]] && [[ -n ${linux_home_parts[@]} ]]
 	then
-		dialog --msgbox "No partition with Linux filesystem selected. please select one from the partitions of the selected ${diskhave[0]} ${m_DisksTemp[*]}" 0 0
-		unset diskhave m_DisksTemp SelectedPartitions
-		MountViewPartitions Disks
-	elif [[ ${#linux_fs_parts[@]} -gt 1 ]]
+		dialog --yes-label "Back" --no-label "continue" --yesno "No swap partition selected. Recommended to have a swap partition. Continue without a swap partition or Go Back to the partition mount menu to select a swap partition?" 0 0
+		case $? in
+			0)
+				unset SelectedPartitions
+				MountViewPartitions Disks
+				;;
+			1) ConfirmMounts Disks SelectedPartitions ;;
+		esac
+
+	elif [[ ${#efi_parts[@]} -eq 1 ]] && [[ ${#linux_fs_parts[@]} -eq 1 ]] && [[ -z ${linux_home_parts[@]} ]] && [[ -z ${linux_swap_parts[@]} ]]
 	then
-		dialog --msgbox "Use one Linux filesystem partition. Using ${diskhave[0]} ${m_DisksTemp[*]}" 0 0
-		unset diskhave m_DisksTemp SelectedPartitions
-		MountViewPartitions Disks
-	elif [[ ${#efi_parts[@]} -eq 0 ]]
+		dialog --yes-label "Back" --no-label "Continue" --yesno "No swap and linux home partitions selected. Continue without them or go back to the partition selection menu?" 0 0
+		case $? in
+			0)
+				unset SelectedPartitions
+				MountViewPartitions Disks
+				;;
+			1) ConfirmMounts Disks SelectedPartitions ;;
+		esac
+
+
+	elif [[ ${#linux_swap_parts[@]} -ge 1 ]] && [[ ${#efi_parts[@]} -eq 1 ]] && [[ ${#linux_fs_parts[@]} -eq 1 ]] && [[ -z ${linux_home_parts[@]} ]]
 	then
-		dialog --msgbox "No EFI partition selected. Please Select one. (The EFI partition is basically where the kernel and the boot files reside)" 0 0
-		unset SelectedPartitions
-		MountViewPartitions Disks
-	elif [[ ${#efi_parts[@]} -gt 1 ]]
+
+		dialog --yes-label "Back" --no-label "continue" --yesno "No linux home or linux user's home partition selected. Continue without one of these partitions or Go Back to the partition mount menu to select a home partition?" 0 0
+		case $? in
+			0)
+				unset SelectedPartitions
+				MountViewPartitions Disks
+				;;
+			1) ConfirmMounts Disks SelectedPartitions ;;
+		esac
+
+	elif [[ ${#linux_swap_parts[@]} -ge 1 ]] && [[ ${#efi_parts[@]} -eq 1 ]] && [[ ${#linux_fs_parts[@]} -eq 1 ]] && [[ -n ${linux_home_parts[@]} ]]
 	then
-		dialog --msgbox "Use not more than one EFI partition (This is basically where the kernel and the boot files reside)" 0 0
-		unset SelectedPartitions
-		MountViewPartitions Disks
+		ConfirmMounts Disks SelectedPartitions
 	fi
 }
 
@@ -2898,5 +2971,5 @@ MainMenu(){
 	esac
 }
 
-trap '' 2
+# trap '' 2
 MainMenu "Partition Disk **" 3>&1 1>&2 2>&3
