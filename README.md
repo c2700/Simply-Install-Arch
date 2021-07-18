@@ -1,5 +1,8 @@
 Run from live ISO - Runs as Installer<br>Run from installed system - Runs as host setup script (Installation options will not show up)
 <br><br>
+chmod a+x Arch\ Installer.sh
+./Arch\ Installer.sh
+
 Just Run the script and go through the options. Also, when inserting a new disk you don't need to exit the script to let your newly inserted disk to show up in the disk menu. Just wait for a second or two and select the "Partition Disk\*\*" menu item to see the disk in the "Disk Selection Menu" And If you insert a disk when in the "Disk Selection Menu" just go back to the Main Menu and select "Partition Disk\*\*" Menu item<br><br><br>
 Plz Don't judge me for my horrible and confusing variable names and naming convention if you plan on reading the script 👀. It's something I came up with on the spot and only had a vague idea on how the script should behave.
 
