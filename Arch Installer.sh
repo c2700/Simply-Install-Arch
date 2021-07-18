@@ -248,7 +248,7 @@ ConfNet(){
 	then
 		unset NMList
 		dialog --msgbox "no networkmanagers available. Local networkmanager package will be installed" 0 0
-		pacman -Uvd --noconfirm --needed "$(ls networkmanager*)"
+		pacman -Uvd --noconfirm "$(ls networkmanager*)"
 		dialog --msgbox "enabling NetworkManager" 0 0
 		nmtui
 		MainMenu "Configure Network"
@@ -2904,6 +2904,16 @@ InstallArch(){
 				unset terminaleditorslist
 				if [[ -n "${editors[@]}" ]]
 				then
+					packages+=("\n")
+					packages+=("\n")
+					if [[ ${#editors[@]} -eq 1 ]]
+					then
+						packages+=("editor selected:")
+					elif [[ ${#editors[@]} -gt 1 ]]
+					then
+						packages+=("editors selected:")
+					fi
+					packages+=("\n")
 					packages+=("${editors[@]}")
 					unset editors
 				fi
@@ -2919,7 +2929,7 @@ InstallArch(){
 				;;
 		esac
 
-		dialog --msgbox "Extra packages that will be installed:\n${packages[*]}" 0 0
+		dialog --msgbox "Extra packages that will be installed:\n\npackages for cpu:\n${packages[*]}" 0 0
 
 		pacstrap /mnt "${packages[@]}"
 		case $? in
