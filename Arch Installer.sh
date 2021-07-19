@@ -582,7 +582,7 @@ ConfirmMounts(){
 	# dialog to format and mount all disks
 	if [[ -z ${Reformat_Disks[@]} ]] && ([[ "${Format_Disks[@]}" == "${m_MountPartitionsTextsTemp[@]}" ]] || [[ ${#Format_Disks[@]} -eq ${#m_MountPartitionsTextsTemp[@]} ]])
 	then
-		dialog --scrollbar --yes-label "Back" --no-label "Format & Mount" --title "partition mount confirmation" --yesno "1) +Format - Will format the partition with specified filesystem format. Reformatting will\n             not apply here.\n2) *Format - If the \"Re-Format\" is selected it will reformat the partition using existing filesystem\n             format wiping the partition.\nFormat:\n  Disk\n  \`-  Partition --> Size --> Partition Label --> Filesystem --> (+|*)Format --> MountPoint\n${MountPartsString[*]}\n\n" 20 110
+		dialog --scrollbar --yes-label "Back" --no-label "Format & Mount" --title "partition mount confirmation" --yesno "1) +Format - Will format the partition with specified filesystem format. Reformatting will\n             not apply here.\n2) *Format - If the \"Re-Format\" is selected it will reformat the partition using existing filesystem\n             format wiping the partition.\nFormat:\n  Disk (Disk Name - partition table type - Disk size>)\n  \`-  Partition --> Size --> Partition Label --> Filesystem --> (+|*)Format --> MountPoint\n${MountPartsString[*]}\n\n" 20 110
 		case $? in
 			0) PartitionDisk ;;
 			1)
@@ -597,7 +597,7 @@ ConfirmMounts(){
 	# dialog to reformat all unformatted disks and mount all disks
 	elif [[ -n ${Reformat_Disks[@]} ]] && [[ -n ${Format_Disks[@]} ]] && ([[ "${Reformat_Disks[@]}" != "${Format_Disks[@]}" ]] || [[ ${#Reformat_Disks[@]} -ne ${#Format_Disks[@]} ]])
 	then
-		dialog --scrollbar --ok-label "Back" --cancel-label "Format & Mount" --extra-button --extra-label "Re-Format & Mount" --title "partition mount confirmation" --yesno "1) +Format - Will format the partition with specified filesystem format. Reformatting will\n             not apply here.\n2) *Format - If the \"Re-Format\" is selected it will reformat the partition using existing filesystem.\n3) *(Format_1 -> Format_2) - Will reformat the existing \"Format_1\" filesystem with \"Format_2\" filesystem\n                             partition with different filesystem format.\n\nFormat:\n  Disk\n  \`-  Partition --> Size --> Partition Label --> Filesystem --> (+|*)Format --> MountPoint\n${MountPartsString[*]}\n\n" 20 110
+		dialog --scrollbar --ok-label "Back" --cancel-label "Format & Mount" --extra-button --extra-label "Re-Format & Mount" --title "partition mount confirmation" --yesno "1) +Format - Will format the partition with specified filesystem format. Reformatting will\n             not apply here.\n2) *Format - If the \"Re-Format\" is selected it will reformat the partition using existing filesystem.\n3) *(Format_1 -> Format_2) - Will reformat the existing \"Format_1\" filesystem with \"Format_2\" filesystem\n                             partition with different filesystem format.\n\nFormat:\n  Disk\n (<Disk Name> - <partition table> - <disk size>)  \`-  Partition --> Size --> Partition Label --> Filesystem --> (+|*)Format --> MountPoint\n${MountPartsString[*]}\n\n" 20 110
 		case $? in
 			0) PartitionDisk ;;
 			1)
@@ -1001,7 +1001,7 @@ MountPartitions(){
 		mountdialogstring="partitions mounted:\n${mounted[*]}${enabled_swap[*]}\npartitions already mounted:\n${already_mounted[*]}${swap_already_enabled[*]}"
 	fi
 	dialog --scrollbar --msgbox "$mountdialogstring" 10 90
-	# unset mountdialogstring
+	unset mountdialogstring
 }
 
 
@@ -1291,7 +1291,7 @@ WritePartitionTable(){
 	local PartTableTemp=()
 	local PartTable
 	PartTableTemp+=("GPT" "supports 128 primary partitions, mutiple bootloaders, storage more than 2TB")
-	PartTableTemp+=("MBR" "supports 4 primary partitions, max storage of 2TB")
+	PartTableTemp+=("MSDOS" "supports 4 primary partitions, max storage of 2TB")
 	PartTable="$(dialog --cancel-label "Back" --menu "Partition Table Menu\n\nSelect the partition Table to write" 0 0 0 "${PartTableTemp[@]}" 3>&1 1>&2 2>&3)"
 	case $? in
 		0)
@@ -1309,12 +1309,14 @@ WritePartitionTable(){
 				local m_pttype=$(lsblk /dev/$b -dnlo pttype)
 				if [[ -n $pttype ]] || [[ "$pttype" != "" ]] || [[ ! "$pttype" =~ " " ]]
 				then
-					parted "/dev/$b" mktable "$PartTable" ---pretend-input-tty <<< "y" &>/dev/null # | GuageMeter "Re-Writing $m_pttype with $PartTable on disk /dev/$b" 1
-					partprobe /dev/$b
+					UnMountPartitions
+					wipefs -a "/dev/$i" | GuageMeter "Wiping disk $b and setting $PartTable partition table" 1
+					parted "/dev/$b" mktable "$PartTable" ---pretend-input-tty <<< "y" &>/dev/null
+					partprobe /dev/$b &>/dev/null
 				elif [[ -z $pttype ]] || [[ "$pttype" == "" ]] || [[ "$pttype" =~ " " ]]
 				then
 					parted "/dev/$b" mktable "$PartTable" | GuageMeter "Setting $PartTable on disk /dev/$b" 1
-					partprobe /dev/$b
+					partprobe /dev/$b &>/dev/null
 				fi
 			done
 			dialog --msgbox "$PartTable Partiton Table set on ${diskhave[0]} ${m_DisksTemp[*]}" 0 0 3>&1 1>&2 2>&3
@@ -1386,7 +1388,7 @@ PartitionDisk(){
 		local REWRITE_PTTYPE_EXIT_CODE
 		if [[ ${#m_diskswithparttable[@]} -eq 1 ]]
 		then
-			dialog --yesno "disk ${m_diskswithparttable[*]} contains a partition table. Re-Write the disk with another partition table?" 0 0
+			dialog --yesno "disk ${m_diskswithparttable[*]} contains a partition table. Re-Write the ${diskshave[0]} with another partition table? This will wipe and delete all partitions and you will be taken to the disk editor menu to edit the selected disk." 0 0
 			REWRITE_PTTYPE_EXIT_CODE=$?
 		elif [[ ${#m_diskswithparttable} -gt 1 ]]
 		then
@@ -1395,11 +1397,14 @@ PartitionDisk(){
 			m_diskswithparttableTemp=($(TempArrayWithAmpersand m_diskswithparttableTemp))
 			local diskshave=($(TempArrayWithAmpersandHasHaveTexts ${#m_diskswithparttable[@]}))
 			REWRITE_PTTYPE_EXIT_CODE=$?
-			dialog --yesno "${diskshave[0]} ${m_diskswithparttableTemp[*]} contains partition tables. Re-Write the ${diskshave[0]} with another partition table?" 0 0
+			dialog --yesno "${diskshave[0]} ${m_diskswithparttableTemp[*]} contains partition tables. Re-Write the ${diskshave[0]} with another partition table? This will wipe and delete all partitions and you will be taken to the disk editor menu to edit the selected ${diskshave[0]}" 0 0
 			unset m_diskswithparttableTemp diskshave
 		fi
 		case $REWRITE_PTTYPE_EXIT_CODE in
-			0) WritePartitionTable m_diskswithparttable ;;
+			0) 
+				WritePartitionTable m_diskswithparttable
+				EditDisk Disks
+				;;
 		esac
 		unset REWRITE_PTTYPE_EXIT_CODE
 	fi
@@ -1881,7 +1886,6 @@ Install_UI(){
 	local wmopts=()
 	local deopts=()
 	local ui_opts=()
-	local xinitrc_string=""
 
 	ui_opts+=("Window Manager")
 	ui_opts+=("Just windows, statusbars, dmenus (minimal).No Graphics composition like on Gnome")
@@ -1918,44 +1922,36 @@ Install_UI(){
 						0) 
 							case $DE in
 								"KDE")
-									pkgs="$(pacman -Sg plasma kde-{applications,system,graphics,network,accessibility} kf{5,5-aids} | awk '{print $2}' | uniq)"
+									pkgs="sdd{m,m-kcm} $(pacman -Sg plasma kde-{applications,system,graphics,network,accessibility} kf{5,5-aids} | awk '{print $2}' | uniq)"
 									ui_type="KDE"
-									xinitrc_string="startplasma-x11"
 									;;
 								"Gnome")
 									ui_type="Gnome"
 									pkgs="gnome gnome-extra"
-									xinitrc_string=""
 									;;
 								"cinnamon")
 									ui_type="cinnamon"
-									pkgs="$(pacman -Ssq cinnamon)"
-									xinitrc_string=""
+									pkgs="lightdm $(pacman -Ssq cinnamon)"
 									;;
 								"deepin")
 									ui_type="deepin"
-									pkgs="deepi{n,n-extra}"
-									xinitrc_string=""
+									pkgs="sdd{m,m-kcm} deepi{n,n-extra}"
 									;;
 								"lxde")
 									ui_type="lxde"
-									pkgs="lxd{e,e-gtk3}"
-									xinitrc_string=""
+									pkgs="lightdm lxd{e,e-gtk3}"
 									;;
 								"lxqt")
 									ui_type="lxqt"
-									pkgs="lxqt"
-									xinitrc_string=""
+									pkgs="lightdm lxqt"
 									;;
 								"mate")
 									ui_type="mate"
-									pkgs="mat{e,e-extra}"
-									xinitrc_string="mate-session"
+									pkgs="lightdm mat{e,e-extra}"
 									;;
 								"xfce4")
 									ui_type="xfce4"
-									pkgs="xfce4"
-									xinitrc_string="startxfce4"
+									pkgs="lightdm xfce4"
 									;;
 							esac
 							;;
@@ -1972,27 +1968,22 @@ Install_UI(){
 								"i3")
 									ui_type="i3"
 									pkgs=$(pacman -Ssq i3 | grep -iv 'py\|7\|perl\|sway\|rust')
-									xinitrc_string="i3"
 									;;
 								"bspwm")
 									ui_type="bspwm"
-									pkgs="bspwm"
-									xinitrc_string=""
+									pkgs="lightdm bspwm"
 									;;
 								"awesome")
-									ui_type="awesome"
+									ui_type="lightdm awesome"
 									pkgs="awesom{e,e-terminal-fonts} vicious powerline "
-									xinitrc_string=""
 									;;
 								"xmonad")
 									ui_type="xmonad"
-									pkgs="xmonad xmonad-{contrib,utils}"
-									xinitrc_string=""
+									pkgs="lightdm xmonad xmonad-{contrib,utils}"
 									;;
 								"enlightenment")
 									ui_type="enlightenment"
-									pkgs="enlightenment ef{l,l-docs}"
-									xinitrc_string=""
+									pkgs="lightdm enlightenment ef{l,l-docs}"
 									;;
 							esac
 							;;
@@ -2734,7 +2725,7 @@ InstallArch(){
 		local packages=()
 
 		# variable holding regex form of packages
-		packages_temp=(base base-devel linu{x,x-{docs,headers}} grub efi{var,bootmgr} git wget lynx dkms broadcom-wl-dkms xf86-input-{libinput,synaptics} xf86-video-fbdev vim sudo)
+		packages_temp=(base base-devel linu{x,x-{docs,headers}} grub efi{var,bootmgr} os-prober git wget lynx dkms broadcom-wl-dkms xf86-input-{libinput,synaptics} xf86-video-fbdev vim sudo)
 
 		# expanding the regex package variable for display in dialog
 		for i in "${packages_temp[@]}"
@@ -2745,7 +2736,7 @@ InstallArch(){
 
 		# installing system
 		pacman-key --init
-		pacstrap /mnt "${packages[@]}"
+		pacstrap /mnt "${packages[@]}" --needed
 		case $? in
 			0)
 				# installing grub 
@@ -2778,19 +2769,21 @@ InstallArch(){
 					fi
 				done
 
-				local bootdisktype=$(lsblk "/dev/$mountptdev" -dnlo tran,rm)
+				local bootdisktype=$(lsblk "/dev/$mountptdev" -dnlo tran,rm | sed 's/    / /g')
 				local GRUB_INSTALL_EXIT_CODE
+
+				echo "${GRUB_INSTALL_EXIT_CODE[@]}"
 
 				# check if grub install device is removable usb
 				if [[ $bootdisktype == "usb 1" ]]
 				then
-					grub-install -v --boot-directory="/mnt/boot" --bootloader-id "$bootloaderid" --efi-directory="/mnt/boot" --recheck --removable --target x86_efi-efi | GuageMeter "Installing Grub to USB drive $mountptdev" 1
+					arch-chroot /mnt grub-install -v --boot-directory="/boot" --bootloader-id "$bootloaderid" --efi-directory="/boot" --recheck --removable --target x86_64-efi
 					GRUB_INSTALL_EXIT_CODE=$?
 
 				# check if grub install device is internal drive
 				elif [[ $bootdisktype == "sata 0" ]] || [[ $bootdisktype == "ata 0" ]]
 				then
-					grub-install -v --boot-directory="/mnt/boot" --bootloader-id "$bootloaderid" --efi-directory="/mnt/boot" --recheck --target x86_efi-efi | GuageMeter "Installing Grub to internal disk" 1
+					arch-chroot /mnt grub-install -v --boot-directory="/boot" --bootloader-id "$bootloaderid" --efi-directory="/boot" --recheck --target x86_64-efi
 					GRUB_INSTALL_EXIT_CODE=$?
 				fi
 				unset bootdisktype mountptdev
@@ -2803,7 +2796,14 @@ InstallArch(){
 						then
 							genfstab -U "/mnt" > "/mnt/etc/fstab"
 							case $? in
-								0) dialog --msgbox "Created fstab entry. you can generate the fstab of your disk by executing \"genfstab -U /mnt > /mnt/etc/fstab\" (if anything went wrong with the fstab entry i.e.)" 0 0 ;;
+								0)
+									dialog --msgbox "Created fstab entry. you can generate the fstab of your disk by executing \"genfstab -U /mnt > /mnt/etc/fstab\" (if anything went wrong with the fstab entry i.e.)" 0 0
+									arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg
+									case $? in
+										0) dialog --msgbox "generated grub config file and stored it in \"/mnt/boot/grub/grub.cfg\"" 0 0 ;;
+										*) dialog --msgbox "failed to generatea grub config file" 0 0 ;;
+									esac
+									;;
 								*) dialog --msgbox "Failed to create fstab entry" 0 0 ;;
 							esac
 						elif [[ ! -f "/mnt/etc/fstab" ]]
@@ -2818,7 +2818,10 @@ InstallArch(){
 						fi
 						MainMenu "Install Arch *"
 						;;
-					1) dialog --msgbox "could not install grub-bootloader. you execute can \'grub-install --help | less\' on one tty and run \'grub-install <options>\' on another tty. \n\nDO NOT USE THE \'--force\' option.You can open tty's by pressing ctrl+alt+<F1>-<F6> with each function key corresponding to their tty id\n\n Go back to the Main Menu or exit to the tty?" ;;
+					1) 
+						dialog --msgbox "could not install grub-bootloader. you execute can \"grub-install --help | less\" on one tty and run \"grub-install <options>\" on another tty. \n\nDO NOT USE THE \"--force\" option.You can open tty's by pressing ctrl+alt+<F1>-<F6> with each function key corresponding to their tty id\n\n Go back to the Main Menu or exit to the tty?" 0 0
+						MainMenu "Install Arch *"
+						;;
 				esac
 				;;
 			*)
@@ -2862,6 +2865,7 @@ InstallArch(){
 
 
 		local packages=()
+		local PackagesDialogText=()
 		# array of packages based on the cpu
 		if [[ $cpu_vendor == "AuthenticAMD" ]]
 		then
@@ -2886,6 +2890,7 @@ InstallArch(){
 			unset intel_gpu
 		fi
 
+		PackagesDialogText=("${packages[@]}")
 		# terminal text editors array for use in dialog
 		local terminaleditorslist=()
 		terminaleditorslist=("vim" "vim" off)
@@ -2904,17 +2909,19 @@ InstallArch(){
 				unset terminaleditorslist
 				if [[ -n "${editors[@]}" ]]
 				then
-					packages+=("\n")
-					packages+=("\n")
+					packages+=("${editors[@]}")
+					PackagesDialogText+=("editor selected:")
+					PackagesDialogText+=("\n")
+					PackagesDialogText+=("\n")
 					if [[ ${#editors[@]} -eq 1 ]]
 					then
-						packages+=("editor selected:")
+						PackagesDialogText+=("editor selected:")
 					elif [[ ${#editors[@]} -gt 1 ]]
 					then
-						packages+=("editors selected:")
+						PackagesDialogText+=("editors selected:")
 					fi
-					packages+=("\n")
-					packages+=("${editors[@]}")
+					PackagesDialogText+=("\n")
+					PackagesDialogText+=("${editors[@]}")
 					unset editors
 				fi
 				;;
@@ -2929,7 +2936,8 @@ InstallArch(){
 				;;
 		esac
 
-		dialog --msgbox "Extra packages that will be installed:\n\npackages for cpu:\n${packages[*]}" 0 0
+		dialog --msgbox "Extra packages that will be installed:\n\npackages for cpu:\n${PackagesDialogText[*]}" 0 0
+		unset PackagesDialogText
 
 		pacstrap /mnt "${packages[@]}"
 		case $? in
@@ -3088,15 +3096,20 @@ MainMenu(){
 					;;
 
 				"Configure Host +"|"Configure Host")
+					arch-chroot /mnt echo "nice" &>/dev/null
+					local ARCH_CHROOT_EXIT_CODE=$?
 					# installed base but on live || not installed base but on live
 					if ( [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( mountpoint /mnt &>/dev/null ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot &>/dev/null ) ) || ( ( mountpoint / &>/dev/null ) && ( mountpoint /boot &>/dev/null ) )
 					then
-						ConfHost "set hostname *"
+						case $ARCH_CHROOT_EXIT_CODE in
+							0) ConfHost "set hostname *" ;;
+							1) dialog --msgbox "Cannot configure host without an installed Linux System" 0 0 ;;
+						esac
 
 					# running live not installed system
 					elif [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( ! mountpoint /mnt &>/dev/null ) && [[ ! -d /mnt/boot ]]
 					then
-						dialog --msgbox "Cannot configure host without a Linux System installed" 0 0
+						dialog --msgbox "No Linux install compatible partitions mounted" 0 0
 					fi
 					MainMenu "Configure Host +"
 					;;
@@ -3104,14 +3117,30 @@ MainMenu(){
 					dialog --yesno "Reboot the machine" 0 0
 					case $? in
 						0)
-							dialog --yesno "save basic customization instructions in the arch partition? It will be stored in the /home/customize.txt file of your arch install location. use less, more, cat or a text editor like vim, vi, emacs or nano to view the file" 0 0
+							arch-chroot /mnt echo "nice" &>/dev/null
 							case $? in
+								0)
+									local rootpass="$(grep -i root /mnt/etc/shadow | sed 's/:/ : /g' | awk '{ print $3 }')"
+									if [[ $rootpass == "*" ]]
+									then
+										dialog --msgbox "Root password not set. Please Set a root password" 0 0	
+										SetRootPassword
+									elif [[ $rootpass != "*" ]]
+									then
+										reboot now -f
+									fi
+									;;
 								1)
-									dialog --msgbox "saved basic customization instructions in /mnt/home/customize.txt" 0 0
-									echo -e "change hostname - vim /etc/hostname\ncreate users - useradd -m\n<username> -G power,storage,wheel -g users\nset or change user password - passwd <username>\nset or change user password - passwd\nset locale - vim /etc/locale.gen, comment '#' to ignore and uncomment to generate or use the locale\n\n(DE - Desktop Environment, WM - Window Manager) to install a DE - install a minimal DE package or the group using the '-g' argument in pacman and a lockscreen manager. enable the lockscreen manager using the systemctl tool and write the DE session name in the /home/<user name>/.xinitrc file\n to install a WM - install a WM and the lockscreen manager will pick it up (if enabled)\nset timezone - soft link (ln -sf) /usr/share/zoneinfo/<continent>/<region> /etc/localtime execute hwclock -w -v (-v is optional if you prefer verbosity (basically more details of what's going on ))" > /mnt/home/customize.txt
+									dialog --yesno "save basic customization instructions in the arch partition? It will be stored in the /home/customize.txt file of your arch install location. use less, more, cat or a text editor like vim, vi, emacs or nano to view the file" 0 0
+									case $? in
+										0)
+											dialog --msgbox "saved basic customization instructions in /mnt/home/customize.txt" 0 0
+											echo -e "change hostname - vim /etc/hostname\ncreate users - useradd -m\n<username> -G power,storage,wheel -g users\nset or change user password - passwd <username>\nset or change user password - passwd\nset locale - vim /etc/locale.gen, comment '#' to ignore and uncomment to generate or use the locale\n\n(DE - Desktop Environment, WM - Window Manager) to install a DE - install a minimal DE package or the group using the '-g' argument in pacman and a lockscreen manager. enable the lockscreen manager using the systemctl tool and write the DE session name in the /home/<user name>/.xinitrc file\n to install a WM - install a WM and the lockscreen manager will pick it up (if enabled)\nset timezone - soft link (ln -sf) /usr/share/zoneinfo/<continent>/<region> /etc/localtime execute hwclock -w -v (-v is optional if you prefer verbosity (basically more details of what's going on ))" > /mnt/home/customize.txt
+											;;
+									esac
+									reboot now -f
 									;;
 							esac
-							reboot now -f
 							;;
 						1) MainMenu "Reboot" ;;
 					esac
@@ -3122,5 +3151,132 @@ MainMenu(){
 	esac
 }
 
+Main(){
+	clear 
+
+	# installed base but on live || not installed base but on live
+	if ( [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( mountpoint /mnt &>/dev/null ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot &>/dev/null ) ) || ( [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( ! mountpoint /mnt &>/dev/null ) && [[ ! -d /mnt/boot ]] )
+	then
+		local needed_components_absent=()
+
+		which dialog &>/dev/null
+		local DIALOG_PRESENT_EXIT_CODE=$?
+
+		efivar -l &>/dev/null
+		local EFI_VAR_EXIT_CODE=$?
+
+		case $DIALOG_PRESENT_EXIT_CODE in
+			1)
+				case $EFI_VAR_EXIT_CODE in
+					1)
+						echo -e "Installer will work only on EFI Systems. Please boot into EFI mode\n\n"
+						read -p "press any key to exit the installer" -n1
+						exit
+						;;
+				esac
+				;;
+			0)
+				case $EFI_VAR_EXIT_CODE in
+					1)
+						dialog --msgbox "Installer will work only on EFI Systems. Please boot into EFI mode. Exiting the Installer" 0 0
+						reset
+						exit
+						;;
+				esac
+				;;
+		esac
+
+		case $DIALOG_PRESENT_EXIT_CODE in
+			0) 
+				dialog --msgbox "check for necessarry installation components" 0 0 
+				clear
+				;;
+			1) echo -e "\nchecking for necessarry arch installation components\n" ;;
+		esac
+
+		case $DIALOG_PRESENT_EXIT_CODE in
+			1)
+				for i in wget git grub "os-prober"
+				do
+					pacman -Qqs "$i" &>/dev/null
+					case $? in
+						0|127) echo "$i - present" ;;
+						1)
+							echo "$i - absent"
+							needed_components_absent+=("$i")
+							;;
+					esac
+				done
+				echo ""
+				read -p "press any key to continue" -n1
+				;;
+			0)
+				for i in wget git grub "os-prober"
+				do
+					pacman -Qqs "$i" &>/dev/null
+					case $? in
+						1) needed_components_absent+=("$i") ;;
+					esac
+				done
+				;;
+		esac
+		clear
+
+		if [[ -n ${needed_components_absent[@]} ]]
+		then
+			local needed_components_absentTemp=("$(TempArrayWithAmpersand needed_components_absent)")
+			case $DIALOG_PRESENT_EXIT_CODE in
+				0) dialog --ok-label "Install" --msgbox "necessarry arch installation components to install:\n${needed_components_absentTemp[*]}" 0 0 ;;
+				1)
+					echo -e "\nnecessarry arch installation components to install:\n${needed_components_absentTemp[*]}\n"
+					read -p "press any key to install" -n1
+					;;
+			esac
+			clear
+			pacman-key --init
+			pacman -Sy "${needed_components_absent[@]}" --noconfirm
+		elif [[ -z ${needed_components_absent[@]} ]]
+		then
+			case $DIALOG_PRESENT_EXIT_CODE in
+				0) dialog --msgbox "necessarry installation components are present" 0 0 ;;
+				1) echo "necessarry installation components are present" ;;
+			esac
+		fi
+		unset needed_components_absent needed_components_absentTemp
+		clear
+		MainMenu "Partition Disk **" 3>&1 1>&2 2>&3
+
+	# installed & running base
+	elif ( ( ! mountpoint /mnt &>/dev/null ) || ( [[ ! -d /mnt/boot ]] && ( ! mountpoint /mnt/boot &>/dev/null ) ) ) && ( [[ ! -d /run/archiso/airootfs ]] && [[ ! -d /run/archiso/bootmnt ]] ) && ( ( mountpoint / &>/dev/null ) && ( mountpoint /boot &>/dev/null ) )
+	then
+		local uid=$(id -u)
+		# pacman -Qs dialog &>/dev/null
+		which dialog &>/dev/null
+		DIALOG_CHECK_EXIT_CODE=$?
+		case $DIALOG_CHECK_EXIT_CODE in
+			0)
+				if [[ $uid -ne 0 ]]
+				then
+					unset uid
+					dialog --msgbox "please run this script as root to configure this system. Exiting script" 0 0
+					clear
+					reset
+					exit
+				fi
+				;;
+			1)
+				if [[ $uid -ne 0 ]]
+				then
+					unset uid
+					echo "\E[1m\t\t\t\t\t\t\t\tplease run this script as root to configure this system. Exiting script\E[m"
+					clear
+					reset
+					exit
+				fi
+		esac
+		MainMenu "Partition Disk **" 3>&1 1>&2 2>&3
+	fi
+}
+
 trap '' 2
-MainMenu "Partition Disk **" 3>&1 1>&2 2>&3
+Main
