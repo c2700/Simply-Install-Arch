@@ -6,6 +6,8 @@ cd Simply-Install-Arch<br>
 chmod a+x Arch\ Installer.sh<br>
 ./Arch\ Installer.sh<br><br>
 
+<br>As a heads up if you have rewritten the partition table (through the installer i.e.) and find mismatched partition information, don't worry about it. Manually wipe it using "wipefs -a" on the disk you want to wipe and partition it again but few partitions are of the same size and block order as the previous partitions then those partitions would have the same filesystem as it had before the wipe. "wipefs -a" the disk you want to wipe, partition the disk with few partitions of the same size and block partition order as before the wipe, lsblk the disk you wiped and partitioned and see for yourself.
+
 Just Run the script and go through the options. Also, when inserting a new disk you don't need to exit the script to let your newly inserted disk to show up in the disk menu. Just wait for a second or two and select the "Partition Disk\*\*" menu item to see the disk in the "Disk Selection Menu" And If you insert a disk when in the "Disk Selection Menu" just go back to the Main Menu and select "Partition Disk\*\*" Menu item<br><br><br>
 Plz Don't judge me for my horrible and confusing variable names and naming convention if you plan on reading the script 👀. It's something I came up with on the spot and only had a vague idea on how the script should behave.<br><br><br>
 
