@@ -21,7 +21,7 @@ use one of these tools cfdisk, cgdisk, fdisk, gdisk, sfdisk. enter partition cod
 
 4) check network connection (ping a wan service first). wifi-menu or any other available networkmanager
 5) open /etc/pacman.conf and uncomment the [multilib] line and the line below it
-6) pacman -Sy
+6) pacman -Sy (to refresh the repos)
 7) (base systems) pacstrap /mnt/ base base-devel devel linux linux-{headers,docs} networkmanager iw net-tools dkms broadcom-wl-dkms vim pulseaudio efi{var,bootmgr} grub sudo os-prober
 8) (optional. can be done after installation as well but on live use pacstrap) install a Desktop environment or window manager and a soundmanager.
 	Desktop environment:
