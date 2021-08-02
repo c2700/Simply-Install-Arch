@@ -2629,21 +2629,29 @@ SetRootPassword(){
 
 ConfHost(){
 	# $1 - menu option item
+	# $2 - config host option string
+
 	local default_menu_opt=$1
+	local ConfigureHostString="$2"
 
 	local usersTemp=""
 
 	# host config options for use in dialog
-	local HostOpt=("set hostname *" "set your computer name")
+	local HostOpt=()
+	HostOpt=("set hostname *" "set your computer name")
 	HostOpt+=("set Locale *" "set your computer language")
 	HostOpt+=("set timezone" "configure which timezone you are in")
 	HostOpt+=("add users **" "add users")
 	HostOpt+=("root password **" "set root password")
 
+	if [[ ! "$(tty)" =~ "tty" ]]
+	then
+		HostOpt+=("Set Bash Prompt" "File that's used to tell how the terminal prompt should look like")
+	fi
+
 	# when base is installed and script is running from live disk
 	if ( ( ! mountpoint /mnt &>/dev/null ) || ( [[ ! -d /mnt/boot ]] && ( ! mountpoint /mnt/boot &>/dev/null ) ) ) && ( [[ ! -d /run/archiso/airootfs ]] && [[ ! -d /run/archiso/bootmnt ]] ) && ( ( mountpoint / &>/dev/null ) && ( mountpoint /boot &>/dev/null ) )
 	then
-		HostOpt+=("Set Bash Prompt" "File that's used to tell how the terminal prompt should look like")
 		usersTemp=($(cat /etc/passwd | sed 's/:/ : /g' | grep -iG '[1-9][0-9][0-9][0-9]\d*' | grep -iv nobody | awk '{ print $1 }'))
 
 	# when base is installed and script is running from installed device
@@ -2706,7 +2714,7 @@ ConfHost(){
 					;;
 			esac
 			;;
-		1) MainMenu "Configure Host +" ;;
+		1) MainMenu "$ConfigureHostString" ;;
 	esac
 }
 ############################################## end of host configuration ###################################################
@@ -3080,7 +3088,8 @@ MainMenu(){
 					;;
 				"Configure Network **"|"Configure Network")
 					ConfNet
-					MainMenu "Configure Network **"
+					MainMenu "$menuitem"
+					# MainMenu "Configure Network **"
 					;;
 
 				"Install Arch *")
@@ -3096,22 +3105,27 @@ MainMenu(){
 					;;
 
 				"Configure Host +"|"Configure Host")
-					arch-chroot /mnt echo "nice" &>/dev/null
-					local ARCH_CHROOT_EXIT_CODE=$?
 					# installed base but on live || not installed base but on live
 					if ( [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( mountpoint /mnt &>/dev/null ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot &>/dev/null ) ) || ( ( mountpoint / &>/dev/null ) && ( mountpoint /boot &>/dev/null ) )
 					then
-						case $ARCH_CHROOT_EXIT_CODE in
-							0) ConfHost "set hostname *" ;;
-							1) dialog --msgbox "Cannot configure host without an installed Linux System" 0 0 ;;
+						which arch-chroot &>/dev/null
+						case $? in
+							0)
+								arch-chroot /mnt echo "arch successfully installed" &>/dev/null
+								case $? in
+									0) ConfHost "set hostname *" "$menuitem" ;;
+									1) dialog --msgbox "Cannot configure host without an installed Linux System" 0 0 ;;
+								esac
+								;;
+							1) ConfHost "set hostname *" "$menuitem" ;;
 						esac
 
 					# running live not installed system
 					elif [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( ! mountpoint /mnt &>/dev/null ) && [[ ! -d /mnt/boot ]]
 					then
-						dialog --msgbox "No Linux install compatible partitions mounted" 0 0
+						dialog --msgbox "No Linux install compatible partitions mounted/found" 0 0
 					fi
-					MainMenu "Configure Host +"
+					MainMenu "$menuitem"
 					;;
 				"Reboot")
 					dialog --yesno "Reboot the machine" 0 0
