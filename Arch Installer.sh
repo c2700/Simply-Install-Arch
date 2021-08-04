@@ -2126,7 +2126,10 @@ SetLocale(){
 			dialog --msgbox "Set Locales :$LocaleFormat" 0 0
 			unset LocaleFormat
 			;;
-		1) ConfHost "set Locale *" ;;
+		1) 
+			rm -rfv locales.txt &>/dev/null
+			ConfHost "set Locale *"
+			;;
 		3)
 			# when base is installed and script is running from live disk
 			if [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( mountpoint /mnt &>/dev/null ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot &>/dev/null )
@@ -2197,30 +2200,41 @@ SetLocale(){
 
 
 SetHostName(){
-	local hostname="$(dialog --inputbox "Set host name or eave blank to set default name \"arch\"" 0 0 3>&1 1>&2 2>&3)"
 
-	if [[ -z $hostname ]]
-	then
-		hostname="arch"
-	fi
+	local ConfHostMenuItemString
 
-	# when base is installed and script is running from live disk
-	if [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( mountpoint /mnt &>/dev/null ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot &>/dev/null )
-	then
-		echo "$hostname" > "/mnt/etc/hostname"
-		echo -e "127.0.0.1\tlocalhost\n      ::1\tlocalhost" > "/mnt/etc/hosts"
-
-	# when base is installed and script is running from installed device
-	elif ( ( ! mountpoint /mnt &>/dev/null ) || ( [[ ! -d /mnt/boot ]] && ( ! mountpoint /mnt/boot &>/dev/null ) ) ) && ( [[ ! -d /run/archiso/airootfs ]] && [[ ! -d /run/archiso/bootmnt ]] ) && ( ( mountpoint / &>/dev/null ) && ( mountpoint /boot &>/dev/null ) )
-	then
-		echo "$hostname" > "/etc/hostname"
-		echo -e "127.0.0.1\tlocalhost\n      ::1\tlocalhost" > "/mnt/etc/hosts"
-	fi
-
-	dialog --yes-label "OK" --no-label "Back" --yesno "set \"$hostname\" as hostname. You can change the hostname in the /etc/hostname file (if you are not in live mode i.e.) or if you are in live mode then edit the /mnt/etc/hostname file. To reset hostname press \"Back\"" 0 0
+	local hostname
+	hostname="$(dialog --cancel-label "Back" --inputbox "Set host name or leave blank to set default name \"arch\"" 0 0 3>&1 1>&2 2>&3)"
 	case $? in
-		1) SetHostName ;;
+		0)
+			if [[ -z $hostname ]]
+			then
+				hostname="arch"
+			fi
+
+			# when base is installed and script is running from live disk
+			if [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( mountpoint /mnt &>/dev/null ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot &>/dev/null )
+			then
+				echo "$hostname" > "/mnt/etc/hostname"
+				echo -e "127.0.0.1\tlocalhost\n      ::1\tlocalhost" > "/mnt/etc/hosts"
+				ConfHostMenuItemString="Configure Host +"
+
+			# when base is installed and script is running from installed device
+			elif ( ( ! mountpoint /mnt &>/dev/null ) || ( [[ ! -d /mnt/boot ]] && ( ! mountpoint /mnt/boot &>/dev/null ) ) ) && ( [[ ! -d /run/archiso/airootfs ]] && [[ ! -d /run/archiso/bootmnt ]] ) && ( ( mountpoint / &>/dev/null ) && ( mountpoint /boot &>/dev/null ) )
+			then
+				ConfHostMenuItemString="Configure Host"
+				echo "$hostname" > "/etc/hostname"
+				echo -e "127.0.0.1\tlocalhost\n      ::1\tlocalhost" > "/mnt/etc/hosts"
+			fi
+
+			dialog --yes-label "OK" --no-label "Back" --yesno "set \"$hostname\" as hostname. You can change the hostname in the /etc/hostname file (if you are not in live mode i.e.) or if you are in live mode then edit the /mnt/etc/hostname file. To reset hostname press \"Back\"" 0 0
+			case $? in
+				1) SetHostName ;;
+			esac
+			;;
+		1) ConfHost "$ConfHostMenuItemString"
 	esac
+
 }
 
 SetPassword(){
@@ -2233,7 +2247,8 @@ SetPassword(){
 	local NewPassword
 	NewPassword="$(dialog --passwordbox "you won't see the password characters as they are typed\n\nset password for username $username" 0 0 3>&1 1>&2 2>&3)"
 	case $? in
-		1) add_users ;;
+		1) ConfHost "add users" ;;
+		# 1) add_users ;;
 		0)
 			if [[ -z $NewPassword ]]
 			then
@@ -2300,7 +2315,7 @@ SetPassword(){
 
 add_users(){
 	local username
-	username="$(dialog --inputbox "Username" 0 0 3>&1 1>&2 2>&3)"
+	username="$(dialog --cancel-button "Back" --inputbox "Username" 0 0 3>&1 1>&2 2>&3)"
 	case $? in
 		1) ConfHost "add users **" ;;
 		0)
@@ -2326,11 +2341,11 @@ add_users(){
 
 			case $USERADD_EXIT_CODE in
 				0) 
-					dialog --msgbox "Created user $username" 0 0
+					dialog --msgbox "Created user \"$username\"" 0 0
 					SetPassword $username
 					;;
 				9)
-					dialog --yesno "User $username already exists. Reset password?" 0 0
+					dialog --yesno "User \"$username\" already exists. Reset password?" 0 0
 					case $? in
 						0) SetPassword $username ;;
 					esac
@@ -2524,56 +2539,142 @@ RemoveUsers(){
 		done
 
 		local UsersToDelete=()
-		UsersToDelete=($(dialog --no-tags --checklist "Available Users" 0 0 0 "${AvailableUsers[@]}" 3>&1 1>&2 2>&3))
-		# when base is installed and script is running from live disk
-		if [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( mountpoint /mnt &>/dev/null ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot &>/dev/null )
-		then
-			for n in ${UsersToDelete[@]}
-			do
-				arch-chroot /mnt userdel -rf $n &>/dev/null
-				case $? in
-					0) DeletedUsers+=("$n") ;;
-					1) UsersFailedToBeDeleted+=("$n") ;;
-				esac
-			done
+		UsersToDelete=($(dialog --cancel-button "Back" --no-tags --checklist "Available Users" 0 0 0 "${AvailableUsers[@]}" 3>&1 1>&2 2>&3))
+		case $? in
+			1) ConfHost "Remove Users" ;;
+			0)
+				set -xvB
+				# when base is installed and script is running from live disk
+				if [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( mountpoint /mnt &>/dev/null ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot &>/dev/null )
+				then
+					if [[ ${#UsersToDelete[@]} -ge 1 ]]
+					then
+						for n in ${UsersToDelete[@]}
+						do
+							arch-chroot /mnt userdel -rf $n &>/dev/null
+							case $? in
+								0) DeletedUsers+=("$n") ;;
+								1) UsersFailedToBeDeleted+=("$n") ;;
+							esac
+						done
 
-		# when base is installed and script is running from installed device
-		elif ( ( ! mountpoint /mnt &>/dev/null ) || ( [[ ! -d /mnt/boot ]] && ( ! mountpoint /mnt/boot &>/dev/null ) ) ) && ( [[ ! -d /run/archiso/airootfs ]] && [[ ! -d /run/archiso/bootmnt ]] ) && ( ( mountpoint / &>/dev/null ) && ( mountpoint /boot &>/dev/null ) )
-		then
-			for n in ${UsersToDelete[@]}
-			do
-				userdel -rf $n &>/dev/null
-				case $? in
-					0) DeletedUsers+=("$n") ;;
-					1) UsersFailedToBeDeleted+=("$n") ;;
-				esac
-			done
-		fi
+						local UserDeletedString=""
+						local UsersFailedString=""
 
-		local userDeletedText=""
-		if [[ -n ${DeletedUsers[@]} ]] && [[ -z ${UsersFailedToBeDeleted[@]} ]]
-		then
-			local DeletedUsersTempTxt=("${DeletedUsers[*]}")
-			DeletedUsersTempTxt=("$(TempArrayWithAmpersand DeletedUsersTempTxt)")
-			userDeletedText="Deleted ${DeletedUsersTempTxt[*]}"
-			unset DeletedUsersTempTxt
-		elif [[ -z ${DeletedUsers[@]} ]] && [[ -n ${UsersFailedToBeDeleted[@]} ]]
-		then
-			userDeletedText="Failed to delete all users"
-		elif [[ -z ${DeletedUsers[@]} ]] && [[ -z ${UsersFailedToBeDeleted[@]} ]]
-		then
-			local DeletedUsersTempTxt=("${DeletedUsers[*]}")
-			DeletedUsersTempTxt=("$(TempArrayWithAmpersand DeletedUsersTempTxt)")
+						if [[ ${#DeletedUsers[@]} -eq 1 ]]
+						then
+							UserDeletedString="user"
+						elif [[ ${#DeletedUsers[@]} -gt 1 ]]
+						then
+							UserDeletedString="users"
+						fi
 
-			local UsersFailedToBeDeletedTempTxt=("${UsersFailedToBeDeleted[*]}")
-			UsersFailedToBeDeletedTempTxt=("$(TempArrayWithAmpersand UsersFailedToBeDeletedTempTxt)")
-			
-			userDeletedText="Deleted ${DeletedUsersTempTxt[*]} ${UsersFailedToBeDeletedTempTxt[*]}"
+						if [[ ${#UsersFailedToBeDeleted[@]} -eq 1 ]]
+						then
+							UsersFailedString="user"
+						elif [[ ${#UsersFailedToBeDeleted[@]} -gt 1 ]]
+						then
+							UsersFailedString="users"
+						fi
 
-			unset DeletedUsersTempTxt UsersFailedToBeDeletedTempTxt
-		fi
-		dialog --msgbox "Deleted $userDeletedText " 0 0
-		unset UsersToDelete userDeletedText DeletedUsers UsersFailedToBeDeleted
+						local userDeletedText=""
+						if [[ ${#DeletedUsers[@]} -ge 1 ]] && [[ ${#UsersFailedToBeDeleted[@]} -eq 0 ]]
+						then
+							local DeletedUsersTempTxt=("${DeletedUsers[*]}")
+							DeletedUsersTempTxt=("$(TempArrayWithAmpersand DeletedUsersTempTxt)")
+							userDeletedText="Deleted $UserDeletedString ${DeletedUsersTempTxt[*]}"
+							unset DeletedUsersTempTxt
+						elif [[ ${#DeletedUsers[@]} -eq 0 ]] && [[ ${#UsersFailedToBeDeleted[@]} -ge 1 ]]
+						then
+							userDeletedText="Failed to delete all users"
+						elif [[ ${#DeletedUsers[@]} -eq 0 ]] && [[ ${#UsersFailedToBeDeleted[@]} -eq 0 ]]
+						then
+							local DeletedUsersTempTxt=("${DeletedUsers[*]}")
+							DeletedUsersTempTxt=("$(TempArrayWithAmpersand DeletedUsersTempTxt)")
+
+							local UsersFailedToBeDeletedTempTxt=("${UsersFailedToBeDeleted[*]}")
+							UsersFailedToBeDeletedTempTxt=("$(TempArrayWithAmpersand UsersFailedToBeDeletedTempTxt)")
+
+							userDeletedText="Deleted $UserDeletedString ${DeletedUsersTempTxt[*]}\n\nFailed to delete $UsersFailedString ${UsersFailedToBeDeletedTempTxt[*]}"
+
+							unset DeletedUsersTempTxt UsersFailedToBeDeletedTempTxt
+						fi
+						dialog --msgbox "$userDeletedText " 0 0
+						unset UsersToDelete userDeletedText DeletedUsers UsersFailedToBeDeleted
+
+					elif [[ ${#UsersToDelete[@]} -eq 0 ]]
+					then
+						dialog --msgbox "No Users Removed" 0 0
+					fi
+
+				# when base is installed and script is running from installed device
+				elif ( ( ! mountpoint /mnt &>/dev/null ) || ( [[ ! -d /mnt/boot ]] && ( ! mountpoint /mnt/boot &>/dev/null ) ) ) && ( [[ ! -d /run/archiso/airootfs ]] && [[ ! -d /run/archiso/bootmnt ]] ) && ( ( mountpoint / &>/dev/null ) && ( mountpoint /boot &>/dev/null ) )
+				then
+					if [[ ${#UsersToDelete[@]} -ge 1 ]]
+					then
+						for n in ${UsersToDelete[@]}
+						do
+							userdel -rf $n &>/dev/null
+							case $? in
+								0) DeletedUsers+=("$n") ;;
+								1) UsersFailedToBeDeleted+=("$n") ;;
+							esac
+						done
+						read -p "continue" -n1
+
+						local UserDeletedString=""
+						local UsersFailedString=""
+
+						if [[ ${#DeletedUsers[@]} -eq 1 ]]
+						then
+							UserDeletedString="user"
+						elif [[ ${#DeletedUsers[@]} -gt 1 ]]
+						then
+							UserDeletedString="users"
+						fi
+
+						if [[ ${#UsersFailedToBeDeleted[@]} -eq 1 ]]
+						then
+							UsersFailedString="user"
+						elif [[ ${#UsersFailedToBeDeleted[@]} -gt 1 ]]
+						then
+							UsersFailedString="users"
+						fi
+						
+
+						local userDeletedText=""
+						if [[ ${#DeletedUsers[@]} -ge 1 ]] && [[ ${#UsersFailedToBeDeleted[@]} -eq 0 ]]
+						then
+							local DeletedUsersTempTxt=("${DeletedUsers[*]}")
+							DeletedUsersTempTxt=("$(TempArrayWithAmpersand DeletedUsersTempTxt)")
+							userDeletedText="Deleted $UserDeletedString ${DeletedUsersTempTxt[*]}"
+							unset DeletedUsersTempTxt
+						elif [[ ${#DeletedUsers[@]} -eq 0 ]] && [[ ${#UsersFailedToBeDeleted[@]} -ge 1 ]]
+						then
+							userDeletedText="Failed to delete all users"
+						elif [[ ${DeletedUsers[@]} -ge 1 ]] && [[ ${#UsersFailedToBeDeleted[@]} -ge 1 ]]
+						then
+							local DeletedUsersTempTxt=("${DeletedUsers[*]}")
+							DeletedUsersTempTxt=("$(TempArrayWithAmpersand DeletedUsersTempTxt)")
+
+							local UsersFailedToBeDeletedTempTxt=("${UsersFailedToBeDeleted[*]}")
+							UsersFailedToBeDeletedTempTxt=("$(TempArrayWithAmpersand UsersFailedToBeDeletedTempTxt)")
+							
+							userDeletedText="Deleted $UserDeletedString ${DeletedUsersTempTxt[*]}\n\nFailed to delete $UsersFailedString ${UsersFailedToBeDeletedTempTxt[*]}"
+
+							unset DeletedUsersTempTxt UsersFailedToBeDeletedTempTxt
+						fi
+						read -p "continue" -n1
+						dialog --msgbox "$userDeletedText " 0 0
+						unset UsersToDelete userDeletedText DeletedUsers UsersFailedToBeDeleted
+					elif [[ ${#UsersToDelete[@]} -eq 0 ]]
+					then
+						dialog --msgbox "No Users Removed" 0 0
+					fi
+				fi
+				set +xvB				
+				;;
+		esac
 	fi
 }
 
