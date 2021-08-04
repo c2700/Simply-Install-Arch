@@ -2620,8 +2620,7 @@ RemoveUsers(){
 								1) UsersFailedToBeDeleted+=("$n") ;;
 							esac
 						done
-						read -p "continue" -n1
-
+						
 						local UserDeletedString=""
 						local UsersFailedString=""
 
@@ -2664,7 +2663,6 @@ RemoveUsers(){
 
 							unset DeletedUsersTempTxt UsersFailedToBeDeletedTempTxt
 						fi
-						read -p "continue" -n1
 						dialog --msgbox "$userDeletedText " 0 0
 						unset UsersToDelete userDeletedText DeletedUsers UsersFailedToBeDeleted
 					elif [[ ${#UsersToDelete[@]} -eq 0 ]]
