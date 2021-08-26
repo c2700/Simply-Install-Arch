@@ -1922,7 +1922,7 @@ Install_UI(){
 						0) 
 							case $DE in
 								"KDE")
-									pkgs="sdd{m,m-kcm} $(pacman -Sg plasma kde-{applications,system,graphics,network,accessibility} kf{5,5-aids} | awk '{print $2}' | uniq)"
+									pkgs="sddm sddm-kcm $(pacman -Sg plasma kde-{applications,system,graphics,network,accessibility} kf{5,5-aids} | awk '{print $2}' | uniq)"
 									ui_type="KDE"
 									;;
 								"Gnome")
@@ -1935,11 +1935,11 @@ Install_UI(){
 									;;
 								"deepin")
 									ui_type="deepin"
-									pkgs="sdd{m,m-kcm} deepi{n,n-extra}"
+									pkgs="sddm sddm-kcm deepin deepin-extra"
 									;;
 								"lxde")
 									ui_type="lxde"
-									pkgs="lightdm lxd{e,e-gtk3}"
+									pkgs="lightdm lxde lxde-gtk3"
 									;;
 								"lxqt")
 									ui_type="lxqt"
@@ -1947,7 +1947,7 @@ Install_UI(){
 									;;
 								"mate")
 									ui_type="mate"
-									pkgs="lightdm mat{e,e-extra}"
+									pkgs="lightdm mate mate-extra"
 									;;
 								"xfce4")
 									ui_type="xfce4"
