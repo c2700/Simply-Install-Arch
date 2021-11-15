@@ -2367,20 +2367,23 @@ SetPrompt(){
 
 	bashrc_file="$1"
 	local folder_path=""
+	local user_db_file_path=""
 
 	# when base is installed and script is running from live disk
 	if [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( mountpoint /mnt &>/dev/null ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot &>/dev/null )
 	then
 		folder_path="/mnt/home"
+		user_db_file_path="/mnt/etc/passwd"
 
 	# when base is installed and script is running from installed device
 	elif ( ( ! mountpoint /mnt &>/dev/null ) || ( [[ ! -d /mnt/boot ]] && ( ! mountpoint /mnt/boot &>/dev/null ) ) ) && ( [[ ! -d /run/archiso/airootfs ]] && [[ ! -d /run/archiso/bootmnt ]] ) && ( ( mountpoint / &>/dev/null ) && ( mountpoint /boot &>/dev/null ) )
 	then
 		folder_path="/home"
+		user_db_file_path="/etc/passwd"
 	fi
 
 
-	local Users=($(grep [1-9][0-9][0-9][0-9] /mnt/etc/passwd | grep -iv nobody | sed 's/\:/ \: /g' | awk '{print $1}'))
+	local Users=($(grep [1-9][0-9][0-9][0-9] "$user_db_file_path" | grep -iv nobody | sed 's/\:/ \: /g' | awk '{print $1}'))
 
 	# set bashrc file for only one existing user
 	if [[ ${#Users[@]} -eq 1 ]]
@@ -2543,7 +2546,6 @@ RemoveUsers(){
 		case $? in
 			1) ConfHost "Remove Users" ;;
 			0)
-				set -xvB
 				# when base is installed and script is running from live disk
 				if [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( mountpoint /mnt &>/dev/null ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot &>/dev/null )
 				then
@@ -2830,9 +2832,10 @@ InstallArch(){
 	elif ( [[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && ( mountpoint /run/archiso/airootfs &>/dev/null ) && ( mountpoint /run/archiso/bootmnt &>/dev/null ) && ( mountpoint /mnt &>/dev/null ) && [[ -d /mnt/boot ]] && ( mountpoint /mnt/boot &>/dev/null ) )
 	then
 		local packages=()
+		local extra_kernels=()
 
 		# variable holding regex form of packages
-		packages_temp=(base base-devel linu{x,x-{docs,headers}} grub efi{var,bootmgr} os-prober git wget lynx dkms broadcom-wl-dkms xf86-input-{libinput,synaptics} xf86-video-fbdev vim sudo)
+		packages_temp=(base base-devel linu{x,x-{api-headers,firmware,docs,headers}} grub efi{var,bootmgr} os-prober git wget lynx dkms broadcom-wl-dkms xf86-input-{libinput,synaptics} xf86-video-fbdev vim sudo linuxconsole net-tools iw)
 
 		# expanding the regex package variable for display in dialog
 		for i in "${packages_temp[@]}"
@@ -2840,6 +2843,15 @@ InstallArch(){
 			packages+=("$i")
 		done
 		unset packages_temp
+
+		local extra_linux_kernel_pkgs_temp=(linux-{lts,zen,hardened} linux-{lts,zen,hardened}-{docs,headers})
+		local extra_linux_kernel_pkgs=()
+		# expanding the regex package variable for display in dialog
+		for i in "${extra_linux_kernel_pkgs_temp[@]}"
+		do
+			extra_linux_kernel_pkgs+=("$i")
+		done
+		unset extra_linux_kernel_pkgs_temp
 
 		# installing system
 		pacman-key --init
@@ -2973,6 +2985,7 @@ InstallArch(){
 
 		local packages=()
 		local PackagesDialogText=()
+
 		# array of packages based on the cpu
 		if [[ $cpu_vendor == "AuthenticAMD" ]]
 		then
@@ -3009,6 +3022,22 @@ InstallArch(){
 		terminaleditorslist+=("zile" "zile" off)
 		terminaleditorslist+=("mg" "mg micro emacs" off)
 
+		dialog --yesno "Install more than one kernel?" 0 0
+		case $? in
+			0) 
+				local kernel_menu_opts=()
+				for i in ${extra_linux_kernel_pkgs[@]}
+				do
+					[[ "$i" =~ "header" ]] || [[ "$i" =~ "docs" ]] && continue
+					kernel_menu_opts+=("$i")
+					kernel_menu_opts+=("$i")
+				done
+				extra_linux_kernels=($(dialog --menu "Kernel" 0 0 0 --no-tags ${kernel_menu_opts[@]} 3>&1 1>&2 2>&3))
+				unset kernel_menu_opts
+				;;
+			1) dialog --msgbox "\"linux\" kernel will be the only available kernel" 0 0
+		esac
+
 		local editors=()
 		editors=($(dialog --extra-button --extra-label "Cancel" --cancel-label "Back" --no-tags --title "text editor selection Menu" --checklist "nano and vi will be installed by default" 0 0 0 "${terminaleditorslist[@]}" 3>&1 1>&2 2>&3))
 		case $? in
@@ -3016,10 +3045,10 @@ InstallArch(){
 				unset terminaleditorslist
 				if [[ -n "${editors[@]}" ]]
 				then
-					packages+=("${editors[@]}")
-					PackagesDialogText+=("editor selected:")
-					PackagesDialogText+=("\n")
-					PackagesDialogText+=("\n")
+					# packages+=("${editors[@]}")
+					# pacPackagesDialogText+=("editor selected:")
+					# pacPackagesDialogText+=("\n")
+					# pacPackagesDialogText+=("\n")
 					if [[ ${#editors[@]} -eq 1 ]]
 					then
 						PackagesDialogText+=("editor selected:")
@@ -3030,6 +3059,24 @@ InstallArch(){
 					PackagesDialogText+=("\n")
 					PackagesDialogText+=("${editors[@]}")
 					unset editors
+				fi
+
+				if [[ -n "${extra_linux_kernels[@]}" ]]
+				then
+					# PackagesDialogText+=("Extra Kernels: ")
+					# PackagesDialogText+=("${extra_linux_kernel_pkgs[@]}")
+					# pacPackagesDialogText+=("\n")
+					# pacPackagesDialogText+=("\n")
+					if [[ ${#extra_linux_kernels[@]} -eq 1 ]]
+					then
+						PackagesDialogText+=("extra kernel selected:")
+					elif [[ ${#extra_linux_kernels[@]} -gt 1 ]]
+					then
+						PackagesDialogText+=("extra kernels selected:")
+					fi
+					PackagesDialogText+=("\n")
+					PackagesDialogText+=("${extra_linux_kernels[@]}")
+					unset extra_linux_kernels
 				fi
 				;;
 			1)
@@ -3048,7 +3095,7 @@ InstallArch(){
 
 		pacstrap /mnt "${packages[@]}"
 		case $? in
-			0) dialog --msgbox "Extra Linux packages have been installed packages" 0 0;;
+			0) dialog --msgbox "Extra Linux packages have been installed" 0 0;;
 			*) dialog --msgbox "failed to install Extra Linux packages" 0 0;;
 		esac
 	fi
