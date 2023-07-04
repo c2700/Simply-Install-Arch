@@ -20,8 +20,8 @@
 #    scope of other functions                                                                 #
 #                                                                                             #
 #                                                                                             #
-#                                                                                             #
-# Also, I'm open to any constructive criticism (IF you find the codebase to be shitty i.e. ) #
+#																							  #
+# Also, I'm open to any constructive criticism (IF you find the codebase to be shitty i.e.)   #
 ###############################################################################################
 
 # DIALOG_CANCEL=0
@@ -3348,6 +3348,14 @@ Main(){
 
 		case $DIALOG_PRESENT_EXIT_CODE in
 			0) 
+				dialog --msgbox "re-installing archlinux-keyring" 0 0 
+				;;
+			1) echo -e "\nre-installing archlinux-keyrin \n" ;;
+		esac
+    pacman -Sy "archlinux-keyring" 
+
+		case $DIALOG_PRESENT_EXIT_CODE in
+			0) 
 				dialog --msgbox "check for necessarry installation components" 0 0 
 				clear
 				;;
@@ -3371,7 +3379,7 @@ Main(){
 				read -p "press any key to continue" -n1
 				;;
 			0)
-				for i in wget git grub "os-prober"
+				for i in wget git grub "os-prober" "NetworkManager"
 				do
 					pacman -Qqs "$i" &>/dev/null
 					case $? in
@@ -3437,6 +3445,7 @@ Main(){
 		MainMenu "Partition Disk **" 3>&1 1>&2 2>&3
 	fi
 }
+
 
 trap '' 2
 Main
