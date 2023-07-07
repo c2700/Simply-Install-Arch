@@ -3346,17 +3346,21 @@ Main(){
 				;;
 		esac
 
-		case $DIALOG_PRESENT_EXIT_CODE in
-			0) 
-				dialog --msgbox "re-installing archlinux-keyring" 0 0 
-				;;
-			1) echo -e "\nre-installing archlinux-keyrin \n" ;;
-		esac
-    pacman -Sy "archlinux-keyring" 
+		local _pkgs=(archlinux-keyring wget git grub os-prober dialog)
+		_pkgs_txt=$(TempArrayWithAmpersand)
+		echo "installing necessary installation dependency packages ${_pkgs_txt[@]}"
+    	pacman -Sy _pkgs_txt[@]
+		if [[ $? -ne 0 ]]
+		then
+			echo could not install the necessary ${_pkgs_txt[*]}. Please check your connectivity, your "/etc/conf/pacman.conf" or "/etc/conf/pacman.d/mirrorlist" files
+			exit
+		fi
+		unset _pkgs _pkgs_txt
+
 
 		case $DIALOG_PRESENT_EXIT_CODE in
 			0) 
-				dialog --msgbox "check for necessarry installation components" 0 0 
+				dialog --msgbox "check if the necessarry installation components" 0 0 
 				clear
 				;;
 			1) echo -e "\nchecking for necessarry arch installation components\n" ;;
