@@ -27,7 +27,7 @@ Plz Don't judge me for my horrible and confusing variable names and naming conve
 
 <br><h3>3. shell rc files:</h3>
    
-- [ ] bashrc prompts for stronger machines (A mix of conf files, python scripts, bash scripts just to make it look like those prompts you see with git icons and colorfilled text embeded arrows. not advisable to be used on weak machines though it can be used)
+- [x] bashrc prompts for stronger machines (A mix of conf files, python scripts, bash scripts just to make it look like those prompts you see with git icons and colorfilled text embeded arrows. not advisable to be used on weak machines though it can be used)
 - [ ] zshrc prompts as the one above.
 
 <br><h3>4. partition editor:</h3>
