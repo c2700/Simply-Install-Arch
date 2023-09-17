@@ -2169,7 +2169,7 @@ SetBashPrompt() {
 	$1="${bashrc_opts[0]}"
 
 	local bashrc
-	bashrc=$(dialog --ok-label "set bashrc" --default-item "$1" --extra-button --extra-label "preview" --cancel-label "back" --menu "bashrc selection menu\n\nselected menuitem will be saved as \".bashrc\" in the home directory. (Preveiew is best seen when a GUI terminal emulator is installed)" 0 0 0 "${bashrc_opts[@]}" 3>&1 1>&2 2>&3)
+	bashrc=$(dialog --ok-label "set bashrc" --default-item "$1" --extra-button --extra-label "preview" --default-button "extra" --cancel-label "back" --menu "bashrc selection menu\n\nselected menuitem will be saved as \".bashrc\" in the home directory. (Preveiew is best seen when a GUI terminal emulator is installed)" 0 0 0 "${bashrc_opts[@]}" 3>&1 1>&2 2>&3)
 
 	case $? in
 	0)
@@ -2369,7 +2369,6 @@ RemoveUsers() {
 					dialog --msgbox "No Users Removed" 0 0
 				fi
 			fi
-			set +xvB
 			;;
 		esac
 	fi
@@ -2895,8 +2894,13 @@ MainMenu() {
 			;;
 
 		"Configure Host +" | "Configure Host")
+			# on installed system
+			if [[ -d / ]] && (mountpoint / &>/dev/null) && [[ -d /boot ]] && (mountpoint /boot &>/dev/null)
+			then
+				ConfHost
+
 			# installed base but on live || not installed base but on live
-			if ([[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && (mountpoint /run/archiso/airootfs &>/dev/null) && (mountpoint /run/archiso/bootmnt &>/dev/null) && (mountpoint /mnt &>/dev/null) && [[ -d /mnt/boot ]] && (mountpoint /mnt/boot &>/dev/null)) || ( (mountpoint / &>/dev/null) && (mountpoint /boot &>/dev/null)); then
+			elif ([[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && (mountpoint /run/archiso/airootfs &>/dev/null) && (mountpoint /run/archiso/bootmnt &>/dev/null) && (mountpoint /mnt &>/dev/null) && [[ -d /mnt/boot ]] && (mountpoint /mnt/boot &>/dev/null)) || ( (mountpoint / &>/dev/null) && (mountpoint /boot &>/dev/null)); then
 				which arch-chroot &>/dev/null
 				case $? in
 				0)
