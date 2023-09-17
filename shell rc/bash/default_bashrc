@@ -6,6 +6,7 @@
 [[ $- != *i* ]] && return
 
 [[ $DISPLAY ]] && shopt -s checkwinsize
+shopt -s autocd hostcomplete direxpand 
 
 PS1='[\u@\h \W]\$ '
 
