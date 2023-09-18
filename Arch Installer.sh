@@ -224,7 +224,7 @@ ConfNet() {
 	if [[ -z ${NMList[@]} ]]; then
 		unset NMList
 		dialog --msgbox "no networkmanagers available. Local networkmanager package will be installed" 0 0
-		pacman -Uvd --noconfirm "$(ls networkmanager*)"
+		pacman -Uvd --needed --noconfirm "$(ls networkmanager*)"
 		dialog --msgbox "enabling NetworkManager" 0 0
 		nmtui
 		MainMenu "Configure Network"
@@ -1097,7 +1097,7 @@ EditDisk() {
 	1) PartitionDisk ;;
 	0)
 		local m_NonePartDisks=()
-		dialog --no-label "Back" --yes-label "OK" --yesno "					 partition type -----> partition filesystem format\n\nPartitions to be created and formatted to:\n\n  Mandatory:\n   1) EFI system partition -> FAT32(This is where the bootloader and the kernel resides)\n   2) Linux filesystem -----> ext4/ext3/ext2/xfs/zfs/bfs/btrfs/jfs (This is the linux root partition)\n\n  Optional but recommended:\n   1) Linux swap -> swap (used when machine runs out of RAM/physical memory\n\n  Optional:\n   1) Linux home -> Same format as Linux filesystem partition (used as storage unit for home directory of all users\n                                                               except root)" 0 0
+		dialog --no-label "Back" --yes-label "OK" --yesno "					 partition type -----> partition filesystem format\n\nPartitions to be created and formatted to:\n\n  Mandatory:\n   1) EFI system partition -> FAT32(This is where the bootloader and the kernel resides)\n   2) Linux filesystem -> ext4/ext3/ext2/xfs/zfs/bfs/btrfs/jfs (This is the linux root filesystem partition)\n\n  Optional but recommended:\n   1) Linux swap -> swap (used when machine runs out of RAM/physical memory)\n\n  Optional:\n   1) Linux home -> Same format as Linux filesystem partition (used as storage location for home directories\n                                                               of regular users)" 0 0
 		case $? in
 		0)
 			local PartProbeDisks=()
@@ -1307,7 +1307,7 @@ PartitionDisk() {
 			fi
 
 			# check for empty disks and edit disks accordingly
-			dialog --extra-button --extra-label "Mount" --ok-label "Back" --cancel-label "Edit" --yesno "Select \"Edit\" for Editting and then mounting the partitions of this disk or select \"Mount\" to only select, format and mount existing Linux filesystem/EFI/swap partitions" 0 0
+			dialog --extra-button --extra-label "Mount" --yes-button "Back" --no-button "Edit" --yesno "Select \"Edit\" for Editing and then mounting the partitions of this disk or select \"Mount\" to only select, format and mount existing Linux filesystem/EFI/swap partitions" 0 0
 			case $? in
 			0) PartitionDisk ;;
 			1)
@@ -1770,7 +1770,7 @@ Install_UI() {
 
 		# when base is installed and script is running from installed device
 		elif ( (! mountpoint /mnt &>/dev/null) || ([[ ! -d /mnt/boot ]] && (! mountpoint /mnt/boot &>/dev/null))) && ([[ ! -d /run/archiso/airootfs ]] && [[ ! -d /run/archiso/bootmnt ]]) && ( (mountpoint / &>/dev/null) && (mountpoint /boot &>/dev/null)); then
-			pacman -Syvd $pkgs
+			pacman -Syvd --needed --noconfirm $pkgs
 		fi
 		ConfHost "Install UI"
 		;;
@@ -2775,7 +2775,7 @@ Repo_Enable() {
 			linenumber=$((linenumber + 1))
 			sed -i "${linenumber}s/\#Include/Include/g" /etc/pacman.conf
 			dialog --msgbox "\"multilib\" repo has been enabled. you can add, remove, disable or enable repos by editing the \"/etc/pacman.conf\" file" 0 0
-			pacman -Sy
+			pacman -Sy --needed --noconfirm
 			;;
 		1)
 			dialog --no-label "exit" --yes-label "continue installation" --yesno "multilib repo not enabled. To enable it restart the script or uncomment lines #[multilib]\n#Include=/etc/pacman.d/mirrorlist\n in file \"/etc/pacman.conf\"" 6 63
@@ -2833,7 +2833,7 @@ MainMenu() {
 		echo -e "dialog not installed.\n"
 		read -p "press any key to install the git provided dialog package " -s -n1
 		clear
-		pacman -Uvd --noconfirm "$(ls dialog*.pkg.tar.zst)"
+		pacman -Uvd --needed --noconfirm "$(ls dialog*.pkg.tar.zst)"
 		case $? in
 		0) dialog --msgbox "installed dialog" 0 0 ;;
 		1)
@@ -2993,19 +2993,19 @@ Main() {
 		esac
 
 		local _pkgs=(archlinux-keyring wget git grub os-prober dialog)
-		_pkgs_txt=$(TempArrayWithAmpersand)
-		echo "installing necessary installation dependency packages ${_pkgs_txt[@]}"
-		pacman -Sy _pkgs_txt[@]
+		_pkgs_txt=("$(TempArrayWithAmpersand _pkgs)")
+		
+		echo -e "\n\ninstalling necessary installation dependency packages $_pkgs_txt\n\n"
+		pacman -Sy ${_pkgs[@]} --needed --noconfirm
 		if [[ $? -ne 0 ]]; then
 			echo could not install "${_pkgs_txt[*]}". Please check your connectivity, your "/etc/conf/pacman.conf" or "/etc/conf/pacman.d/mirrorlist" files or please manually install the packages by follwing the below steps
 			echo -e \n\n\n check if all the sources in the "/etc/conf/pacman.conf" are uncommented
-			echo check if the "[options]" "[core]" "[extra]" "[community]" "[multilib]" sections &
-			the include lines in those sections are uncommented
+			echo 'check if the "[options]" "[core]" "[extra]" "[community]" "[multilib]" sections & the include lines in those sections are uncommented'
 			echo "type the following commands in a different tty by pressing ctrl+alt+F3 & logging in as root & come back to this tty by pressing ctrl+alt+F1"
 			echo "type pacman -Sp ${_pkgs[*]} > links.txt"
-			echo "for i in $(cat links.txt)"
+			echo 'for i in $(cat links.txt)'
 			echo "do"
-			echo "curl -c $i -O $(basename $i)"
+			echo 'curl -c $i -O $(basename $i)'
 			echo "done"
 			echo "pacman -Sy"
 			echo "pacman -Uvd --needed --noconfirm *.pkg.tar.zst"
@@ -3015,7 +3015,7 @@ Main() {
 
 		case $DIALOG_PRESENT_EXIT_CODE in
 		0)
-			dialog --msgbox "check if the necessarry installation components" 0 0
+			dialog --msgbox "press enter to check if necessarry installation components are present" 0 0
 			clear
 			;;
 		1) echo -e "\nchecking for necessarry arch installation components\n" ;;
@@ -3058,7 +3058,7 @@ Main() {
 			esac
 			clear
 			pacman-key --init
-			pacman -Sy "${needed_components_absent[@]}" --noconfirm
+			pacman -Sy "${needed_components_absent[@]}" --needed --noconfirm
 		elif [[ -z ${needed_components_absent[@]} ]]; then
 			case $DIALOG_PRESENT_EXIT_CODE in
 			0) dialog --msgbox "necessarry installation components are present" 0 0 ;;
