@@ -98,9 +98,10 @@ TempArrayWithAmpersand() {
 	local TempArray=(${!TempArrayArgs})
 	unset TempArrayArgs
 
-	if [[ ${#TempArray[@]} -eq 1 ]]; then
-		:
-	elif [[ ${#TempArray[@]} -gt 1 ]]; then
+	# if [[ ${#TempArray[@]} -eq 1 ]]; then
+	# 	:
+	# elif [[ ${#TempArray[@]} -gt 1 ]]; then
+	if [[ ${#TempArray[@]} -gt 1 ]]; then
 		temp="${TempArray[-1]}"
 		TempArray[-1]="&"
 		TempArray+=("$temp")
@@ -194,29 +195,9 @@ ConfNet() {
 
 	# create an array of available network managers for use in dialog
 	local NMList=()
-	ls /bin/wifi-menu &>/dev/null
-	case $? in
-		0)
-			NMList+=("wifi-menu")
-			NMList+=("")
-		;;
-	esac
-
-	ls /usr/lib/systemd/system/NetworkManager* &>/dev/null
-	case $? in
-		0)
-			NMList+=("networkmanager")
-			NMList+=("")
-		;;
-	esac
-
-	ls /usr/lib/systemd/system/iwd* &>/dev/null
-	case $? in
-		0)
-			NMList+=("iwd")
-			NMList+=("")
-			;;
-	esac
+	ls /bin/wifi-menu &>/dev/null && NMList+=("wifi-menu" "") ;;
+	ls /usr/lib/systemd/system/NetworkManager* &>/dev/null && NMList+=("networkmanager" "") ;;
+	ls /usr/lib/systemd/system/iwd* &>/dev/null && NMList+=("iwd" "") ;;
 
 	if [[ -z ${NMList[@]} ]]; then
 		unset NMList
@@ -229,28 +210,21 @@ ConfNet() {
 		local NM
 		NM=$(dialog --cancel-label "BACK" --menu "Availble Network Managers" 0 0 0 "${NMList[@]}" 3>&1 1>&2 2>&3)
 
+		unset NMList
 		case $? in
+			1) MainMenu "Configure Network **" ;;
 			0)
 				case $NM in
-					"wifi-menu")
-						unset NMList
-						wifi-menu
-						;;
+					"wifi-menu") wifi-menu ;;
 					"networkmanager")
-						unset NMList
 						nmtui
 						MainMenu "Configure Network **"
 						;;
 					"iwd")
-						unset NMList
 						iwd_mngr
 						MainMenu "Configure Network **"
 						;;
 				esac
-				;;
-			1)
-				unset NMList
-				MainMenu "Configure Network **"
 				;;
 		esac
 	fi
@@ -512,7 +486,7 @@ ConfirmMounts() {
 					FormatPartition "$u" "$linuxfs"
 				done
 				MountPartitions m_MountPartitionsTextsTemp
-					;;
+				;;
 			3)
 				UnMountPartitions
 				for u in ${m_MountPartitionsTextsTemp[@]}; do
@@ -601,25 +575,15 @@ UnMountPartitions() {
 	# 1 - /mnt/home
 	# 2 - /mnt/boot
 	# 3 - /mnt/
-	if [[ -d /mnt/home ]]; then
-		if mountpoint /mnt/home &>/dev/null; then
-			umount /mnt/home &>/dev/null
-		fi
-	fi
+	[[ -d /mnt/home ]] && (mountpoint /mnt/home &>/dev/null) && umount /mnt/home &>/dev/null
 
-	if mountpoint /mnt/boot &>/dev/null; then
+	if (mountpoint /mnt/boot &>/dev/null) then
 		umount /mnt/boot &>/dev/null
 		rm -rf /mnt/boot &>/dev/null
-		if mountpoint /mnt/ &>/dev/null; then
-			umount /mnt/ &>/dev/null
-		fi
-	elif ! mountpoint /mnt/boot &>/dev/null; then
-		if [[ -d /mnt/boot ]]; then
-			rm -rf /mnt/boot &>/dev/null
-		fi
-		if mountpoint /mnt/ &>/dev/null; then
-			umount /mnt/ &>/dev/null
-		fi
+        (mountpoint /mnt/ &>/dev/null) && umount /mnt/ &>/dev/null
+	elif (! mountpoint /mnt/boot &>/dev/null) then
+		[[ -d /mnt/boot ]] && rm -rf /mnt/boot &>/dev/null
+        (mountpoint /mnt/ &>/dev/null) && umount /mnt/ &>/dev/null
 	fi
 }
 
@@ -640,34 +604,28 @@ MountPartitions() {
 	while (! mountpoint /mnt &>/dev/null) || ([[ ! -d /mnt/boot ]] || (! mountpoint /mnt/boot &>/dev/null)); do
 		if (! mountpoint /mnt &>/dev/null); then
 			for k in ${Partitions[@]}; do
-				local partfsformat="$(lsblk "/dev/$k" -dlno fstype,fsver | awk '{ print $1" "$2 }' | sed 's/vfat FAT32/FAT32/g;s/ 1.0//g;s/swap 1/swap/g')"
-				local partfsformat2="$(lsblk "/dev/$k" -dlno fstype,fsver | awk '{ print $1" "$2 }')"
+				local partfsformat="$(lsblk "/dev/$k" -dlno fstype,fsver | cut -d" " -f1,2 | sed 's/vfat FAT32/FAT32/g;s/ 1.0//g;s/swap 1/swap/g')"
+				local partfsformat2="$(lsblk "/dev/$k" -dlno fstype,fsver | cut -d" " -f1,2 | awk '{ print $1" "$2 }')"
+				# local partfsformat="$(lsblk "/dev/$k" -dlno fstype,fsver | awk '{ print $1" "$2 }' | sed 's/vfat FAT32/FAT32/g;s/ 1.0//g;s/swap 1/swap/g')"
+				# local partfsformat2="$(lsblk "/dev/$k" -dlno fstype,fsver | awk '{ print $1" "$2 }')"
 				local m_parttypenametemp="$(lsblk /dev/$k -nlo parttypename | grep -ie 'linux filesystem\|swap\|linux.*home' | sed -E 's/\s{13}/  /g')"
 				local m_sizetemp="$(lsblk /dev/$k -nlo size | sed 's/^\s*//g')"
 				local m_partlabeltemp="$(lsblk /dev/$k -nlo partlabel | sed -E 's/\s{13}/  /g')"
 
-				if [[ -z $m_partlabeltemp ]] || [[ "$m_partlabeltemp" == "" ]] || [[ "$m_partlabeltemp" =~ " " ]]; then
-					m_partlabeltemp="No Label"
-				fi
+				[[ -z $m_partlabeltemp ]] || [[ "$m_partlabeltemp" == "" ]] || [[ "$m_partlabeltemp" =~ " " ]] && m_partlabeltemp="No Label"
 
 				if [[ "$m_parttypenametemp" == "Linux filesystem" ]] || [[ "$m_parttypenametemp" == "Linux" ]]; then
 					case $partfsformat in
 						"ext4" | "ext3" | "ext2" | "xfs" | "zfs" | "bfs" | "btrfs" | "jfs")
 							mount /dev/$k /mnt
 							case $? in
+								1) mountfails+=("/dev/$k --> $m_sizetemp --> $partfsformat - $m_parttypenametemp ($m_partlabeltemp) --> $(lsblk /dev/$k -nlo mountpoint)\n") ;;
+								32) already_mounted+=("/dev/$k --> $m_sizetemp --> $partfsformat - $m_parttypenametemp ($m_partlabeltemp) --> $(lsblk /dev/$k -nlo mountpoint)\n") ;;
 								0)
-									[[ ! -d /mnt/boot ]] && 
-									mounted+=("/dev/$k --> $m_sizetemp --> $partfsformat - $m_parttypenametemp ($m_partlabeltemp) --> $(lsblk /dev/$k -nlo mountpoint)\n")
-									break
-									;;
-								1)
-									mountfails+=("/dev/$k --> $m_sizetemp --> $partfsformat - $m_parttypenametemp ($m_partlabeltemp) --> $(lsblk /dev/$k -nlo mountpoint)\n")
-									break
-									;;
-								32)
-									already_mounted+=("/dev/$k --> $m_sizetemp --> $partfsformat - $m_parttypenametemp ($m_partlabeltemp) --> $(lsblk /dev/$k -nlo mountpoint)\n")
-									break
-									;;
+									if [[ ! -d /mnt/boot ]] then
+									    mounted+=("/dev/$k --> $m_sizetemp --> $partfsformat - $m_parttypenametemp ($m_partlabeltemp) --> $(lsblk /dev/$k -nlo mountpoint)\n")
+                                    fi
+                                    ;;
 							esac
 							;;
 					esac
@@ -675,10 +633,7 @@ MountPartitions() {
 				unset m_parttypename partfsformat m_parttypenametemp m_sizetemp m_partlabeltemp
 			done
 
-			if ! mountpoint /mnt &>/dev/null; then
-				dialog --msgbox "could not mount '/dev/${fail_drive[0]}' to '/'. Therefore cannot mount other partitions. you can manually try mounting the partition or changing the partition type to the right partition type and format it with the relevant filesystem and mount it" 0 0
-				break
-			fi
+			[[ ! mountpoint /mnt &>/dev/null ]] && dialog --msgbox "could not mount '/dev/${fail_drive[0]}' to '/'. Therefore cannot mount other partitions. you can manually try mounting the partition or changing the partition type to the right partition type and format it with the relevant filesystem and mount it" 0 0
 		elif (mountpoint /mnt &>/dev/null); then
 			if [[ -d /mnt/boot ]]; then
 				if (! mountpoint /mnt/boot/ &>/dev/null); then
@@ -689,36 +644,24 @@ MountPartitions() {
 						local m_sizetemp="$(lsblk /dev/$k -nlo size | sed 's/^\s*//g')"
 						local m_partlabeltemp="$(lsblk /dev/$k -nlo partlabel | sed -E 's/\s{13}/  /g')"
 
-						if [[ -z $m_partlabeltemp ]] || [[ "$m_partlabeltemp" == "" ]] || [[ "$m_partlabeltemp" =~ " " ]]; then
-							m_partlabeltemp="No Label"
-						fi
+						[[ -z $m_partlabeltemp ]] || [[ "$m_partlabeltemp" == "" ]] || [[ "$m_partlabeltemp" =~ " " ]] && m_partlabeltemp="No Label"
 
 						if [[ "$m_parttypenametemp" == "EFI System" ]] || [[ "$partfsformat" == "FAT32" ]] || [[ "$partfsformat2" == "vfat FAT32" ]]; then
 							mount /dev/$k /mnt/boot
 							case $? in
-								0)
-									mounted+=("/dev/$k --> $m_sizetemp --> $partfsformat - $m_parttypenametemp ($m_partlabeltemp) --> $(lsblk /dev/$k -nlo mountpoint)\n")
-									break
-									;;
+								0) mounted+=("/dev/$k --> $m_sizetemp --> $partfsformat - $m_parttypenametemp ($m_partlabeltemp) --> $(lsblk /dev/$k -nlo mountpoint)\n") ;;
+								32) already_mounted+=("/dev/$k --> $m_sizetemp --> $partfsformat - $m_parttypenametemp ($m_partlabeltemp) --> $(lsblk /dev/$k -nlo mountpoint)\n") ;;
 								1)
 									dialog --msgbox "could not mount disk /dev/$k/ (EFI partition) to /mnt/boot" 0 0
 									mountfails+=("/dev/$k --> $m_sizetemp --> $partfsformat - $m_parttypenametemp ($m_partlabeltemp) --> $(lsblk /dev/$k -nlo mountpoint)\n")
 									fail_drive+=("$k")
-									break
-									;;
-								32)
-									already_mounted+=("/dev/$k --> $m_sizetemp --> $partfsformat - $m_parttypenametemp ($m_partlabeltemp) --> $(lsblk /dev/$k -nlo mountpoint)\n")
-									break
 									;;
 							esac
 						fi
 						unset m_parttypename partfsformat m_parttypenametemp m_sizetemp m_partlabeltemp
 					done
 
-					if (! mountpoint /mnt/boot/ &>/dev/null); then
-						dialog --msgbox "could not mount /dev/${fail_drive[0]} (EFI Partition) to /mnt/boot" 0 0
-						break
-					fi
+					[[ ! mountpoint /mnt/boot/ &>/dev/null ]] && dialog --msgbox "could not mount /dev/${fail_drive[0]} (EFI Partition) to /mnt/boot" 0 0
 				fi
 			elif [[ ! -d /mnt/boot ]]; then
 				mkdir /mnt/boot
@@ -729,43 +672,32 @@ MountPartitions() {
 					local m_sizetemp="$(lsblk /dev/$k -nlo size | sed 's/^\s*//g')"
 					local m_partlabeltemp="$(lsblk /dev/$k -nlo partlabel | sed -E 's/\s{13}/  /g')"
 
-					if [[ -z $m_partlabeltemp ]] || [[ "$m_partlabeltemp" == "" ]] || [[ "$m_partlabeltemp" =~ " " ]]; then
-						m_partlabeltemp="No Label"
-					fi
+					[[ -z $m_partlabeltemp ]] || [[ "$m_partlabeltemp" == "" ]] || [[ "$m_partlabeltemp" =~ " " ]] && m_partlabeltemp="No Label"
 
 					if [[ "$m_parttypenametemp" == "EFI System" ]] || [[ "$partfsformat" == "FAT32" ]] || [[ "$partfsformat2" == "vfat FAT32" ]]; then
 						mount /dev/$k /mnt/boot
 						case $? in
-							0)
-								mounted+=("/dev/$k --> $m_sizetemp --> $partfsformat - $m_parttypenametemp ($m_partlabeltemp) --> $(lsblk /dev/$k -nlo mountpoint)\n")
-								break
-								;;
+							32) already_mounted+=("/dev/$k --> $m_sizetemp --> $partfsformat - $m_parttypenametemp ($m_partlabeltemp) --> $(lsblk /dev/$k -nlo mountpoint)\n") ;;
+							0) mounted+=("/dev/$k --> $m_sizetemp --> $partfsformat - $m_parttypenametemp ($m_partlabeltemp) --> $(lsblk /dev/$k -nlo mountpoint)\n") ;;
 							1)
 								mountfails+=("/dev/$k --> $m_sizetemp --> $partfsformat - $m_parttypenametemp ($m_partlabeltemp) --> $(lsblk /dev/$k -nlo mountpoint)\n")
 								fail_drive+=("$k")
-								break
-								;;
-							32)
-								already_mounted+=("/dev/$k --> $m_sizetemp --> $partfsformat - $m_parttypenametemp ($m_partlabeltemp) --> $(lsblk /dev/$k -nlo mountpoint)\n")
-								break
 								;;
 						esac
-						# break
 					fi
 					unset m_parttypename partfsformat m_parttypenametemp m_sizetemp m_partlabeltemp
 				done
 				if [[ ! -d /mnt/boot ]]; then
 					dialog --msgbox "could not create /mnt/boot. Therefore cannot mount /dev/${fail_drive[0]} (EFI Partition)" 0 0
-					break
 				elif (! mountpoint /mnt/boot &>/dev/null); then
 					dialog --msgbox "could not mount /dev/${fail_drive[0]} (EFI Partition) to /mnt/boot" 0 0
-					break
 				fi
 			fi
 		fi
 	done
 
-	if (mountpoint /mnt &>/dev/null) && (mountpoint /mnt/boot &>/dev/null); then
+	if (mountpoint /mnt &>/dev/null) && (mountpoint /mnt/boot &>/dev/null)
+    then
 		local homepart
 		for t in ${Partitions[@]}; do
 			local m_parttypename="$(lsblk "/dev/$t" -dlno parttypename)"
@@ -774,29 +706,22 @@ MountPartitions() {
 			local m_sizetemp="$(lsblk /dev/$t -nlo size | sed 's/^\s*//g')"
 			local m_partlabeltemp="$(lsblk /dev/$t -nlo partlabel | sed -E 's/\s{13}/  /g')"
 
-			if [[ -z $m_partlabeltemp ]] || [[ "$m_partlabeltemp" == "" ]] || [[ "$m_partlabeltemp" =~ " " ]]; then
-				m_partlabeltemp="No Label"
-			fi
+			[[ -z $m_partlabeltemp ]] || [[ "$m_partlabeltemp" == "" ]] || [[ "$m_partlabeltemp" =~ " " ]] && m_partlabeltemp="No Label"
 
 			if [[ "$m_parttypenametemp" == "Linux home" ]]; then
 				homepart="$t"
 				mkdir /mnt/home
 				mount /dev/$t /mnt/home
 				case $? in
+					32) already_mounted+=("/dev/$k --> $m_sizetemp --> $partfsformat - $m_parttypenametemp ($m_partlabeltemp) --> $(lsblk /dev/$k -nlo mountpoint)\n") ;;
 					0)
 						mounted+=("/dev/$t --> $m_sizetemp --> $partfsformat - $m_parttypenametemp ($m_partlabeltemp) --> $(lsblk /dev/$t -nlo mountpoint)\n")
 						unset homepart
-						break
 						;;
 					1)
 						mountfails+=("/dev/$t --> $m_sizetemp --> $partfsformat - $m_parttypenametemp ($m_partlabeltemp) --> $(lsblk /dev/$t -nlo mountpoint)\n")
 						dialog --msgbox "could not mount home partition /dev/$homepart" 0 0
 						unset homepart
-						break
-						;;
-					32)
-						already_mounted+=("/dev/$k --> $m_sizetemp --> $partfsformat - $m_parttypenametemp ($m_partlabeltemp) --> $(lsblk /dev/$k -nlo mountpoint)\n")
-						break
 						;;
 				esac
 			fi
@@ -817,9 +742,7 @@ MountPartitions() {
 		local m_sizetemp="$(lsblk /dev/$k -nlo size | sed 's/^\s*//g')"
 		local m_partlabeltemp="$(lsblk /dev/$k -nlo partlabel | sed -E 's/\s{13}/  /g')"
 
-		if [[ -z $m_partlabeltemp ]] || [[ "$m_partlabeltemp" == "" ]] || [[ "$m_partlabeltemp" =~ " " ]]; then
-			m_partlabeltemp="No Label"
-		fi
+		[[ -z $m_partlabeltemp ]] || [[ "$m_partlabeltemp" == "" ]] || [[ "$m_partlabeltemp" =~ " " ]] && m_partlabeltemp="No Label"
 
 		if [[ "$m_parttypename" == "Linux swap" ]] || [[ "$partfsformat" == "swap" ]]; then
 			swap_parts+=("$k")
@@ -827,10 +750,7 @@ MountPartitions() {
 			case $? in
 				0) enabled_swap+=("/dev/$k --> $m_sizetemp --> $m_parttypenametemp ($m_partlabeltemp) --> swap enabled") ;;
 				1) disabled_swap+=("/dev/$k --> $m_sizetemp --> $m_parttypenametemp ($m_partlabeltemp)") ;;
-				255)
-					swap_already_enabled+=("/dev/$k --> $m_sizetemp --> $partfsformat - $m_parttypenametemp ($m_partlabeltemp) --> $(lsblk /dev/$k -nlo mountpoint)\n")
-					break
-					;;
+				255) swap_already_enabled+=("/dev/$k --> $m_sizetemp --> $partfsformat - $m_parttypenametemp ($m_partlabeltemp) --> $(lsblk /dev/$k -nlo mountpoint)\n") ;;
 			esac
 		fi
 		unset m_parttypename partfsformat m_parttypenametemp m_sizetemp m_partlabeltemp m_parttypename partfsformat
@@ -990,7 +910,6 @@ DisksWithoutPartitionTable() {
 			1)
 				m_NoPartTableDisk="${m_Disks[$i]}"
 				a=$i
-				break
 				;;
 		esac
 	done
@@ -1015,10 +934,7 @@ DisksWithoutPartitionsPresent() {
 
 	for i in ${Disks[@]}; do
 		local m_check=($(DiskPartInfoTemp "$i" | awk '{ print $1 }'))
-		if [[ -z "${m_check[@]}" ]]; then
-			m_NoPartsDisks="$i"
-			break
-		fi
+		[[ -z "${m_check[@]}" ]] && m_NoPartsDisks="$i"
 	done
 
 	if [[ -n "$m_NoPartsDisks" ]]; then
@@ -1039,9 +955,7 @@ DisksWithoutPartitions() {
 	local m_NoPartsDisks=()
 	for i in ${Disks[@]}; do
 		local m_check=($(DiskPartInfoTemp "$i" | awk '{ print $1 }'))
-		if [[ -z ${m_check[@]} ]]; then
-			m_NoPartsDisks+=("$i")
-		fi
+		[[ -z ${m_check[@]} ]] && m_NoPartsDisks+=("$i")
 		unset m_check
 	done
 	echo "${m_NoPartsDisks[@]}"
@@ -1191,7 +1105,7 @@ PartitionDisk() {
 	Disks=($(dialog --scrollbar --cancel-label "Back" --column-separator "|" --checklist "Disk Selection Menu" 0 0 0 "${DiskListInfo[@]}" 3>&1 1>&2 2>&3))
 	DISKS_EXIT_CODE=$?
 
-	local m_diskswithparttable=()
+	# local m_diskswithparttable=()
 	local m_diskswithparttable=()
 	for o in ${Disks[@]}; do
 		IsPartitionTablePresent $o
@@ -1279,19 +1193,20 @@ PartitionDisk() {
 						case $? in
 							0)
 								PartitionDisk
-								unset m_NoPartTableDisks m_NoPartTableDisksTemp m_DisksTemp diskhave1111 diskhave0000 diskhave1100 m_DisksWithPartTable m_DisksWithPartTableTemp
+								# unset m_NoPartTableDisks m_NoPartTableDisksTemp m_DisksTemp diskhave1111 diskhave0000 diskhave1100 m_DisksWithPartTable m_DisksWithPartTableTemp
 								;;
 							1)
 								WritePartitionTable m_NoPartTableDisks
 								EditDisk m_NoPartTableDisks
-								unset m_NoPartTableDisks m_NoPartTableDisksTemp m_DisksTemp diskhave1111 diskhave0000 diskhave1100 m_DisksWithPartTable m_DisksWithPartTableTemp
+								# unset m_NoPartTableDisks m_NoPartTableDisksTemp m_DisksTemp diskhave1111 diskhave0000 diskhave1100 m_DisksWithPartTable m_DisksWithPartTableTemp
 								;;
 							3)
 								Disks=("$(DiscardFromArray Disks m_NoPartTableDisks)")
 								dialog --msgbox "Discarded ${diskhave0000[0]} ${m_NoPartTableDisksTemp[*]}. Using ${diskhave1100[0]} ${m_DisksWithPartTableTemp[*]}" 0 0
-								unset m_NoPartTableDisks m_NoPartTableDisksTemp m_DisksTemp diskhave1111 diskhave0000 diskhave1100 m_DisksWithPartTable m_DisksWithPartTableTemp
+								# unset m_NoPartTableDisks m_NoPartTableDisksTemp m_DisksTemp diskhave1111 diskhave0000 diskhave1100 m_DisksWithPartTable m_DisksWithPartTableTemp
 								;;
 						esac
+						unset m_NoPartTableDisks m_NoPartTableDisksTemp m_DisksTemp diskhave1111 diskhave0000 diskhave1100 m_DisksWithPartTable m_DisksWithPartTableTemp
 					fi
 				fi
 
@@ -1417,9 +1332,10 @@ MountViewPartitions() {
 			local DiskPartListInfo=()
 			for i in ${DiskPartName[@]}; do
 				local partinfo="${DiskPartSize[$i]} | ${DiskPartFsType[$i]} | ${PartFs[$i]} | ${DiskPartLabel[$i]}"
-				DiskPartListInfo+=("$i")
-				DiskPartListInfo+=("$partinfo")
-				DiskPartListInfo+=(0)
+				DiskPartListInfo+=("$i" "$partinfo" 0)
+				# DiskPartListInfo+=("$i")
+				# DiskPartListInfo+=("$partinfo")
+				# DiskPartListInfo+=(0)
 				unset partinfo
 			done
 			unset DiskPartName DiskPartFsTypeTemp DiskPartSize DiskPartLabel DiskPartFsType # PartFs
@@ -1481,7 +1397,6 @@ MountViewPartitions() {
 							DiscardDisks=("${Disks[@]}")
 							DiscardDisks=("${DiscardDisks[$a]:$size}")
 							unset DiscardDisksTemp size
-							break
 						fi
 					fi
 
@@ -1496,7 +1411,6 @@ MountViewPartitions() {
 						m_DiscardDisksTemp=($(TempArrayWithAmpersand m_DiscardDisksTemp))
 						dialog --yes-label "OK" --no-label "Back" --yesno "Discarding ${diskhave[0]} ${m_DiscardDisksTemp[*]}" 0 0
 						unset DiscardDisks m_DiscardDisksTemp diskhave
-						break
 					elif [[ ${#DiscardDisks[@]} -gt 1 ]] && [[ "${DiscardDisks[@]}" == "${Disks[@]}" ]]; then
 						unset DiscardDisks
 						dialog --yes-label "Select Disk" --no-label "Select Partition" --yesno "No disk or partition selected for installation. Select Disks or Select Partitions from already Selected Disks?\n\nSelected Disks: ${Disks[*]}" 0 0
@@ -1510,7 +1424,6 @@ MountViewPartitions() {
 						m_DiscardDisksTemp=($(TempArrayWithAmpersand m_DiscardDisksTemp))
 						dialog --yes-label "OK" --no-label "Back" --yesno "Discarding ${diskhave[0]} ${m_DiscardDisksTemp[*]}" 0 0
 						unset DiscardDisks m_DiscardDisksTemp diskhave
-						break
 					fi
 					;;
 				1) PartitionDisk ;;
@@ -1525,7 +1438,6 @@ MountViewPartitions() {
 							SelectedPartitions+=("${partition[@]}")
 						elif [[ "${Disks[-1]}" == "${Disks[$a]}" ]]; then
 							SelectedPartitions+=("${partition[@]}")
-							break
 						fi
 					fi
 					DiskPartListInfo=()
@@ -1751,8 +1663,9 @@ SetTz() {
 
 	for ((b = 0; b < ${#regions_dir_temp[@]}; b++)); do
 		if [[ -d "${regions_dir_temp[$b]}" ]]; then
-			regions+=("${regions_dir_temp[$b]}")
-			regions+=("${regions_temp[$b]}")
+			regions+=("${regions_dir_temp[$b]}" "${regions_temp[$b]}")
+			# regions+=("${regions_dir_temp[$b]}")
+			# regions+=("${regions_temp[$b]}")
 		fi
 	done
 	unset regions_temp regions_dir_temp
@@ -1768,8 +1681,8 @@ SetTz() {
 
 			for ((b = 0; b < ${#zones_temp[@]}; b++)); do
 				if [[ -f "$region/${zones_temp[$b]}" ]] && [[ -r "$region/${zones_temp[$b]}" ]]; then
-					zones+=("$region/${zones_temp[$b]}")
-					zones+=("${zones_temp[$b]}")
+					zones+=("$region/${zones_temp[$b]}" "${zones_temp[$b]}")
+					# zones+=("${zones_temp[$b]}")
 				fi
 			done
 
@@ -1794,7 +1707,8 @@ SetTz() {
 					fi
 					case $HWCLOCK_EXIT_CODE in
 						0)
-							zone="$(echo $zone | sed 's/\// \/ /g' | awk ' { region=(NF-2);print $region"-"$NF }')"
+							# zone="$(echo $zone | sed 's/\// \/ /g' | awk ' { region=(NF-2);print $region"-"$NF }')"
+							zone="$(echo ${zone/\// \/ } | awk ' { region=(NF-2);print $region"-"$NF }')"
 							dialog --msgbox "Hardware Clock and timezone is $zone" 0 0
 							;;
 						1) dialog --msgbox "timezone or Hardware Clock could not be set" 0 0 ;;
@@ -1810,13 +1724,14 @@ SetLocale() {
 	local LOCALE=()
 
 	# temporary file to store locale.gen info
-	cat "/etc/locale.gen" | grep -i '#[a-zA-Z0-9]' | sed 's/#//' >locales.txt
+	grep -i '#[a-zA-Z0-9]' "/etc/locale.gen" | sed 's/#//' >locales.txt
 
 	# locale selection checklist items
 	while read txt; do
-		LOCALE+=("$txt")
-		LOCALE+=("$txt")
-		LOCALE+=(OFF)
+		LOCALE+=("$txt" "$txt" OFF)
+		# LOCALE+=("$txt")
+		# LOCALE+=("$txt")
+		# LOCALE+=(OFF)
 	done <locales.txt
 
 	local LocaleDialog
@@ -1824,7 +1739,8 @@ SetLocale() {
 	case $? in
 		0)
 			unset LOCALE
-			echo "${LocaleDialog[@]}" | sed 's/" "/"\n"/g;s/"//g' >locales.txt
+			echo "${LocaleDialog[@]/ /\n}" | sed 's/"//g' >locales.txt
+			# echo "${LocaleDialog[@]}" | sed 's/" "/"\n"/g;s/"//g' >locales.txt
 			local LocaleFormat
 
 			# when base is installed and script is running from live disk
@@ -1833,7 +1749,8 @@ SetLocale() {
 					sed -i s/"#$txt"/"$txt"/g /mnt/etc/locale.gen
 				done <locales.txt # substituing texts in "locale.gen" with texts in "locales.txt"
 				rm -rfv locales.txt &>/dev/null
-				LocaleFormat="$(echo -e "\n\n${LocaleDialog[*]}\n" | sed 's/" "/"\n"/g')" # locales text for use in dialog
+				LocaleFormat="\n\n${LocaleDialog[*]/ /\n}\n" # locales text for use in dialog
+				# LocaleFormat="$(echo -e "\n\n${LocaleDialog[*]}\n" | sed 's/" "/"\n"/g')" # locales text for use in dialog
 				arch-chroot /mnt locale-gen | GuageMeter "Generating Locales" 1
 
 			# when base is installed and script is running from installed device
@@ -1842,7 +1759,8 @@ SetLocale() {
 					sed -i s/"#$txt"/"$txt"/g /etc/locale.gen
 				done <locales.txt # substituing texts in "locale.gen" with texts in "locales.txt"
 				rm -rfv locales.txt &>/dev/null
-				LocaleFormat=$(echo -e "\n\n${LocaleDialog[*]}\n" | sed 's/" "/"\n"/g') # locales text for use in dialog
+				LocaleFormat="\n\n${LocaleDialog[*]/ /\n}\n" # locales text for use in dialog
+				# LocaleFormat=$(echo -e "\n\n${LocaleDialog[*]}\n" | sed 's/" "/"\n"/g') # locales text for use in dialog
 				locale-gen | GuageMeter "Generating Locales" 1
 			fi
 			dialog --msgbox "Set Locales :$LocaleFormat" 0 0
@@ -1865,7 +1783,8 @@ SetLocale() {
 						local set_localesTemp=($(diff locales.txt /mnt/etc/locale.gen | grep -iv '#' | grep -i '>' | sed 's/> //g;s/ /+/g'))
 						local set_locales=()
 						for w in ${set_localesTemp[@]}; do
-							set_locales+=("$(echo $w | sed 's/+//g')")
+							set_locales+="${w/+/}"
+							# set_locales+=("$(echo $w | sed 's/+//g')")
 						done
 						local locales_text=""
 						if [[ ${set_locales[@]} -eq 1 ]]; then
@@ -1887,12 +1806,14 @@ SetLocale() {
 				vim /etc/locale.gen
 				diff /etc/locale.gen /etc/locale_copy.gen
 				case $? in
+					1) dialog --msgbox "no locales have been uncommented. Therefore default en_US.UTF-8 will be used as default locale" ;;
 					0)
 						locale-gen
 						local set_localesTemp=($(diff locales.txt /etc/locale.gen | grep -iv '#' | grep -i '>' | sed 's/> //g;s/ /+/g'))
 						local set_locales=()
 						for w in ${set_localesTemp[@]}; do
-							set_locales+=("$(echo $w | sed 's/+//g')")
+							set_locales+="${w/+/}"
+							# set_locales+=("$(echo $w | sed 's/+//g')")
 						done
 						local locales_text=""
 						if [[ ${set_locales[@]} -eq 1 ]]; then
@@ -1903,7 +1824,6 @@ SetLocale() {
 						dialog --msgbox "$locales_text set:\n${set_locales[*]}" 0 0
 						;;
 
-					1) dialog --msgbox "no locales have been uncommented. Therefore default en_US.UTF-8 will be used as default locale" ;;
 				esac
 				rm -rf /etc/locale_copy.gen
 			fi
@@ -1935,10 +1855,7 @@ SetHostName() {
 				echo -e "127.0.0.1\tlocalhost\n      ::1\tlocalhost" >"/mnt/etc/hosts"
 			fi
 
-			dialog --yes-label "OK" --no-label "Back" --yesno "set \"$hostname\" as hostname. You can change the hostname in the /etc/hostname file (if you are not in live mode i.e.) or if you are in live mode then edit the /mnt/etc/hostname file. To reset hostname press \"Back\"" 0 0
-			case $? in
-				1) SetHostName ;;
-			esac
+			dialog --yes-label "OK" --no-label "Back" --yesno "set \"$hostname\" as hostname. You can change the hostname in the /etc/hostname file (if you are not in live mode i.e.) or if you are in live mode then edit the /mnt/etc/hostname file. To reset hostname press \"Back\"" 0 0 || SetHostName
 			;;
 		1) ConfHost "$ConfHostMenuItemString" ;;
 	esac
@@ -2189,9 +2106,10 @@ RemoveUsers() {
 
 		local AvailableUsers=()
 		for y in ${AvailableUsersTemp[@]}; do
-			AvailableUsers+=("$y")
-			AvailableUsers+=("$y")
-			AvailableUsers+=(0)
+			AvailableUsers+=("$y", "$y", 0)
+			# AvailableUsers+=("$y")
+			# AvailableUsers+=("$y")
+			# AvailableUsers+=(0)
 		done
 
 		local UsersToDelete=()
@@ -2470,9 +2388,7 @@ InstallArch() {
 				dialog --msgbox "Installed Arch Base system successfully" 0 0
 				local bootloaderid
 				bootloaderid="$(dialog --inputbox "Bootloader ID - Input Any Text. Leave Blank for default ID \"ARCH_LINUX_GRUB\"" 0 0 3>&1 1>&2 2>&3)"
-				if [[ -z $bootloaderid ]] || [[ "$bootloaderid" == "" ]] || [[ "$bootloaderid" =~ " " ]]; then
-					bootloaderid="ARCH_LINUX_GRUB"
-				fi
+				[[ -z $bootloaderid ]] || [[ "$bootloaderid" == "" ]] || [[ "$bootloaderid" =~ " " ]] && bootloaderid="ARCH_LINUX_GRUB"
 
 				local mountptdev=""
 				local grub_disk_array=($(lsblk -dnlo name | grep -iv 'loop\|sr[0-9]\|fd[0-9]'))
@@ -2480,15 +2396,10 @@ InstallArch() {
 					local grub_part_array=($(lsblk /dev/$b -nlo name))
 					for h in ${grub_part_array[@]}; do
 						local mountpt=$(lsblk /dev/$h -nlo mountpoint)
-						if [[ "$mountpt" == "/mnt/boot" ]]; then
-							mountptdev="$b"
-							break
-						fi
+						[[ "$mountpt" == "/mnt/boot" ]] && mountptdev="$b"
 						unset mountpt
 					done
-					if [[ -n $mountptdev ]] || [[ "$mountptdev" != "" ]] || [[ ! "$mountptdev" =~ " " ]]; then
-						break
-					fi
+				    [[ -n $mountptdev ]] || [[ "$mountptdev" != "" ]] || [[ ! "$mountptdev" =~ " " ]] && break
 				done
 
 				local bootdisktype=$(lsblk "/dev/$mountptdev" -dnlo tran,rm | sed 's/    / /g')
@@ -2499,13 +2410,14 @@ InstallArch() {
 				# check if grub install device is removable usb
 				if [[ $bootdisktype == "usb 1" ]]; then
 					arch-chroot /mnt grub-install -v --boot-directory="/boot" --bootloader-id "$bootloaderid" --efi-directory="/boot" --recheck --removable --target x86_64-efi
-					GRUB_INSTALL_EXIT_CODE=$?
+					# GRUB_INSTALL_EXIT_CODE=$?
 
 				# check if grub install device is internal drive
 				elif [[ $bootdisktype == "sata 0" ]] || [[ $bootdisktype == "ata 0" ]]; then
 					arch-chroot /mnt grub-install -v --boot-directory="/boot" --bootloader-id "$bootloaderid" --efi-directory="/boot" --recheck --target x86_64-efi
-					GRUB_INSTALL_EXIT_CODE=$?
+					# GRUB_INSTALL_EXIT_CODE=$?
 				fi
+				GRUB_INSTALL_EXIT_CODE=$?
 				unset bootdisktype mountptdev
 
 				# create an fstab
@@ -2592,6 +2504,7 @@ InstallArch() {
 			packages+=("intel-undervolt")
 			packages+=("throttled")
 			packages+=("xf86-video-intel")
+
 			for r in ${intel_gpu[@]}; do
 				packages+=("$r")
 			done
@@ -2616,8 +2529,9 @@ InstallArch() {
 				local kernel_menu_opts=()
 				for i in ${extra_linux_kernel_pkgs[@]}; do
 					[[ "$i" =~ "header" ]] || [[ "$i" =~ "docs" ]] && continue
-					kernel_menu_opts+=("$i")
-					kernel_menu_opts+=("$i")
+					kernel_menu_opts+=("$i", "$i")
+					# kernel_menu_opts+=("$i")
+					# kernel_menu_opts+=("$i")
 				done
 				extra_linux_kernels=($(dialog --menu "Kernel" 0 0 0 --no-tags ${kernel_menu_opts[@]} 3>&1 1>&2 2>&3))
 				unset kernel_menu_opts
@@ -2628,6 +2542,7 @@ InstallArch() {
 		local editors=()
 		editors=($(dialog --extra-button --extra-label "Cancel" --cancel-label "Back" --no-tags --title "text editor selection Menu" --checklist "nano and vi will be installed by default" 0 0 0 "${terminaleditorslist[@]}" 3>&1 1>&2 2>&3))
 		case $? in
+			3) unset terminaleditorslist ;;
 			0)
 				unset terminaleditorslist
 				if [[ -n "${editors[@]}" ]]; then
@@ -2640,8 +2555,9 @@ InstallArch() {
 					elif [[ ${#editors[@]} -gt 1 ]]; then
 						PackagesDialogText+=("editors selected:")
 					fi
-					PackagesDialogText+=("\n")
-					PackagesDialogText+=("${editors[@]}")
+					# PackagesDialogText+=("\n")
+					# PackagesDialogText+=("${editors[@]}")
+					PackagesDialogText+=("\n" "${editors[@]}")
 					unset editors
 				fi
 
@@ -2655,19 +2571,15 @@ InstallArch() {
 					elif [[ ${#extra_linux_kernels[@]} -gt 1 ]]; then
 						PackagesDialogText+=("extra kernels selected:")
 					fi
-					PackagesDialogText+=("\n")
-					PackagesDialogText+=("${extra_linux_kernels[@]}")
+					# PackagesDialogText+=("\n")
+					# PackagesDialogText+=("${extra_linux_kernels[@]}")
+					PackagesDialogText+=("\n" "${extra_linux_kernels[@]}")
 					unset extra_linux_kernels
 				fi
 				;;
 			1)
 				unset terminaleditorslist editors
 				MainMenu "Install Arch *"
-				;;
-			3)
-				:
-				unset terminaleditorslist
-				break
 				;;
 		esac
 
@@ -2834,6 +2746,7 @@ MainMenu() {
 					elif ([[ -d /run/archiso/airootfs ]] && [[ -d /run/archiso/bootmnt ]] && (mountpoint /run/archiso/airootfs &>/dev/null) && (mountpoint /run/archiso/bootmnt &>/dev/null) && (mountpoint /mnt &>/dev/null) && [[ -d /mnt/boot ]] && (mountpoint /mnt/boot &>/dev/null)) || ( (mountpoint / &>/dev/null) && (mountpoint /boot &>/dev/null)); then
 						which arch-chroot &>/dev/null
 						case $? in
+							1) ConfHost "set hostname *" "$menuitem" ;;
 							0)
 								arch-chroot /mnt echo "arch successfully installed" &>/dev/null
 								case $? in
@@ -2841,7 +2754,6 @@ MainMenu() {
 									1) dialog --msgbox "Cannot configure host without an installed Linux System" 0 0 ;;
 								esac
 								;;
-							1) ConfHost "set hostname *" "$menuitem" ;;
 						esac
 
 					# running live not installed system
