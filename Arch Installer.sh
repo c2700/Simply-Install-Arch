@@ -195,9 +195,9 @@ ConfNet() {
 
 	# create an array of available network managers for use in dialog
 	local NMList=()
-	ls /bin/wifi-menu &>/dev/null && NMList+=("wifi-menu" "") ;;
-	ls /usr/lib/systemd/system/NetworkManager* &>/dev/null && NMList+=("networkmanager" "") ;;
-	ls /usr/lib/systemd/system/iwd* &>/dev/null && NMList+=("iwd" "") ;;
+	ls /bin/wifi-menu &>/dev/null && NMList+=("wifi-menu" "")
+	ls /usr/lib/systemd/system/NetworkManager* &>/dev/null && NMList+=("networkmanager" "")
+	ls /usr/lib/systemd/system/iwd* &>/dev/null && NMList+=("iwd" "")
 
 	if [[ -z ${NMList[@]} ]]; then
 		unset NMList
@@ -633,7 +633,7 @@ MountPartitions() {
 				unset m_parttypename partfsformat m_parttypenametemp m_sizetemp m_partlabeltemp
 			done
 
-			[[ ! mountpoint /mnt &>/dev/null ]] && dialog --msgbox "could not mount '/dev/${fail_drive[0]}' to '/'. Therefore cannot mount other partitions. you can manually try mounting the partition or changing the partition type to the right partition type and format it with the relevant filesystem and mount it" 0 0
+			mountpoint /mnt &>/dev/null || dialog --msgbox "could not mount '/dev/${fail_drive[0]}' to '/'. Therefore cannot mount other partitions. you can manually try mounting the partition or changing the partition type to the right partition type and format it with the relevant filesystem and mount it" 0 0
 		elif (mountpoint /mnt &>/dev/null); then
 			if [[ -d /mnt/boot ]]; then
 				if (! mountpoint /mnt/boot/ &>/dev/null); then
@@ -661,7 +661,7 @@ MountPartitions() {
 						unset m_parttypename partfsformat m_parttypenametemp m_sizetemp m_partlabeltemp
 					done
 
-					[[ ! mountpoint /mnt/boot/ &>/dev/null ]] && dialog --msgbox "could not mount /dev/${fail_drive[0]} (EFI Partition) to /mnt/boot" 0 0
+					mountpoint /mnt/boot/ &>/dev/null || dialog --msgbox "could not mount /dev/${fail_drive[0]} (EFI Partition) to /mnt/boot" 0 0
 				fi
 			elif [[ ! -d /mnt/boot ]]; then
 				mkdir /mnt/boot
